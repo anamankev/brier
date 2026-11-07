@@ -33,9 +33,9 @@ py-check: ## ruff, mypy --strict, fast Python tests
 private-check: ## No tracked file mentions the private development tooling
 	sh scripts/private_tooling_check.sh
 
-differential-full: ## The G1 gate study: 10 million random commands through both engines (a few minutes)
+differential-full: ## The gate study: 10 million random commands through both engines, full invariant checks every 100,000
 	$(CARGO) build --release --locked -p brier-replay
-	cd services && uv run --locked python -m brier_services.differential --binary ../target/release/brier-replay --seed $(SEED) --commands 10000000
+	cd services && uv run --locked python -m brier_services.differential --binary ../target/release/brier-replay --seed $(SEED) --commands 10000000 --check-every 100000
 
 bench: ## The registered P1/P2 engine benchmark (docs/notes/performance.md); plug in and close heavy apps first
 	$(CARGO) build --release --locked -p brier-bench

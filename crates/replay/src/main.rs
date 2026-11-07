@@ -357,7 +357,9 @@ impl From<io::Error> for Failure {
     }
 }
 
-fn run(input: impl BufRead, output: impl Write) -> Result<(), Failure> {
+/// Replay every command; with `check_every > 0`, also run the full invariant check
+/// (I1-I5) after every `check_every` commands and at the end.
+fn run(input: impl BufRead, output: impl Write, check_every: u64) -> Result<(), Failure> {
     let mut out = BufWriter::new(output);
     let mut engine = Engine::new();
     let mut events = Vec::new();
@@ -377,11 +379,21 @@ fn run(input: impl BufRead, output: impl Write) -> Result<(), Failure> {
         engine
             .apply(&cmd, &mut events)
             .map_err(|e| Failure::Engine(format!("line {number}: {e}")))?;
+        if check_every > 0 && parsed.seq.is_multiple_of(check_every) {
+            engine
+                .check_invariants()
+                .map_err(|e| Failure::Engine(format!("line {number}: {e}")))?;
+        }
         for e in &events {
             serde_json::to_writer(&mut out, &event_json(parsed.seq, e))
                 .map_err(|e| Failure::Io(io::Error::other(e)))?;
             out.write_all(b"\n")?;
         }
+    }
+    if check_every > 0 {
+        engine
+            .check_invariants()
+            .map_err(|e| Failure::Engine(format!("at end of input: {e}")))?;
     }
     let book = final_book(&engine).map_err(|e| Failure::Engine(e.to_string()))?;
     serde_json::to_writer(&mut out, &book).map_err(|e| Failure::Io(io::Error::other(e)))?;
@@ -390,9 +402,24 @@ fn run(input: impl BufRead, output: impl Write) -> Result<(), Failure> {
     Ok(())
 }
 
+/// `--check-every N` (optional): run the full invariant check every N commands.
+fn parse_args() -> Result<u64, Failure> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.as_slice() {
+        [] => Ok(0),
+        [flag, n] if flag == "--check-every" => n
+            .parse()
+            .map_err(|_| Failure::Input(format!("--check-every needs a number, got {n:?}"))),
+        _ => Err(Failure::Input(format!(
+            "usage: brier-replay [--check-every N], got {args:?}"
+        ))),
+    }
+}
+
 fn main() -> ExitCode {
     let stdin = io::stdin();
-    match run(stdin.lock(), io::stdout().lock()) {
+    let result = parse_args().and_then(|every| run(stdin.lock(), io::stdout().lock(), every));
+    match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(Failure::Input(msg)) => {
             eprintln!("brier-replay: malformed input: {msg}");
@@ -415,7 +442,7 @@ mod tests {
 
     fn replay(input: &str) -> Result<Vec<Value>, Failure> {
         let mut out = Vec::new();
-        run(input.as_bytes(), &mut out)?;
+        run(input.as_bytes(), &mut out, 1)?;
         Ok(String::from_utf8(out)
             .unwrap()
             .lines()

@@ -85,7 +85,7 @@ def test_generation_is_deterministic_in_the_seed() -> None:
 @pytest.mark.differential
 @pytest.mark.parametrize("seed", FAST_SEEDS)
 def test_rust_engine_matches_the_reference_engine(replay_binary: Path, seed: int) -> None:
-    report = run(replay_binary, seed, FAST_COMMANDS)
+    report = run(replay_binary, seed, FAST_COMMANDS, check_every=500)
     assert report.divergence is None, report.divergence
     assert report.trades > 0
 

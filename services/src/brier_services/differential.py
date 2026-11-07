@@ -217,11 +217,15 @@ def _feed(process_stdin: IO[str], seed: int, count: int) -> None:
             process_stdin.close()
 
 
-def run(binary: Path, seed: int, count: int) -> Report:
-    """Run ``count`` generated commands through both engines and compare every event."""
+def run(binary: Path, seed: int, count: int, check_every: int = 0) -> Report:
+    """Run ``count`` generated commands through both engines and compare every event.
+
+    With ``check_every > 0``, both engines also run their full invariant checks (I1-I5)
+    every ``check_every`` commands and at the end.
+    """
     start = time.perf_counter()
     process = subprocess.Popen(  # noqa: S603 - our own binary, fixed arguments
-        [str(binary)],
+        [str(binary), *(["--check-every", str(check_every)] if check_every else [])],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -241,6 +245,8 @@ def run(binary: Path, seed: int, count: int) -> Report:
     try:
         for cmd in generate(seed, count):
             expected = reference.apply(cmd)
+            if check_every and cmd["seq"] % check_every == 0:
+                reference.check_invariants()
             got: list[dict[str, Any]] = []
             while True:
                 line = pending if pending is not None else next(rust_lines, None)
@@ -274,8 +280,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--commands", type=int, required=True)
+    parser.add_argument("--check-every", type=int, default=0)
     args = parser.parse_args(argv)
-    report = run(args.binary, args.seed, args.commands)
+    report = run(args.binary, args.seed, args.commands, args.check_every)
     print(
         json.dumps(
             {
