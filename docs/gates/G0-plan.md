@@ -7,7 +7,7 @@ Reads: SPEC §12, §13, §14. Exit: `make check` green from a fresh clone; CI gr
 
 ## Units
 1. **Toolchain pin.** `rust-toolchain.toml` pins Rust 1.99.1 with clippy and rustfmt, so every machine and CI builds with the same compiler.
-2. **Rust workspace and `exchange-types` crate.** Zero runtime dependencies. Holds the domain units from SPEC §2.1, each a validated newtype:
+2. **Rust workspace and `brier-types` crate.** Zero runtime dependencies. Holds the domain units from SPEC §2.1, each a validated newtype:
    - `Price` (1-99) with `complement` (100 − p).
    - `Quantity` (1 to `MAX_ORDER_QTY`).
    - `Credits` (i64 credit-cents, checked arithmetic only).

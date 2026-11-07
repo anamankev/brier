@@ -1,6 +1,6 @@
-# Event Exchange
+# Brier
 
-A prediction-market exchange built to the engineering standard of a regulated venue, and run with play money.
+A prediction-market exchange, named after the Brier score (Brier, 1950), the standard measure of how good probability forecasts are. It is built to the engineering standard of a regulated venue, and run with play money.
 
 Traders buy and sell yes/no contracts on public events, such as "Will October CPI come in above 3.0%?". A contract pays 100 if the event happens and 0 if it does not, so its price (1 to 99) reads as the market's probability. Under that simple product sits the machinery a real exchange needs:
 

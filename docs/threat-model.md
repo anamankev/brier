@@ -9,9 +9,9 @@ Updated at every gate review (SPEC §13). Each entry gives the threat, its mitig
 | Source repository (public) | A secret committed by mistake | gitleaks on every commit (pre-commit) and over the full history in CI; `.env` files ignored | `.pre-commit-config.yaml`, `security.yml` job `secrets` | Hooks can be bypassed locally with `--no-verify`; CI still scans |
 | Source repository | Private development files or notes published | Untracked via `.git/info/exclude`; `scripts/private_tooling_check.sh` fails if any are tracked or referenced | `make private-check`, CI job `private-tooling` | None known |
 | Dependencies | A known-vulnerable crate or package | Lockfiles committed (`Cargo.lock`, `services/uv.lock`); cargo-audit and pip-audit in CI, weekly as well as per push; Dependabot proposals | `security.yml` | Audits find known advisories only, not malicious new releases |
-| Dependencies | A compromised upstream release pulled in silently | Exact versions from lockfiles (`--locked` everywhere); no runtime dependencies in `exchange-types` | `Makefile`, `check.yml` | Build-time dependencies (proptest, dev tools) are trusted |
+| Dependencies | A compromised upstream release pulled in silently | Exact versions from lockfiles (`--locked` everywhere); no runtime dependencies in `brier-types` | `Makefile`, `check.yml` | Build-time dependencies (proptest, dev tools) are trusted |
 | CI | A workflow given more power than it needs, or a moving action tag swapped | `permissions: contents: read`; third-party actions pinned to commit SHAs | `.github/workflows/*.yml` | None known |
-| Domain values | Invalid prices or quantities, or overflowing money arithmetic, reaching later components | Validated newtypes; checked arithmetic; lints forbidding floats, unchecked arithmetic, and panics in library code | `exchange-types` tests and proptests; clippy configuration in `Cargo.toml` | None known |
+| Domain values | Invalid prices or quantities, or overflowing money arithmetic, reaching later components | Validated newtypes; checked arithmetic; lints forbidding floats, unchecked arithmetic, and panics in library code | `brier-types` tests and proptests; clippy configuration in `Cargo.toml` | None known |
 
 ## Components to come (from SPEC §13), owned by their gates
 

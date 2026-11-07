@@ -1,5 +1,5 @@
 [package]
-name = "exchange-types"
+name = "brier-types"
 description = "Domain units for the exchange: prices, quantities, credits, identifiers (SPEC §2.1)"
 version = "1.0.0"
 edition.workspace = true

@@ -1,5 +1,5 @@
 [project]
-name = "exchange-services"
+name = "brier-services"
 version = "1.0.0"
 description = "Exchange services and research: reference engine, resolvers, market maker, surveillance, simulation"
 requires-python = ">=3.12,<3.13"

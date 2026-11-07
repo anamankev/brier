@@ -1,6 +1,6 @@
-# Event Exchange: Product and Engineering Specification
+# Brier: Product and Engineering Specification
 
-Working name; rename freely. Written 6 November 2026. This is the complete standard for the product. It is built once, completely, and released when every item in §0 is met. Section numbers are stable; cite them in commits, ADRs, and notes.
+Written 6 November 2026. This is the complete standard for the product. It is built once, completely, and released when every item in §0 is met. Section numbers are stable; cite them in commits, ADRs, and notes.
 
 ---
 
@@ -199,6 +199,7 @@ Where this project can be better than the leaders: open, verifiable engineering 
 - The path to real money (partnering with a designated contract market, or applying for designation) is not designed here.
 
 ## 18. References
+- Brier, G. W. (1950). Verification of forecasts expressed in terms of probability. *Monthly Weather Review* 78(1), 1-3. (The product's name.)
 - Avellaneda, M., Stoikov, S. (2008). High-frequency trading in a limit order book. *Quantitative Finance* 8(3), 217-224.
 - Fowler, M. (2011). The LMAX Architecture. martinfowler.com. (Single-threaded, event-sourced matching design.)
 - Harris, L. (2003). *Trading and Exchanges: Market Microstructure for Practitioners*. Oxford University Press.

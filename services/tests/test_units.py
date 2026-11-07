@@ -6,7 +6,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from exchange_services.units import (
+from brier_services.units import (
     I64_MAX,
     I64_MIN,
     MAX_ORDER_QTY,

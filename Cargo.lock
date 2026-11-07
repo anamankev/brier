@@ -58,6 +58,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "brier-types"
+version = "1.0.0"
+dependencies = [
+ "proptest",
+]
+
+[[package]]
 name = "bytes"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -115,13 +122,6 @@ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
  "windows-sys",
-]
-
-[[package]]
-name = "exchange-types"
-version = "1.0.0"
-dependencies = [
- "proptest",
 ]
 
 [[package]]
