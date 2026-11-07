@@ -17,7 +17,7 @@
 //!   Run the full invariant check, and print the state hash.
 //!
 //! `brier-core sync-bench --data DIR --count N`
-//!   Time N append-and-sync cycles of one small record (the durability note's sync cost).
+//!   Time N append-and-sync cycles of 4 KiB each (the durability note's sync cost).
 
 use std::fmt::Write as _;
 use std::io::{self, BufRead, BufWriter, Write};
@@ -41,6 +41,8 @@ use serde_json::json;
 const MAX_BATCH_COMMANDS: usize = 8_192;
 /// Default commands between snapshots.
 const DEFAULT_SNAPSHOT_EVERY: u64 = 100_000;
+/// Bytes appended per sync in `sync-bench` (the durability note's registered 4 KiB).
+const SYNC_BENCH_BYTES: usize = 4_096;
 
 enum Failure {
     Usage(String),
@@ -231,13 +233,14 @@ fn sync_bench(data: &Path, count: u64) -> Result<(), Failure> {
     std::fs::create_dir_all(data)?;
     let mut journal = JournalWriter::open(data, Seq::FIRST)?;
     let mut nanos: Vec<u128> = Vec::new();
-    for i in 1..=count {
-        journal.append(
-            Seq::from_raw(i),
-            &Command::OpenAccount {
-                account: AccountId::new(i),
-            },
-        )?;
+    let mut seq = Seq::FIRST;
+    for _ in 0..count {
+        // About 4 KiB of records per sync, as registered in the durability note.
+        while journal.pending_bytes() < SYNC_BENCH_BYTES {
+            let account = AccountId::new(seq.get());
+            journal.append(seq, &Command::OpenAccount { account })?;
+            seq = seq.next().map_err(engine_failure)?;
+        }
         let start = Instant::now();
         journal.commit()?;
         nanos.push(start.elapsed().as_nanos());
