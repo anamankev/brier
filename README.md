@@ -59,4 +59,4 @@ Library code may not panic, unwrap, use floating point, or do unchecked integer 
 
 ## License
 
-See [LICENSE](LICENSE).
+All rights reserved. The code is published to be read, not reused: no license is granted to copy, modify, run, or redistribute it, and contributions are not accepted. See [LICENSE](LICENSE).
