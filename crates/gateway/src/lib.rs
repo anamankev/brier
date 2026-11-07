@@ -5,11 +5,16 @@
 //! so there is exactly one writer. Every command a client sends is answered only after its
 //! batch is durable.
 
+pub mod audit;
 pub mod auth;
+pub mod clock;
 pub mod error;
 pub mod feed;
 pub mod limits;
+pub mod markets;
+pub mod resolution;
 pub mod routes;
+pub mod scheduler;
 pub mod ws;
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -32,6 +37,7 @@ use tokio::sync::watch;
 use tokio_postgres::Client;
 
 use crate::auth::ReplayCache;
+use crate::clock::{Clock, Unix};
 use crate::error::ApiError;
 use crate::limits::Limiter;
 
@@ -42,6 +48,9 @@ pub const MAX_BODY_BYTES: usize = 8 * 1_024;
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 /// Most journal commands written to the read models in one transaction.
 pub const PROJECT_BATCH: u64 = 10_000;
+/// How long a confirmed resolution stays open to disputes before it settles (G5 plan): long
+/// enough for a person to notice a wrong outcome. `BRIER_DISPUTE_WINDOW_SECONDS` overrides it.
+pub const DISPUTE_WINDOW: Unix = 24 * 3_600;
 
 /// The client address, as the gateway saw it, for per-address limits.
 #[derive(Debug, Clone, Copy)]
@@ -66,8 +75,13 @@ pub struct AppState {
     pub projected: Arc<AtomicU64>,
     /// The market-data publisher.
     pub feed: feed::FeedHandle,
-    /// Set to true to close every WebSocket connection (graceful shutdown).
+    /// Set to true to close every WebSocket connection and stop the scheduler (graceful
+    /// shutdown).
     pub shutdown: watch::Sender<bool>,
+    /// The clock schedules, proposals, and dispute windows are judged by.
+    pub clock: Clock,
+    /// Seconds a confirmed resolution stays open to disputes.
+    pub dispute_window: Unix,
     /// A hash checked when the username is unknown, so login time does not reveal it.
     dummy_hash: String,
 }
@@ -98,8 +112,26 @@ impl AppState {
                 limits::ADDRESS_AUTH_BURST,
             ),
             projected: Arc::new(AtomicU64::new(0)),
+            clock: Clock::system(),
+            dispute_window: DISPUTE_WINDOW,
             dummy_hash: auth::hash_password("timing equalizer, never a real password")?,
         })
+    }
+}
+
+impl AppState {
+    /// The same state judged by another clock (tests use a manual one).
+    #[must_use]
+    pub fn with_clock(mut self, clock: Clock) -> Self {
+        self.clock = clock;
+        self
+    }
+
+    /// The same state with another dispute window, in seconds.
+    #[must_use]
+    pub const fn with_dispute_window(mut self, seconds: Unix) -> Self {
+        self.dispute_window = seconds;
+        self
     }
 }
 
@@ -148,6 +180,10 @@ endpoints! {
     DELETE "/v1/keys/{id}" => routes::revoke_key,
     GET "/v1/markets" => routes::markets,
     GET "/v1/markets/{id}/book" => routes::book,
+    GET "/v1/markets/{id}/rules" => markets::rules,
+    GET "/v1/markets/{id}/resolution" => resolution::get,
+    POST "/v1/markets/{id}/resolution" => resolution::propose,
+    POST "/v1/resolutions/{id}/disputes" => resolution::dispute,
     GET "/v1/markets/{id}/trades" => routes::trades,
     GET "/v1/ws" => ws::upgrade,
     POST "/v1/orders" => routes::place,
@@ -157,9 +193,11 @@ endpoints! {
     PATCH "/v1/orders/{id}" => routes::amend,
     GET "/v1/portfolio" => routes::portfolio,
     GET "/v1/fills" => routes::fills,
-    POST "/v1/admin/markets" => routes::create_market,
+    POST "/v1/admin/markets" => markets::create_market,
     POST "/v1/admin/markets/{id}/state" => routes::set_state,
-    POST "/v1/admin/markets/{id}/settle" => routes::settle,
+    POST "/v1/admin/resolutions/{id}/confirm" => resolution::confirm,
+    POST "/v1/admin/resolutions/{id}/withdraw" => resolution::withdraw,
+    POST "/v1/admin/disputes/{id}/rule" => resolution::rule,
     POST "/v1/admin/cancel-all" => routes::cancel_all,
     POST "/v1/admin/halt-all" => routes::halt_all,
 }
@@ -174,7 +212,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
-fn log(level: &str, msg: &str, detail: &dyn std::fmt::Display) {
+pub(crate) fn log(level: &str, msg: &str, detail: &dyn std::fmt::Display) {
     eprintln!(
         "{}",
         json!({ "level": level, "msg": msg, "detail": detail.to_string() })

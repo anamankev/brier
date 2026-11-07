@@ -3,11 +3,14 @@
 //! ```text
 //! brier-gateway [serve]                 run the exchange
 //! brier-gateway promote <user> <reason> give a user the admin role (audit-logged)
+//! brier-gateway role <user> <role> <reason>
+//!                                       set a user's role: trader, admin, or resolver (audit-logged)
 //! ```
 //! Configuration comes from the environment only: `BRIER_DATABASE_URL` (required; never
-//! logged), `BRIER_DATA_DIR` (default `data`), `BRIER_LISTEN` (default `127.0.0.1:8080`), and
-//! `BRIER_DATABASE_SCHEMA` (optional: keep every table in this schema, created if missing, so
-//! several exchanges, such as test runs, can share one database).
+//! logged), `BRIER_DATA_DIR` (default `data`), `BRIER_LISTEN` (default `127.0.0.1:8080`),
+//! `BRIER_DISPUTE_WINDOW_SECONDS` (default 86400), and `BRIER_DATABASE_SCHEMA` (optional: keep
+//! every table in this schema, created if missing, so several exchanges, such as test runs,
+//! can share one database).
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -15,7 +18,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use brier_core::CoreConfig;
-use brier_gateway::{AppState, router, run_projector};
+use brier_gateway::{AppState, DISPUTE_WINDOW, router, run_projector, scheduler};
 use serde_json::json;
 use tokio::net::TcpListener;
 use tokio_postgres::{Client, NoTls};
@@ -87,6 +90,14 @@ async fn serve(url: &str) -> Result<(), String> {
         .unwrap_or_else(|_| "127.0.0.1:8080".to_owned())
         .parse()
         .map_err(|e| format!("BRIER_LISTEN: {e}"))?;
+    let dispute_window = match std::env::var("BRIER_DISPUTE_WINDOW_SECONDS") {
+        Ok(v) => v
+            .parse::<i64>()
+            .ok()
+            .filter(|w| (1..=30 * 86_400).contains(w))
+            .ok_or("BRIER_DISPUTE_WINDOW_SECONDS must be 1 to 2592000")?,
+        Err(_) => DISPUTE_WINDOW,
+    };
     let mut db = connect(url).await?;
     brier_readmodel::migrate(&mut db)
         .await
@@ -99,7 +110,12 @@ async fn serve(url: &str) -> Result<(), String> {
         "recovered",
         &json!({ "next_seq": recovery.next_seq.get(), "replayed": recovery.replayed, "snapshot": recovery.snapshot.map(brier_types::Seq::get) }),
     );
-    let state = Arc::new(AppState::new(core.clone(), db).map_err(|e| format!("{e:?}"))?);
+    let state = Arc::new(
+        AppState::new(core.clone(), db)
+            .map_err(|e| format!("{e:?}"))?
+            .with_dispute_window(dispute_window),
+    );
+    let schedule = tokio::spawn(scheduler::run(Arc::clone(&state)));
     let projector = tokio::spawn(run_projector(
         projector_db,
         data,
@@ -124,7 +140,9 @@ async fn serve(url: &str) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
-    // Every handle is gone with the router, so the core finishes its last batch and stops.
+    // The scheduler stops on the same signal; with it and the router gone, every core handle
+    // is gone, so the core finishes its last batch and stops.
+    schedule.await.map_err(|e| format!("scheduler task: {e}"))?;
     let core_result = tokio::task::spawn_blocking(move || core_thread.join())
         .await
         .map_err(|e| e.to_string())?;
@@ -145,6 +163,13 @@ fn db_err(e: &tokio_postgres::Error) -> String {
 }
 
 async fn promote(url: &str, username: &str, reason: &str) -> Result<(), String> {
+    set_role(url, username, "admin", reason).await
+}
+
+async fn set_role(url: &str, username: &str, role: &str, reason: &str) -> Result<(), String> {
+    if !["trader", "admin", "resolver"].contains(&role) {
+        return Err("role must be trader, admin, or resolver".to_owned());
+    }
     if !(3..=500).contains(&reason.trim().chars().count()) {
         return Err("reason must be 3 to 500 characters".to_owned());
     }
@@ -155,21 +180,21 @@ async fn promote(url: &str, username: &str, reason: &str) -> Result<(), String> 
     let tx = db.transaction().await.map_err(|e| db_err(&e))?;
     let row = tx
         .query_opt(
-            "UPDATE users SET role = 'admin' WHERE username = $1 RETURNING id",
-            &[&username],
+            "UPDATE users SET role = $2 WHERE username = $1 RETURNING id",
+            &[&username, &role],
         )
         .await
         .map_err(|e| db_err(&e))?
         .ok_or_else(|| format!("no user named {username}"))?;
     let id: i64 = row.get(0);
     tx.execute(
-        "INSERT INTO audit_log (user_id, action, detail, reason) VALUES ($1, 'promote_admin', '{\"via\": \"cli\"}', $2)",
-        &[&id, &reason.trim()],
+        "INSERT INTO audit_log (user_id, action, detail, reason) VALUES ($1, 'set_role', $2::text::jsonb, $3)",
+        &[&id, &json!({ "via": "cli", "role": role }).to_string(), &reason.trim()],
     )
     .await
     .map_err(|e| db_err(&e))?;
     tx.commit().await.map_err(|e| db_err(&e))?;
-    info("promoted", &json!({ "user_id": id }));
+    info("role set", &json!({ "user_id": id, "role": role }));
     Ok(())
 }
 
@@ -188,8 +213,10 @@ async fn main() -> ExitCode {
     {
         [] | ["serve"] => serve(&url).await,
         ["promote", username, reason] => promote(&url, username, reason).await,
+        ["role", username, role, reason] => set_role(&url, username, role, reason).await,
         _ => Err(
-            "usage: brier-gateway [serve] | brier-gateway promote <username> <reason>".to_owned(),
+            "usage: brier-gateway [serve] | promote <username> <reason> | role <username> <trader|admin|resolver> <reason>"
+                .to_owned(),
         ),
     };
     match result {

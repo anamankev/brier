@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "market": 1,
+  "title": "Test market: CPI inflation above 3.0% in September 2099",
+  "question": "Will the 12-month change in CPI-U for September 2099 be above 3.0%?",
+  "observation": "2099-09",
+  "revision": "first_release",
+  "void": ["no_value_by_deadline", "source_discontinued"],
+  "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+  },
+  "condition": { "transform": "pct_change_12m", "op": ">", "threshold": "3.0" },
+  "schedule": {
+    "open": "2026-01-01T00:00:00Z",
+    "close": "2099-10-15T12:00:00Z",
+    "release": "2099-10-15T12:30:00Z",
+    "deadline": "2099-12-15T12:30:00Z"
+  }
+}

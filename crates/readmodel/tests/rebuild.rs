@@ -12,7 +12,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use brier_core::{CoreConfig, start};
 use brier_engine::{Command, MarketState, NewOrder, TimeInForce};
 use brier_readmodel::{Projector, migrate};
-use brier_types::{AccountId, MarketId, OrderId, Outcome, Side};
+use brier_types::{AccountId, Digest, MarketId, OrderId, Outcome, Side};
 use tokio_postgres::{Client, NoTls};
 
 async fn connect(schema: &str) -> Client {
@@ -44,7 +44,7 @@ fn workload() -> Vec<Command> {
         },
         Command::CreateMarket {
             market: MarketId::new(1),
-            rules_hash: None,
+            rules_hash: Some(Digest::new([7; 32])),
         },
         Command::SetState {
             market: MarketId::new(1),
@@ -94,7 +94,7 @@ fn workload() -> Vec<Command> {
     out.push(Command::Settle {
         market: MarketId::new(1),
         outcome: Outcome::Yes,
-        evidence_hash: None,
+        evidence_hash: Some(Digest::new([9; 32])),
     });
     out
 }
@@ -154,7 +154,11 @@ async fn live_projection_equals_a_rebuild_from_the_journal() {
     while fresh.project(&mut rebuild, total, 10_000).await.unwrap() > 0 {}
     assert_eq!(fresh.cursor(), total);
 
-    for (table, order) in [("fills", "seq, ordinal"), ("order_events", "seq, ordinal")] {
+    for (table, order) in [
+        ("fills", "seq, ordinal"),
+        ("order_events", "seq, ordinal"),
+        ("market_journal", "market"),
+    ] {
         let sql = format!("SELECT t::text FROM {table} t ORDER BY {order}");
         let (a, b) = (rows(&live, &sql).await, rows(&rebuild, &sql).await);
         assert!(!a.is_empty(), "{table} has rows");

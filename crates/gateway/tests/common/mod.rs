@@ -100,3 +100,12 @@ pub async fn login(app: &Router, username: &str, password: &str) -> String {
     assert_eq!(status, StatusCode::OK, "{body}");
     body["token"].as_str().unwrap().to_owned()
 }
+
+/// A rulebook for `market` that is open from 2026 until 2099, for tests that only need a
+/// tradable market (`tests/fixtures/long_window_rulebook.json`).
+pub fn rulebook(market: u32) -> Value {
+    let mut r: Value =
+        serde_json::from_str(include_str!("../fixtures/long_window_rulebook.json")).unwrap();
+    r["market"] = json!(market);
+    r
+}

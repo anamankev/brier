@@ -130,7 +130,7 @@ async fn the_rest_api_end_to_end() {
         )
         .await
         .unwrap();
-    let create = json!({ "market": 1, "reason": "list the first test market" });
+    let create = json!({ "rulebook": common::rulebook(1), "reason": "list the first test market" });
     let (status, _) = call(
         &app,
         Method::POST,
@@ -145,7 +145,7 @@ async fn the_rest_api_end_to_end() {
         Method::POST,
         "/v1/admin/markets",
         Some(&alice),
-        Some(json!({ "market": 1, "reason": " x " })),
+        Some(json!({ "rulebook": common::rulebook(1), "reason": " x " })),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "a reason is required");
@@ -157,7 +157,7 @@ async fn the_rest_api_end_to_end() {
         Some(create),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(status, StatusCode::CREATED, "{body}");
     let (status, _) = call(
         &app,
         Method::POST,
@@ -170,19 +170,32 @@ async fn the_rest_api_end_to_end() {
     let (status, body) = call(
         &app,
         Method::POST,
-        "/v1/admin/markets/1/settle",
+        "/v1/admin/markets/1/state",
         Some(&alice),
-        Some(json!({ "outcome": "yes", "reason": "too early" })),
+        Some(json!({ "state": "pre_open", "reason": "back to pre-open" })),
     )
     .await;
     assert_eq!(
         status,
         StatusCode::UNPROCESSABLE_ENTITY,
-        "an open market cannot settle: {body}"
+        "an open market cannot go back to pre_open: {body}"
     );
     assert!(
         body["error"]["seq"].is_u64(),
         "the rejection was sequenced: {body}"
+    );
+    let (status, _) = call(
+        &app,
+        Method::POST,
+        "/v1/admin/markets/1/settle",
+        Some(&alice),
+        Some(json!({ "outcome": "yes", "reason": "one-step settlement is gone" })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "settlement only happens through the resolution workflow"
     );
 
     // Orders: rest, idempotent retry, take, amend, cancel.
@@ -408,7 +421,7 @@ async fn the_rest_api_end_to_end() {
         .get(0);
     assert_eq!(
         audited, 3,
-        "create, open, and the rejected settle are audited with their seq"
+        "create, open, and the rejected state change are audited with their seq"
     );
 
     // Limits and errors.

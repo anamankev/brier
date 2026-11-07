@@ -7,6 +7,7 @@ Needs the Rust toolchain and PostgreSQL: ``make up``, then
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
 import signal
@@ -21,6 +22,7 @@ import pytest
 from brier_services.client import ApiError, Ed25519Key, RestClient, WsClient, clock_ms
 
 ROOT = Path(__file__).resolve().parents[2]
+RULEBOOK = ROOT / "crates" / "gateway" / "tests" / "fixtures" / "long_window_rulebook.json"
 PASSWORD = "a long enough password"  # noqa: S105 - a throwaway local test account
 
 
@@ -114,8 +116,15 @@ def test_the_reference_client_trades_against_a_real_gateway(
     )
     alice = RestClient(base)
     alice.login("alice", PASSWORD)
-    alice.request("POST", "/v1/admin/markets", {"market": 1, "reason": "live client test"})
-    alice.request("POST", "/v1/admin/markets/1/state", {"state": "open", "reason": "open it"})
+    rulebook = json.loads(RULEBOOK.read_text())
+    alice.request("POST", "/v1/admin/markets", {"rulebook": rulebook, "reason": "live client test"})
+    # The rulebook's open time has passed, so the gateway's scheduler opens the market within a
+    # second; an explicit open that loses that race is refused as an invalid transition.
+    try:
+        alice.request("POST", "/v1/admin/markets/1/state", {"state": "open", "reason": "open it"})
+    except ApiError as e:
+        if e.code != "invalid_transition":
+            raise
 
     bob = RestClient(base)
     bob.login("bob", PASSWORD)

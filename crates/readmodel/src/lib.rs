@@ -13,7 +13,7 @@ use std::path::Path;
 
 use brier_engine::{CancelReason, Command, Engine, Event, RejectReason, Sequenced};
 use brier_journal::{Follower, JournalError};
-use brier_types::{AccountId, MarketId, OrderId, Seq, Side};
+use brier_types::{AccountId, Digest, MarketId, OrderId, Outcome, Seq, Side};
 use tokio_postgres::Client;
 
 /// Embedded migrations for the whole database (read models and gateway identity), applied in
@@ -30,6 +30,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
     (
         "0003_market_trades",
         include_str!("../migrations/0003_market_trades.sql"),
+    ),
+    (
+        "0004_resolution",
+        include_str!("../migrations/0004_resolution.sql"),
     ),
 ];
 
@@ -144,6 +148,63 @@ struct OrderEvent {
     reason: Option<&'static str>,
 }
 
+/// What the journal says about a market's rules or settlement (`market_journal`).
+enum Pin {
+    Listed {
+        market: i64,
+        seq: i64,
+        rules_hash: Option<Digest>,
+    },
+    Settled {
+        market: i64,
+        seq: i64,
+        outcome: &'static str,
+        evidence_hash: Option<Digest>,
+    },
+}
+
+/// The rows one batch of commands produces.
+#[derive(Default)]
+struct Rows {
+    fills: Vec<Fill>,
+    order_events: Vec<OrderEvent>,
+    pins: Vec<Pin>,
+}
+
+/// The `market_journal` change an event makes, if any.
+fn pin(event: &Event, seq: i64) -> Option<Pin> {
+    match *event {
+        Event::MarketCreated { market, rules_hash } => Some(Pin::Listed {
+            market: i64::from(market.get()),
+            seq,
+            rules_hash,
+        }),
+        Event::Settled {
+            market,
+            outcome,
+            evidence_hash,
+        } => Some(Pin::Settled {
+            market: i64::from(market.get()),
+            seq,
+            outcome: outcome_name(outcome),
+            evidence_hash,
+        }),
+        _ => None,
+    }
+}
+
+fn digest_col(d: Option<Digest>) -> Option<Vec<u8>> {
+    d.map(|d| d.bytes().to_vec())
+}
+
+const fn outcome_name(o: Outcome) -> &'static str {
+    match o {
+        Outcome::Yes => "yes",
+        Outcome::No => "no",
+        Outcome::Void => "void",
+    }
+}
+
 const fn cancel_reason(r: CancelReason) -> &'static str {
     match r {
         CancelReason::User => "user",
@@ -201,7 +262,7 @@ impl Projector {
             owners: HashMap::new(),
             cursor,
         };
-        let mut ignored = (Vec::new(), Vec::new());
+        let mut ignored = Rows::default();
         let mut commands = Vec::new();
         p.follower.poll::<ReadModelError>(cursor, |seq, command| {
             commands.push((seq, command));
@@ -240,11 +301,15 @@ impl Projector {
         if commands.is_empty() {
             return Ok(0);
         }
-        let mut rows = (Vec::new(), Vec::new());
+        let mut rows = Rows::default();
         for &(seq, command) in &commands {
             self.replay(seq, command, &mut rows)?;
         }
-        let (fills, order_events) = rows;
+        let Rows {
+            fills,
+            order_events,
+            pins,
+        } = rows;
         let new_cursor = commands.last().map_or(self.cursor, |(s, _)| s.get());
         let tx = client.transaction().await?;
         let insert_fill = tx
@@ -287,6 +352,7 @@ impl Projector {
             )
             .await?;
         }
+        write_pins(&tx, &pins).await?;
         let moved = tx
             .execute(
                 "UPDATE projector_cursor SET last_seq = $1 WHERE id = 1 AND last_seq = $2",
@@ -307,7 +373,7 @@ impl Projector {
         &mut self,
         seq: Seq,
         command: Command,
-        rows: &mut (Vec<Fill>, Vec<OrderEvent>),
+        rows: &mut Rows,
     ) -> Result<(), ReadModelError> {
         let mut events = Vec::new();
         self.replica
@@ -320,6 +386,10 @@ impl Projector {
         };
         let missing = |what: &str| ReadModelError::Engine(format!("{what} at seq {}", seq.get()));
         for (i, event) in events.iter().enumerate() {
+            if let Some(pin) = pin(event, s) {
+                rows.pins.push(pin);
+                continue;
+            }
             let at = (
                 s,
                 i32::try_from(i).map_err(|_| ReadModelError::OutOfRange("ordinal"))?,
@@ -387,12 +457,12 @@ impl Projector {
                     None => continue,
                 },
                 Event::Trade(t) => {
-                    rows.0.push(fill_row(at, &t)?);
+                    rows.fills.push(fill_row(at, &t)?);
                     continue;
                 }
                 _ => continue,
             };
-            rows.1.push(row);
+            rows.order_events.push(row);
         }
         // Orders that filled completely leave the book without a cancel event, and incoming
         // orders that never rested leave none either: forget every owner no longer live.
@@ -408,6 +478,47 @@ impl Projector {
         }
         Ok(())
     }
+}
+
+/// Write `market_journal` rows in journal order: a market listed and settled in one batch is
+/// inserted, then updated.
+async fn write_pins(
+    tx: &tokio_postgres::Transaction<'_>,
+    pins: &[Pin],
+) -> Result<(), ReadModelError> {
+    for pin in pins {
+        let changed = match pin {
+            Pin::Listed {
+                market,
+                seq,
+                rules_hash,
+            } => {
+                tx.execute(
+                    "INSERT INTO market_journal (market, listed_seq, rules_hash) VALUES ($1, $2, $3)",
+                    &[market, seq, &digest_col(*rules_hash)],
+                )
+                .await?
+            }
+            Pin::Settled {
+                market,
+                seq,
+                outcome,
+                evidence_hash,
+            } => {
+                tx.execute(
+                    "UPDATE market_journal SET settled_seq = $2, outcome = $3, evidence_hash = $4 WHERE market = $1 AND settled_seq IS NULL",
+                    &[market, seq, outcome, &digest_col(*evidence_hash)],
+                )
+                .await?
+            }
+        };
+        if changed != 1 {
+            return Err(ReadModelError::Engine(
+                "market_journal disagrees with the journal".to_owned(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn order_row(

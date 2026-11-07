@@ -58,6 +58,8 @@ The validator refuses a rulebook if any of these holds:
 Canonical form: RFC 8785 (JSON Canonicalization Scheme), implemented in both Rust and Python. Shared test vectors keep the two byte for byte identical.
 
 ### Resolution workflow (gateway and Postgres)
+*Built in unit 4; `docs/resolution.md` is the current reference. Added while building: a `settling` state (the settler's claim, so a crash between `settle` and the row update is finished from the journal), an admin `withdraw` for a wrong proposal, `moot` for the other open disputes when one is upheld, the `market_journal` read model of the journaled hashes, and evidence checks (market, rules hash, outcome, retrieval time).*
+
 **Roles.** `user`, `admin`, and a new `resolver` role. A resolver can only propose outcomes; it cannot confirm, settle, or trade.
 
 **Tables:**

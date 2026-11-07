@@ -213,7 +213,7 @@ async fn the_websocket_api_end_to_end() {
     for (path, body) in [
         (
             "/v1/admin/markets",
-            json!({ "market": 1, "reason": "websocket test market" }),
+            json!({ "rulebook": common::rulebook(1), "reason": "websocket test market" }),
         ),
         (
             "/v1/admin/markets/1/state",
@@ -221,7 +221,7 @@ async fn the_websocket_api_end_to_end() {
         ),
     ] {
         let (status, body) = call(&app, Method::POST, path, Some(&alice), Some(body)).await;
-        assert_eq!(status, StatusCode::OK, "{body}");
+        assert!(status.is_success(), "{body}");
     }
 
     // Public market data needs no auth; private channels and orders do.

@@ -29,7 +29,7 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 | G2 | Ledger, collateral, settlement | Done |
 | G3 | Journal, snapshots, crash recovery | Done |
 | G4 | Gateway, APIs, PostgreSQL read models | Done |
-| G5 | Markets, rulebook, resolution | Next |
+| G5 | Markets, rulebook, resolution | In progress |
 | G6 | Web app | |
 | G7 | Market maker, simulation harness | |
 | G8 | Surveillance and its evaluation | |

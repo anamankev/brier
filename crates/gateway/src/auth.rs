@@ -40,8 +40,31 @@ pub const MAX_PASSWORD_LEN: usize = 256;
 pub struct User {
     /// User ID, which is also the engine account ID.
     pub id: i64,
-    /// Whether the user may run administrative commands.
-    pub admin: bool,
+    /// What the user may do.
+    pub role: Role,
+}
+
+/// A user's role (the `users.role` column).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    /// Trades its own account.
+    Trader,
+    /// Trades, and runs administrative commands.
+    Admin,
+    /// Proposes market outcomes, and nothing else: it cannot trade, confirm, or settle.
+    Resolver,
+}
+
+impl Role {
+    /// The role stored as `name`; an unknown name gets the fewest rights.
+    #[must_use]
+    pub fn from_name(name: &str) -> Self {
+        match name {
+            "admin" => Self::Admin,
+            "resolver" => Self::Resolver,
+            _ => Self::Trader,
+        }
+    }
 }
 
 impl User {
@@ -289,7 +312,7 @@ pub async fn authenticate(
         let row = row.ok_or_else(|| ApiError::unauthorized("the session is invalid or expired"))?;
         return Ok(User {
             id: row.get(0),
-            admin: row.get::<_, &str>(1) == "admin",
+            role: Role::from_name(row.get(1)),
         });
     }
     if !allow_signed {
@@ -326,7 +349,7 @@ pub async fn authenticate(
     }
     Ok(User {
         id: row.get(1),
-        admin: row.get::<_, &str>(2) == "admin",
+        role: Role::from_name(row.get(2)),
     })
 }
 

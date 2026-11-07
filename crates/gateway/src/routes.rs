@@ -22,19 +22,19 @@ use brier_core::{Answer, Committed, Query};
 use brier_engine::{Command, Event, NewOrder, RejectReason};
 use brier_types::{AccountId, MarketId, OrderId};
 use brier_wire::{
-    cancel_name, event_json, outcome_from_name, reject_name, side_from_name, side_name,
-    state_from_name, state_name, tif_from_name,
+    cancel_name, reject_name, side_from_name, side_name, state_from_name, state_name, tif_from_name,
 };
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
-use crate::auth::{self, User};
+use crate::audit::{self, Actor};
+use crate::auth::{self, Role, User};
 use crate::error::ApiError;
 use crate::{AppState, ClientIp};
 
-type Shared = State<Arc<AppState>>;
-type ApiResult = Result<Response, ApiError>;
+pub(crate) type Shared = State<Arc<AppState>>;
+pub(crate) type ApiResult = Result<Response, ApiError>;
 
 /// Rows per page of history when the client does not say.
 const DEFAULT_PAGE: i64 = 100;
@@ -86,7 +86,7 @@ impl<S: Send + Sync> FromRequest<S> for Req {
 }
 
 impl Req {
-    async fn user(&self, s: &AppState, allow_signed: bool) -> Result<User, ApiError> {
+    pub(crate) async fn user(&self, s: &AppState, allow_signed: bool) -> Result<User, ApiError> {
         let path = self
             .uri
             .path_and_query()
@@ -103,7 +103,7 @@ impl Req {
         .await
     }
 
-    fn json<T: DeserializeOwned>(&self) -> Result<T, ApiError> {
+    pub(crate) fn json<T: DeserializeOwned>(&self) -> Result<T, ApiError> {
         serde_json::from_slice(&self.body)
             .map_err(|e| ApiError::bad_request(format!("invalid body: {e}")))
     }
@@ -115,7 +115,7 @@ impl Req {
     }
 }
 
-fn parse_id<T: std::str::FromStr>(raw: &str, what: &str) -> Result<T, ApiError> {
+pub(crate) fn parse_id<T: std::str::FromStr>(raw: &str, what: &str) -> Result<T, ApiError> {
     raw.parse()
         .map_err(|_| ApiError::bad_request(format!("{what} must be a non-negative integer")))
 }
@@ -188,7 +188,7 @@ pub async fn register(State(s): Shared, req: Req) -> ApiResult {
         .ok_or_else(|| ApiError::new(StatusCode::CONFLICT, "username_taken", "that username is taken"))?;
     let user = User {
         id: row.get(0),
-        admin: false,
+        role: Role::Trader,
     };
     if let Err(e) = ensure_account(&s, user).await {
         // No half-made user: without its engine account the row is removed. If this delete
@@ -225,7 +225,7 @@ pub async fn login(State(s): Shared, req: Req) -> ApiResult {
     let user = match row {
         Some(r) if matches => User {
             id: r.get(0),
-            admin: r.get::<_, &str>(2) == "admin",
+            role: Role::from_name(r.get(2)),
         },
         _ => return Err(ApiError::unauthorized("wrong username or password")),
     };
@@ -388,6 +388,10 @@ pub fn decode_order(body: &[u8], account: AccountId) -> Result<Command, ApiError
 
 async fn trader(s: &AppState, req: &Req) -> Result<AccountId, ApiError> {
     let user = req.user(s, true).await?;
+    // A resolver proposes outcomes; it must never also be able to trade on them.
+    if user.role == Role::Resolver {
+        return Err(ApiError::forbidden());
+    }
     if !s.order_limits.allow(user.id) {
         return Err(ApiError::rate_limited());
     }
@@ -672,10 +676,19 @@ pub async fn order(State(s): Shared, Path(raw): Path<String>, req: Req) -> ApiRe
 
 // ---- administration -------------------------------------------------------------------------
 
-/// Run an administrative command: admin role required, a reason required, and an audit row
-/// written before the command is submitted (so even a crash mid-command leaves a trace), then
-/// completed with the sequence number and the engine's answer.
-async fn admin(
+/// The signed-in user, who must be an admin.
+pub(crate) async fn admin_user(s: &AppState, req: &Req) -> Result<User, ApiError> {
+    let user = req.user(s, true).await?;
+    if user.role == Role::Admin {
+        Ok(user)
+    } else {
+        Err(ApiError::forbidden())
+    }
+}
+
+/// Run an administrative command: admin role required, a reason required, and the command
+/// audited ([`audit::submit`]).
+pub(crate) async fn admin(
     s: &AppState,
     req: &Req,
     action: &'static str,
@@ -683,77 +696,17 @@ async fn admin(
     detail: Value,
     reason: &str,
 ) -> ApiResult {
-    let user = req.user(s, true).await?;
-    if !user.admin {
-        return Err(ApiError::forbidden());
-    }
-    let reason = reason.trim();
-    if !(3..=500).contains(&reason.chars().count()) {
-        return Err(ApiError::bad_request("reason must be 3 to 500 characters"));
-    }
-    let row = s
-        .db
-        .query_one(
-            "INSERT INTO audit_log (user_id, action, detail, reason) VALUES ($1, $2, $3::text::jsonb, $4) RETURNING id",
-            &[&user.id, &action, &json!({ "request": detail }).to_string(), &reason],
-        )
-        .await?;
-    let audit: i64 = row.get(0);
-    let committed = match s.core.submit(command).await {
-        Ok(c) => c,
-        Err(e) => {
-            let note = json!({ "error": e.to_string() }).to_string();
-            s.db.execute(
-                "UPDATE audit_log SET detail = detail || $2::text::jsonb WHERE id = $1",
-                &[&audit, &note],
-            )
-            .await?;
-            return Err(e.into());
-        }
-    };
-    let seq = committed.seq.get();
-    let events: Vec<Value> = committed
-        .events
-        .iter()
-        .map(|e| event_json(seq, e))
-        .collect();
-    let seq_col = i64::try_from(seq).map_err(|e| ApiError::internal(&e))?;
-    let note = json!({ "events": events }).to_string();
-    s.db.execute(
-        "UPDATE audit_log SET seq = $2, detail = detail || $3::text::jsonb WHERE id = $1",
-        &[&audit, &seq_col, &note],
-    )
-    .await?;
-    if let [Event::Rejected { reason }] = committed.events.as_slice() {
+    let user = admin_user(s, req).await?;
+    let reason = audit::reason(reason)?;
+    let done = audit::submit(s, Actor::User(user.id), action, command, detail, reason).await?;
+    let seq = done.committed.seq.get();
+    if let [Event::Rejected { reason }] = done.committed.events.as_slice() {
         return Err(ApiError::rejected(reject_name(*reason), seq));
     }
-    Ok(Json(json!({ "seq": seq, "audit_id": audit, "events": events })).into_response())
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CreateMarketBody {
-    market: u32,
-    reason: String,
-}
-
-/// `POST /v1/admin/markets`: list a market (in `pre_open`).
-pub async fn create_market(State(s): Shared, req: Req) -> ApiResult {
-    let b: CreateMarketBody = req.json()?;
-    // G5 unit 4 replaces this endpoint with listing from a validated rulebook.
-    let command = Command::CreateMarket {
-        market: MarketId::new(b.market),
-        rules_hash: None,
-    };
-    admin(
-        &s,
-        &req,
-        "create_market",
-        command,
-        json!({ "market": b.market }),
-        &b.reason,
+    Ok(
+        Json(json!({ "seq": seq, "audit_id": done.audit_id, "events": done.events }))
+            .into_response(),
     )
-    .await
 }
 
 #[derive(Deserialize)]
@@ -769,6 +722,7 @@ pub async fn set_state(State(s): Shared, Path(raw): Path<String>, req: Req) -> A
     let b: StateBody = req.json()?;
     let state =
         state_from_name(&b.state).ok_or_else(|| ApiError::bad_request("unknown market state"))?;
+    crate::markets::check_manual_state(&s, MarketId::new(market), state).await?;
     let command = Command::SetState {
         market: MarketId::new(market),
         state,
@@ -779,36 +733,6 @@ pub async fn set_state(State(s): Shared, Path(raw): Path<String>, req: Req) -> A
         "set_state",
         command,
         json!({ "market": market, "state": b.state }),
-        &b.reason,
-    )
-    .await
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SettleBody {
-    outcome: String,
-    reason: String,
-}
-
-/// `POST /v1/admin/markets/{id}/settle`: settle a closed market YES, NO, or void.
-pub async fn settle(State(s): Shared, Path(raw): Path<String>, req: Req) -> ApiResult {
-    let market: u32 = parse_id(&raw, "market")?;
-    let b: SettleBody = req.json()?;
-    let outcome = outcome_from_name(&b.outcome)
-        .ok_or_else(|| ApiError::bad_request("outcome must be yes, no, or void"))?;
-    // G5 unit 4 removes this one-step settle in favour of propose, confirm, and dispute.
-    let command = Command::Settle {
-        market: MarketId::new(market),
-        outcome,
-        evidence_hash: None,
-    };
-    admin(
-        &s,
-        &req,
-        "settle",
-        command,
-        json!({ "market": market, "outcome": b.outcome }),
         &b.reason,
     )
     .await

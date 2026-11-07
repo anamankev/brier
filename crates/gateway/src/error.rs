@@ -20,6 +20,9 @@ pub const GATEWAY_CODES: &[&str] = &[
     "too_many_in_flight",
     "unavailable",
     "timeout",
+    "invalid_rulebook",
+    "conflict",
+    "too_early",
 ];
 
 /// An error answered to a client.
@@ -67,6 +70,25 @@ impl ApiError {
             "forbidden",
             "this action needs the admin role",
         )
+    }
+
+    /// 403 with a specific reason.
+    #[must_use]
+    pub fn forbidden_because(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::FORBIDDEN, "forbidden", message)
+    }
+
+    /// 409: the request conflicts with the current state (a market that exists, a live
+    /// resolution, a dispute already filed).
+    #[must_use]
+    pub fn conflict(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::CONFLICT, "conflict", message)
+    }
+
+    /// 409: allowed later, not now (before a market's release time, inside the dispute window).
+    #[must_use]
+    pub fn too_early(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::CONFLICT, "too_early", message)
     }
 
     /// 429: a rate limit was exceeded.

@@ -29,6 +29,13 @@ info:
     (burst 10). An exceeded limit answers 429 `rate_limited`; nothing is queued. Bodies are at
     most 8 KiB. A request taking over 10 s answers 504 `timeout`.
 
+    Markets and resolution. Every market is listed from its rulebook (docs/rulebook.md); the
+    gateway opens and closes it at the rulebook's times. A market settles only through the
+    resolution workflow (docs/resolution.md): a resolver proposes an outcome with its evidence,
+    an admin other than the proposer confirms it, position holders may dispute it for the
+    dispute window (24 h), and the gateway then settles it. The journal records the rules hash
+    and the evidence hash.
+
     Authentication. People log in for a session token (`Authorization: Bearer <token>`, valid
     24 h). Bots register an Ed25519 public key with a session, then sign each request (see the
     `signed` scheme). Managing keys needs a session.
@@ -43,6 +50,7 @@ tags:
   - name: market data
   - name: trading
   - name: history
+  - name: resolution
   - name: administration
 paths:
   /v1/health:
@@ -221,6 +229,142 @@ paths:
                   bids: { $ref: '#/components/schemas/Levels' }
                   asks: { $ref: '#/components/schemas/Levels' }
         '404': { $ref: '#/components/responses/Error' }
+  /v1/markets/{id}/rules:
+    get:
+      tags: [market data]
+      summary: The market's rulebook, rules hash, rule text, and what the journal recorded
+      security: []
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: The rulebook. `journal` is null until the read models reach the listing.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [market, rules_hash, rulebook, canonical, text, schedule, journal]
+                properties:
+                  market: { type: integer }
+                  rules_hash: { $ref: '#/components/schemas/Hash' }
+                  rulebook: { type: object, description: 'The rulebook (docs/rulebook.md)' }
+                  canonical: { type: string, description: 'Its RFC 8785 canonical JSON; rules_hash is the SHA-256 of these bytes' }
+                  text: { type: string, description: 'The resolution rule in words, generated from the rulebook' }
+                  schedule:
+                    type: object
+                    required: [open, close, release, deadline]
+                    properties:
+                      open: { $ref: '#/components/schemas/Instant' }
+                      close: { $ref: '#/components/schemas/Instant' }
+                      release: { $ref: '#/components/schemas/Instant' }
+                      deadline: { $ref: '#/components/schemas/Instant' }
+                  journal:
+                    type: [object, 'null']
+                    properties:
+                      listed_seq: { type: integer }
+                      rules_hash: { oneOf: [{ $ref: '#/components/schemas/Hash' }, { type: 'null' }] }
+                      matches: { type: boolean, description: 'The journaled hash equals rules_hash' }
+        '404': { $ref: '#/components/responses/Error' }
+  /v1/markets/{id}/resolution:
+    get:
+      tags: [resolution]
+      summary: Every resolution of the market, newest first, with its evidence record
+      security: []
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: Resolutions. Who proposed, confirmed, or disputed is not shown.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [market, resolutions]
+                properties:
+                  market: { type: integer }
+                  resolutions:
+                    type: array
+                    items: { $ref: '#/components/schemas/Resolution' }
+    post:
+      tags: [resolution]
+      summary: Propose an outcome for a closed market after its release time (resolver or admin)
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [outcome, evidence, reason]
+              properties:
+                outcome: { enum: [yes, no, void] }
+                void_condition:
+                  enum: [no_value_by_deadline, source_discontinued]
+                  description: Required with void, and only then; one of the rulebook's void conditions. no_value_by_deadline needs the deadline to have passed.
+                evidence:
+                  type: object
+                  required: [market, rules_hash, outcome, retrieved_at]
+                  description: |
+                    The evidence record (docs/resolution.md), at most 4 KiB as canonical JSON, with
+                    integer numbers only. `market`, `rules_hash`, and `outcome` must match; `retrieved_at`
+                    must be no earlier than the release time (the deadline for no_value_by_deadline)
+                    and not in the future. Its SHA-256 is the evidence hash `settle` carries.
+                  properties:
+                    market: { type: integer }
+                    rules_hash: { $ref: '#/components/schemas/Hash' }
+                    outcome: { enum: [yes, no, void] }
+                    retrieved_at: { $ref: '#/components/schemas/Instant' }
+                reason: { $ref: '#/components/schemas/Reason' }
+      responses:
+        '201':
+          description: Proposed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [resolution, market, state, evidence_hash]
+                properties:
+                  resolution: { type: integer }
+                  market: { type: integer }
+                  state: { const: proposed }
+                  evidence_hash: { $ref: '#/components/schemas/Hash' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /v1/resolutions/{id}/disputes:
+    post:
+      tags: [resolution]
+      summary: Dispute a confirmed resolution inside its window (position holders, once each)
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { $ref: '#/components/schemas/Reason' }
+      responses:
+        '201':
+          description: Filed; settlement waits until an admin rules on it
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [dispute, resolution, state]
+                properties:
+                  dispute: { type: integer }
+                  resolution: { type: integer }
+                  state: { const: open }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
   /v1/markets/{id}/trades:
     get:
       tags: [market data]
@@ -449,7 +593,7 @@ paths:
   /v1/admin/markets:
     post:
       tags: [administration]
-      summary: List a market (pre_open)
+      summary: List a market from its rulebook (pre_open; the scheduler opens it at its open time)
       requestBody:
         required: true
         content:
@@ -457,20 +601,33 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [market, reason]
+              required: [rulebook, reason]
               properties:
-                market: { type: integer, minimum: 0, maximum: 4294967295 }
+                rulebook: { type: object, description: 'The rulebook (docs/rulebook.md); its close time must be in the future' }
                 reason: { $ref: '#/components/schemas/Reason' }
       responses:
-        '200': { $ref: '#/components/responses/Admin' }
+        '201':
+          description: Listed; `create_market` carried the rules hash into the journal
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [seq, audit_id, market, rules_hash, events]
+                properties:
+                  seq: { type: integer }
+                  audit_id: { type: integer }
+                  market: { type: integer }
+                  rules_hash: { $ref: '#/components/schemas/Hash' }
+                  events: { type: array, items: { type: object } }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
   /v1/admin/markets/{id}/state:
     post:
       tags: [administration]
-      summary: Move a market through its lifecycle
+      summary: Move a market through its lifecycle (open only inside the rulebook's trading window)
       parameters: [{ $ref: '#/components/parameters/Id' }]
       requestBody:
         required: true
@@ -488,11 +645,12 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
-  /v1/admin/markets/{id}/settle:
+  /v1/admin/resolutions/{id}/confirm:
     post:
-      tags: [administration]
-      summary: Settle a closed market YES, NO, or void
+      tags: [resolution]
+      summary: Confirm a proposed resolution (an admin other than the proposer); opens the dispute window
       parameters: [{ $ref: '#/components/parameters/Id' }]
       requestBody:
         required: true
@@ -501,16 +659,73 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [outcome, reason]
+              required: [reason]
               properties:
-                outcome: { enum: [yes, no, void] }
                 reason: { $ref: '#/components/schemas/Reason' }
       responses:
-        '200': { $ref: '#/components/responses/Admin' }
+        '200':
+          description: 'Confirmed: `{resolution, state: confirmed, dispute_until}`'
+          content:
+            application/json:
+              schema: { type: object }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
-        '422': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /v1/admin/resolutions/{id}/withdraw:
+    post:
+      tags: [resolution]
+      summary: Withdraw a proposed or confirmed resolution before it settles; its open disputes become moot
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { $ref: '#/components/schemas/Reason' }
+      responses:
+        '200':
+          description: 'Withdrawn: `{resolution, state: withdrawn}`'
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /v1/admin/disputes/{id}/rule:
+    post:
+      tags: [resolution]
+      summary: 'Rule on an open dispute (an admin other than the proposer): uphold withdraws the resolution, reject lets it stand'
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [decision, reason]
+              properties:
+                decision: { enum: [uphold, reject] }
+                reason: { $ref: '#/components/schemas/Reason' }
+      responses:
+        '200':
+          description: 'Ruled: `{dispute, resolution, state: upheld | rejected}`'
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
   /v1/admin/cancel-all:
     post:
       tags: [administration]
@@ -621,10 +836,12 @@ components:
         seq: { type: integer, description: Present when the engine sequenced and rejected the command (422) }
     ErrorCode:
       description: |
-        Gateway codes: bad_request (400), unauthorized (401), forbidden (403), not_found (404),
-        username_taken (409), too_large (413), rate_limited (429), too_many_in_flight (429,
-        WebSocket only), unavailable (503), timeout (504). Every other code is an engine reject
-        reason (422, docs/protocol.md).
+        Gateway codes: bad_request (400), invalid_rulebook (400; the message starts with the
+        rulebook error code, docs/rulebook.md), unauthorized (401), forbidden (403), not_found
+        (404), username_taken (409), conflict (409: the state does not allow this), too_early
+        (409: allowed later, such as before a release time), too_large (413), rate_limited (429),
+        too_many_in_flight (429, WebSocket only), unavailable (503), timeout (504). Every other
+        code is an engine reject reason (422, docs/protocol.md).
       enum:
         - bad_request
         - unauthorized
@@ -636,6 +853,9 @@ components:
         - too_many_in_flight
         - unavailable
         - timeout
+        - invalid_rulebook
+        - conflict
+        - too_early
         - unknown_market
         - market_exists
         - market_not_open
@@ -651,6 +871,36 @@ components:
         - account_exists
         - too_many_orders
         - insufficient_collateral
+    Hash:
+      type: string
+      pattern: '^[0-9a-f]{64}$'
+      description: A SHA-256 hash, 64 lowercase hex digits
+    Instant:
+      type: string
+      pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
+      description: A UTC instant, written exactly YYYY-MM-DDTHH:MM:SSZ
+    Resolution:
+      type: object
+      required: [resolution, outcome, void_condition, evidence_hash, state, proposed_at, confirmed_at, dispute_until, settled_seq, evidence, disputes]
+      properties:
+        resolution: { type: integer }
+        outcome: { enum: [yes, no, void] }
+        void_condition: { enum: [no_value_by_deadline, source_discontinued, null] }
+        evidence_hash: { $ref: '#/components/schemas/Hash' }
+        state:
+          enum: [proposed, confirmed, settling, settled, withdrawn]
+          description: 'settling means the gateway has claimed it to settle; it can no longer be withdrawn or disputed'
+        proposed_at: { $ref: '#/components/schemas/Instant' }
+        confirmed_at: { oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }] }
+        dispute_until: { oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }] }
+        settled_seq: { type: [integer, 'null'], description: "The settle command's journal sequence number" }
+        evidence: { type: object, description: 'The evidence record' }
+        disputes:
+          type: object
+          required: [open, total]
+          properties:
+            open: { type: integer }
+            total: { type: integer }
     Credentials:
       type: object
       additionalProperties: false

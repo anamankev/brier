@@ -39,6 +39,21 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
+/// The civil date of a day count from 1970-01-01 (H. Hinnant's `civil_from_days`).
+#[allow(clippy::arithmetic_side_effects)] // callers bound `z` to the years 2000-2100
+fn civil_from_days(z: i64) -> (i64, i64, i64) {
+    let z = z + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    (year, month, day)
+}
+
 fn year_month(y: &str, m: &str) -> Option<(i64, i64)> {
     let (year, month) = (digits(y)?, digits(m)?);
     (y.len() == 4
@@ -78,6 +93,26 @@ pub fn instant(s: &str) -> Option<Unix> {
         return None;
     }
     Some(days_from_civil(year, month, day) * DAY + h * 3600 + mi * 60 + se)
+}
+
+/// The one spelling of an instant, `YYYY-MM-DDTHH:MM:SSZ`; `None` outside the years 2000-2100.
+/// The inverse of [`instant`].
+#[must_use]
+#[allow(clippy::arithmetic_side_effects)] // bounded by the range check first
+pub fn format_instant(t: Unix) -> Option<String> {
+    let first = days_from_civil(MIN_YEAR, 1, 1) * DAY;
+    let end = days_from_civil(MAX_YEAR + 1, 1, 1) * DAY;
+    if !(first..end).contains(&t) {
+        return None;
+    }
+    let (days, secs) = (t.div_euclid(DAY), t.rem_euclid(DAY));
+    let (year, month, day) = civil_from_days(days);
+    Some(format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        secs / 3600,
+        secs % 3600 / 60,
+        secs % 60
+    ))
 }
 
 /// Which kind of period a series is observed over.
@@ -140,6 +175,25 @@ mod tests {
         ] {
             assert_eq!(instant(bad), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn formatting_inverts_parsing() {
+        let first = instant("2000-01-01T00:00:00Z").unwrap();
+        let last = instant("2100-12-31T23:59:59Z").unwrap();
+        // Every day boundary and a spread of times in between.
+        let mut t = first;
+        while t <= last {
+            let s = format_instant(t).unwrap();
+            assert_eq!(instant(&s), Some(t), "{s}");
+            t += DAY + 371;
+        }
+        assert_eq!(
+            format_instant(last).as_deref(),
+            Some("2100-12-31T23:59:59Z")
+        );
+        assert_eq!(format_instant(first - 1), None);
+        assert_eq!(format_instant(last + 1), None);
     }
 
     #[test]

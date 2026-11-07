@@ -1,6 +1,6 @@
 [package]
 name = "brier-gateway"
-description = "HTTP and WebSocket gateway: identity, signed requests, rate limits, REST, market data (SPEC §6)"
+description = "HTTP and WebSocket gateway: identity, signed requests, rate limits, REST, market data, market schedules and resolution (SPEC §6, §7)"
 version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -20,6 +20,7 @@ base64 = "=0.23.1"
 brier-core = { path = "../core" }
 brier-engine = { path = "../engine" }
 brier-readmodel = { path = "../readmodel" }
+brier-rules = { path = "../rules" }
 brier-types = { path = "../types" }
 brier-wire = { path = "../wire" }
 ed25519-dalek = "=3.0.0"

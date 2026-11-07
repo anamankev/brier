@@ -255,6 +255,7 @@ dependencies = [
  "brier-core",
  "brier-engine",
  "brier-readmodel",
+ "brier-rules",
  "brier-types",
  "brier-wire",
  "ed25519-dalek",

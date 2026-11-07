@@ -453,7 +453,7 @@ fn one_run(url: &str, run: usize, plan: Plan) -> Run {
                 "POST",
                 "/v1/admin/markets",
                 Some(&admin),
-                &json!({ "market": m, "reason": "gateway benchmark" }),
+                &json!({ "rulebook": bench_rulebook(m), "reason": "gateway benchmark" }),
             )
             .await;
             http(
@@ -464,6 +464,7 @@ fn one_run(url: &str, run: usize, plan: Plan) -> Run {
                 &json!({ "state": "open", "reason": "gateway benchmark" }),
             )
             .await;
+            // The scheduler may open it first (the open time has passed); either way it is open.
         }
         tokens
     });
@@ -589,4 +590,14 @@ fn main() -> ExitCode {
     } else {
         ExitCode::FAILURE
     }
+}
+
+/// The gateway tests' long-window rulebook, listed as market `m`.
+fn bench_rulebook(m: u32) -> serde_json::Value {
+    let mut r: serde_json::Value = serde_json::from_str(include_str!(
+        "../../gateway/tests/fixtures/long_window_rulebook.json"
+    ))
+    .expect("the fixture rulebook is JSON");
+    r["market"] = json!(m);
+    r
 }
