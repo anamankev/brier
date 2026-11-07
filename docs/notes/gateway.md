@@ -79,10 +79,28 @@ Command: `make gateway-bench`. macOS 26.6, rustc 1.99.1, release build, AC power
 ### Follow-up hypothesis (registered here before the change is made)
 - **P4-coalesced**: if each connection writes all its queued messages and then flushes once, instead of one system call per message, then P4's pooled p99 over 3 registered-length runs is ≤ 10 ms. Refuted if it exceeds 10 ms. Order latency during fan-out is reported beside it.
 
+### Follow-up result: P4-coalesced
+Code `7058161`, same command, conditions, and checks (AC power at every run's start and end).
+
+| Run | Fan-out p50 | p99 | p99.9 | Order to ack p99 (alone) | Order to ack p99 (during fan-out) |
+|---|---|---|---|---|---|
+| 1 | 3.35 ms | 8.00 ms | 13.2 ms | 7.02 ms | 20.3 ms |
+| 2 | 3.79 ms | 37.5 ms | 224 ms | 6.97 ms | 86.6 ms |
+| 3 | 3.98 ms | 15.3 ms | 28.3 ms | 18.1 ms | 43.3 ms |
+| **Pooled** | 3.69 ms | **16.4 ms** | 76.3 ms | 7.97 ms | |
+
+- **P4-coalesced: refuted** (pooled p99 16.4 ms > 10 ms). Coalescing halved the median (6.88 to 3.69 ms) and cut the pooled p99 from 22.9 to 16.4 ms; run 1 alone met the bound.
+- What is left is not the steady per-message cost but stalls of 100-400 ms that hit some runs and not others, in the order path and the fan-out at the same time (run 2 here, run 2 of the registered run). P3 and P3b were re-measured on the way: pooled p99 7.97 ms, again P3 refuted and P3b supported.
+
 ## 6. Interpretation
+- Order acknowledgment costs one to two durable syncs, as G3 predicted; the median is 4.7 ms, and a single sync is 3.95 ms. Getting P3's 5 ms at p99 would need a cheaper durability point (a battery-backed or replicated log), not a faster gateway.
+- Fan-out of 1,000 subscribers on one machine is bounded by system calls: about 557,000 messages a second written by the gateway and read by the clients on the same cores. Coalescing writes removed much of the steady cost.
+- The remaining tail is intermittent stalls that strike orders and fan-out together and vary from run to run under the same code. With 9 GB of swap in use by other applications, a 4-core gateway runtime competing with 4 client threads, Docker, and the core's sync thread on one laptop, the stalls are most likely the machine (paging or scheduling), but this was not proven.
 
 ## 7. Limitations and threats to validity
 - Load client, gateway, and subscribers share one 10-core laptop, so they compete for CPU. Measured latency is an upper bound on the gateway's own cost.
 - Localhost only: no network, TLS, or proxy cost.
 
 ## 8. Next questions
+- Where do the 100-400 ms stalls come from? Repeat with swap cleared, then with the clients on a second machine; if they persist, trace scheduling (`sample` the core and gateway threads during one).
+- Conflation for slow or very wide fan-out: send a book's latest state at most every N ms per subscriber instead of every delta, as large exchanges do for retail feeds.
