@@ -14,6 +14,10 @@ from brier_services.reference_engine import ReferenceEngine
 ROOT = Path(__file__).resolve().parents[2]
 FAST_SEEDS = range(1, 6)
 FAST_COMMANDS = 5_000
+# Measured on seeds 1-5 at 5,000 commands (commit after 0c33e86): trades 0.046-0.064 and
+# accepted orders 0.442-0.496 per command. The floors are about half the lowest.
+LIVE_TRADES_PER_COMMAND = 0.02
+LIVE_ACCEPTED_PER_COMMAND = 0.25
 
 
 @pytest.fixture(scope="session")
@@ -87,7 +91,11 @@ def test_generation_is_deterministic_in_the_seed() -> None:
 def test_rust_engine_matches_the_reference_engine(replay_binary: Path, seed: int) -> None:
     report = run(replay_binary, seed, FAST_COMMANDS, check_every=500)
     assert report.divergence is None, report.divergence
-    assert report.trades > 0
+    # Liveness floors: a stream that mostly bounces off rejections proves little even when
+    # the engines agree (docs/notes/differential.md, G2 incidents). Floors are set well below
+    # the measured rates so they catch a degenerate generator, not normal seed variation.
+    assert report.trades >= LIVE_TRADES_PER_COMMAND * FAST_COMMANDS
+    assert report.accepted >= LIVE_ACCEPTED_PER_COMMAND * FAST_COMMANDS
 
 
 @pytest.mark.differential
