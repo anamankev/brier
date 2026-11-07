@@ -420,6 +420,13 @@ fn settlement_needs_a_closed_market_and_pays_the_winning_side() {
     assert_eq!(h.engine.escrow(M), Some(Credits::ZERO));
     assert_eq!((h.position(BOB, M), h.position(CAROL, M)), (0, 0));
     assert_eq!(h.engine.market_state(M), Some(MarketState::Resolved));
+    // The settled market leaves nothing behind in any account (SPEC §2.4).
+    assert!(
+        h.engine
+            .accounts()
+            .iter()
+            .all(|v| v.positions.iter().all(|&(m, _)| m != M))
+    );
 }
 
 #[test]

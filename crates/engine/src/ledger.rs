@@ -347,7 +347,7 @@ impl Ledger {
             .range((market, AccountId::new(0))..=(market, AccountId::new(u64::MAX)))
             .map(|(key, _)| *key)
             .collect();
-        for key in keys {
+        for &key in &keys {
             let account = key.1;
             let holding = self
                 .holdings
@@ -387,6 +387,27 @@ impl Ledger {
         }
         if self.escrow.get(&market) != Some(&Credits::ZERO) {
             return Err(EngineError::Corrupt("escrow is not zero after settlement"));
+        }
+        // A settled market can never trade again, so its holdings are dead weight in memory
+        // and in every snapshot (G3). Each must already be empty: no position (just paid out),
+        // no resting orders (cancelled at close), no reserve.
+        for key in keys {
+            let holding = self
+                .holdings
+                .remove(&key)
+                .ok_or(EngineError::Corrupt("holding vanished"))?;
+            let idle = holding.position == 0
+                && holding.reserve == Credits::ZERO
+                && holding
+                    .buy_qty
+                    .iter()
+                    .chain(holding.sell_qty.iter())
+                    .all(|&n| n == 0);
+            if !idle {
+                return Err(EngineError::Corrupt(
+                    "settled market still has live holdings",
+                ));
+            }
         }
         Ok(())
     }

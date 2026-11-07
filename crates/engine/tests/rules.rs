@@ -134,18 +134,14 @@ fn trade(
 }
 
 #[test]
-fn a_sequence_gap_halts_the_engine() {
+fn a_sequence_gap_halts_the_engine_for_good() {
     let mut engine = Engine::new();
     let mut out = Vec::new();
-    let err = engine
-        .apply(
-            &Sequenced {
-                seq: Seq::from_raw(2),
-                command: Command::CreateMarket { market: M },
-            },
-            &mut out,
-        )
-        .unwrap_err();
+    let gap = Sequenced {
+        seq: Seq::from_raw(2),
+        command: Command::CreateMarket { market: M },
+    };
+    let err = engine.apply(&gap, &mut out).unwrap_err();
     assert_eq!(
         err,
         EngineError::SequenceGap {
@@ -153,6 +149,19 @@ fn a_sequence_gap_halts_the_engine() {
             got: Seq::from_raw(2)
         }
     );
+    assert_eq!(out, [] as [Event; 0]);
+    // SPEC §4.3: once halted, even a correctly sequenced command is refused.
+    let next = Sequenced {
+        seq: Seq::FIRST,
+        command: Command::CreateMarket { market: M },
+    };
+    assert_eq!(
+        engine.apply(&next, &mut out),
+        Err(EngineError::Halted {
+            at: Seq::from_raw(2)
+        })
+    );
+    assert_eq!(engine.halted(), Some((Seq::from_raw(2), err)));
     assert_eq!(out, [] as [Event; 0]);
 }
 

@@ -287,6 +287,12 @@ class ReferenceEngine:
         if self.escrow[market] != 0:
             msg = f"escrow of market {market} is {self.escrow[market]} after settlement"
             raise EngineHaltedError(msg)
+        # A settled market never trades again; drop its per-account state.
+        self.positions.pop(market, None)
+        for pair in [pair for pair in self.reserve if pair[1] == market]:
+            if self.reserve.pop(pair) != 0:
+                msg = f"settled market {market} still charges a reserve"
+                raise EngineHaltedError(msg)
         return events
 
     def _cancel_all(self, account: int | None, market: int | None) -> list[Event]:

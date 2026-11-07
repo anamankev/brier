@@ -29,6 +29,13 @@ pub enum EngineError {
     Corrupt(&'static str),
     /// A unit conversion failed where the engine's own invariants say it cannot.
     Unit(UnitError),
+    /// The engine halted earlier, at command `at`, and accepts nothing more. The original
+    /// failure is available from [`Engine::halted`]. Recovery is a restart from the journal
+    /// (G3), never a retry on the same in-memory state.
+    Halted {
+        /// The sequence number of the command that halted the engine.
+        at: Seq,
+    },
 }
 
 impl fmt::Display for EngineError {
@@ -42,6 +49,7 @@ impl fmt::Display for EngineError {
             ),
             Self::Corrupt(what) => write!(f, "engine invariant violated: {what}"),
             Self::Unit(e) => write!(f, "engine unit error: {e}"),
+            Self::Halted { at } => write!(f, "engine halted at command {}", at.get()),
         }
     }
 }
@@ -87,6 +95,8 @@ pub struct Engine {
     /// Lookup only; never iterated without sorting, so its order cannot affect output.
     orders: HashMap<OrderId, (MarketId, Handle)>,
     ledger: Ledger,
+    /// Set by the first failed command; every later command is refused.
+    halted: Option<(Seq, EngineError)>,
 }
 
 impl Default for Engine {
@@ -104,15 +114,39 @@ impl Engine {
             markets: BTreeMap::new(),
             orders: HashMap::new(),
             ledger: Ledger::default(),
+            halted: None,
         }
+    }
+
+    /// The command that halted the engine and why, if it has halted.
+    #[must_use]
+    pub const fn halted(&self) -> Option<(Seq, EngineError)> {
+        self.halted
     }
 
     /// Apply one command, appending its events to `out` (which the caller may reuse).
     ///
     /// # Errors
     /// [`EngineError::SequenceGap`] if `cmd.seq` is not the next sequence number, or
-    /// [`EngineError::Corrupt`] if an internal invariant fails. Either halts the engine.
+    /// [`EngineError::Corrupt`] if an internal invariant fails. Either halts the engine for
+    /// good: a command that fails may have changed state part-way, so every later call
+    /// returns [`EngineError::Halted`] (SPEC §4.3).
     pub fn apply(&mut self, cmd: &Sequenced, out: &mut Vec<Event>) -> Result<(), EngineError> {
+        if let Some((at, _)) = self.halted {
+            return Err(EngineError::Halted { at });
+        }
+        let result = self.apply_unchecked(cmd, out);
+        if let Err(e) = result {
+            self.halted = Some((cmd.seq, e));
+        }
+        result
+    }
+
+    fn apply_unchecked(
+        &mut self,
+        cmd: &Sequenced,
+        out: &mut Vec<Event>,
+    ) -> Result<(), EngineError> {
         if cmd.seq != self.next_seq {
             return Err(EngineError::SequenceGap {
                 expected: self.next_seq,
