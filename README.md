@@ -26,8 +26,8 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 |---|---|---|
 | G0 | Toolchains, domain types, build, CI, security scans | Done |
 | G1 | Matching engine and independent reference engine | Done |
-| G2 | Ledger, collateral, settlement | Next |
-| G3 | Journal, snapshots, crash recovery | |
+| G2 | Ledger, collateral, settlement | Done |
+| G3 | Journal, snapshots, crash recovery | Next |
 | G4 | Gateway, APIs, PostgreSQL read models | |
 | G5 | Markets, rulebook, resolution | |
 | G6 | Web app | |
@@ -41,8 +41,10 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 |---|---|---|
 | Matching throughput, one core | 12.3 million commands per second (median of 5 runs) | [performance note](docs/notes/performance.md) |
 | Matching latency per command | p99 334 ns, p99.9 500 ns (timer resolution 42 ns) | [performance note](docs/notes/performance.md) |
-| Agreement with an independent reference engine | 10 million random commands, 12.4 million events, 0 divergences | [differential note](docs/notes/differential.md) |
-| Book invariants | Checked after every command in 1,536 random streams per CI run | `crates/engine/tests/properties.rs` |
+| Agreement with an independent reference engine | 10 million random commands, 12.4 million events, 0 divergences (matching only) | [differential note](docs/notes/differential.md) |
+| The same, with the ledger | 10 million commands with accounts, collateral, and settlement: 11.95 million events, 0 divergences, full invariant checks every 100,000 commands | [differential note](docs/notes/differential.md) |
+| Throughput with the ledger in the order path | 2.51 million commands per second; p99 1.4 µs | [performance note](docs/notes/performance.md) |
+| Book and ledger invariants (I1-I5) | Checked after every command in 2,560 random streams per CI run | `crates/engine/tests/properties.rs` |
 
 Measured on a 16 GB Apple M5 MacBook Air on AC power. Both performance hypotheses were registered before the engine existed.
 

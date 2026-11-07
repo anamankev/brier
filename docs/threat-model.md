@@ -22,6 +22,16 @@ Updated at every gate review (SPEC §13). Each entry gives the threat, its mitig
 | Matching engine | Out-of-sequence or duplicated commands | Gap-free sequence check; a gap halts the engine | `rules.rs::a_sequence_gap_halts_the_engine` | The sequencer itself arrives in G3/G4 |
 | Other users' orders | One account cancelling, amending, or probing another's orders | Ownership checked on cancel and amend; other accounts' orders answer `unknown_order`, so their existence is not revealed | `rules.rs::cancel_only_reaches_the_owners_live_orders` | Authentication of who an account is arrives in G4 |
 
+## Components that exist (G2)
+
+| Asset | Threat | Mitigation | Evidence | Gap |
+|---|---|---|---|---|
+| Ledger | A bug that creates or destroys credits | Double-entry entries that must sum to zero (`Entry::new` refuses otherwise); I1 conservation checked after every command in tests and periodically in long runs; the engine halts on violation, never adjusting a balance | `tests/ledger.rs`, `properties.rs`, `docs/notes/differential.md` (G2) | None known |
+| Ledger | An account spending credits it has locked, or more than it has | Collateral lock with a worst-case rule proven sufficient (ADR-0005); pre-trade check counting the incoming order as resting; I3 checked for touched accounts after every command | `collateral_must_cover_the_whole_order_exactly`, ADR-0005 proof | The proof is by hand; a mechanized proof is out of scope |
+| Play-money boundary | A path that moves credits between users outside matched trades, or that adds credits after signup | Only three entry kinds exist; a property test checks every entry's kind and legs in random streams | `every_entry_is_a_grant_a_trade_or_a_settlement` | Admin re-grants (SPEC §1.2) are not built; they will need the same test |
+| Settlement | Paying out more or less than escrow | Escrow = 100 × open interest (I2); settlement must end at exactly zero escrow or the engine halts; void pays 50 to each side (ADR-0002) | `settlement_always_zeroes_escrow`, void and YES rule tests | Who may trigger settlement is G5 (two-step confirmation) |
+| Markets | A runaway account or market during an incident | `cancel_all` by account, market, or everything; `halt_all` | Kill-switch rule tests | Who may trigger them, and the audit log, are G4 |
+
 ## Components to come (from SPEC §13), owned by their gates
 
 | Gate | Threat | Planned mitigation |

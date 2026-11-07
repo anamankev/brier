@@ -60,3 +60,23 @@ Timer overhead (1,000,000 empty timing pairs): p50 below one tick, p99 42 ns, ma
 ## 8. Next questions
 - How much of the 82 ns is the order-ID HashMap (SipHash)? A faster deterministic hasher might matter at G4 rates.
 - How large is the tail with a 1,000-level-deep book and frequent level emptying?
+
+
+## Addendum: rerun after G2 (observation, not a registered hypothesis)
+
+The same `make bench` workload at `496af0f`, with the ledger in the order path: every place is checked for collateral, every fill moves cash, and every touched (account, market) has its reserve recomputed. The workload now opens its 100 accounts first. Apple M5, macOS 26.6, AC power.
+
+| Measure | G1 (matching only) | G2 (with ledger) |
+|---|---|---|
+| Throughput, median of 5 | 12.27 M commands/s | 2.51 M commands/s |
+| p99 latency | 334 ns | 1,417 ns |
+| p99.9 latency | 500 ns | 2,543 ns |
+
+P1 (≥ 1 M/s) and P2 (p99 ≤ 5 µs, p99.9 ≤ 20 µs) still hold with the ledger included. The ledger costs about 4.9× in throughput.
+
+Likely sources, to profile before optimizing anything:
+- `can_afford` copies an 800-byte holding (two 100-level arrays) on every place.
+- Each touched pair's reserve walks 2 × 99 levels.
+- Holdings sit in a `BTreeMap` keyed by (market, account).
+
+Limitation: with collateral enforced, part of this workload is rejected (cash locked by accumulated passive orders), so it is not the same mix of work as the G1 run. Measuring the rejection share is the first next question.
