@@ -6,7 +6,7 @@ CARGO ?= cargo
 UV_RUN := uv run --project services --locked
 PIP_AUDIT_VERSION := 2.10.1
 
-.PHONY: help setup env up down db-url check rust-check py-check private-check test-all audit differential-full bench crash
+.PHONY: help setup env up down db-url check rust-check py-check private-check test-all audit differential-full bench crash gateway-bench
 
 SEED ?= 1
 
@@ -60,6 +60,13 @@ bench: ## The registered P1/P2 engine benchmark (docs/notes/performance.md); plu
 	-sw_vers -productVersion  # macOS only; ignored elsewhere
 	-pmset -g batt | head -1  # macOS power source; ignored elsewhere
 	./target/release/brier-bench
+
+gateway-bench: up ## The registered P3/P3b/P4 gateway benchmark (docs/notes/gateway.md); plug in and close heavy apps first
+	$(CARGO) build --release --locked -p brier-bench
+	rustc --version
+	-sw_vers -productVersion  # macOS only; ignored elsewhere
+	-pmset -g batt | head -1  # macOS power source; ignored elsewhere
+	ulimit -n 10240 && BRIER_DATABASE_URL="$$($(MAKE) -s db-url)" ./target/release/brier-gateway-bench
 
 test-all: check up ## Every test, including slow ones and the database tests (starts PostgreSQL)
 	BRIER_TEST_DATABASE_URL="$$($(MAKE) -s db-url)" $(CARGO) test --workspace --locked -- --include-ignored

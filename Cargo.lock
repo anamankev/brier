@@ -209,9 +209,18 @@ dependencies = [
 name = "brier-bench"
 version = "1.0.0"
 dependencies = [
+ "axum",
+ "brier-core",
  "brier-engine",
+ "brier-gateway",
+ "brier-readmodel",
  "brier-types",
+ "futures-util",
  "hdrhistogram",
+ "serde_json",
+ "tokio",
+ "tokio-postgres",
+ "tokio-tungstenite",
 ]
 
 [[package]]

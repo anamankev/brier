@@ -6,7 +6,8 @@
 //! - `account`: the subscriber's own order events and fills (authenticated).
 //!
 //! Every message on a channel carries that channel's sequence number, consecutive from the
-//! subscription's first message, and the journal sequence number it reflects. A client that
+//! subscription's first message, the journal sequence number it reflects, and `ts`, the
+//! publisher's wall clock in microseconds when it published the message. A client that
 //! sees a number that is not the previous plus one has missed messages; on the book channel the
 //! server then sends a fresh snapshot, which replaces the client's book.
 //!
@@ -160,6 +161,22 @@ async fn run(core: CoreHandle, mut inbox: mpsc::Receiver<(Channel, Reply)>) {
 #[derive(Debug)]
 struct Inconsistent(&'static str);
 
+/// Microseconds since the Unix epoch, the `ts` of every server message.
+#[must_use]
+pub fn now_us() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_micros()).unwrap_or(u64::MAX))
+}
+
+/// The message as text, with `ts` (when it was published) added.
+fn stamped(mut message: Value) -> Utf8Bytes {
+    if let Some(fields) = message.as_object_mut() {
+        fields.insert("ts".to_owned(), now_us().into());
+    }
+    Utf8Bytes::from(message.to_string())
+}
+
 /// One channel's sequence numbers and subscribers.
 struct Stream {
     seq: u64,
@@ -174,12 +191,12 @@ impl Stream {
         }
     }
 
-    /// Publish the message `build` makes with the next sequence number; it is built only when
-    /// someone is subscribed.
+    /// Publish the message `build` makes with the next sequence number, stamped with the
+    /// publish time; it is built only when someone is subscribed.
     fn publish(&mut self, build: impl FnOnce(u64) -> Value) {
         self.seq = self.seq.saturating_add(1); // 2^64 messages: unreachable
         if self.tx.receiver_count() > 0 {
-            let _ = self.tx.send(Utf8Bytes::from(build(self.seq).to_string())); // no receiver: fine
+            let _ = self.tx.send(stamped(build(self.seq))); // no receiver: fine
         }
     }
 }
@@ -397,7 +414,7 @@ impl Feed {
             }
         };
         Ok(Subscription {
-            first: Utf8Bytes::from(first.to_string()),
+            first: stamped(first),
             rx,
         })
     }

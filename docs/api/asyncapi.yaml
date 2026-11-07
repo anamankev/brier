@@ -13,8 +13,9 @@ info:
     second, burst 400). At most 64 subscriptions and 256 orders awaiting durability per
     connection; messages are at most 8 KiB.
 
-    Sequencing. Every channel message carries `seq`, that channel's sequence number, and
-    `journal_seq`, the journal sequence number it reflects. The first message of a
+    Sequencing. Every channel message carries `seq`, that channel's sequence number,
+    `journal_seq`, the journal sequence number it reflects, and `ts`, when the server
+    published it (microseconds since the Unix epoch). The first message of a
     subscription (a book `snapshot`, or `subscribed`) states the current `seq`; each later
     message has the previous `seq` plus one. A client that sees anything else has missed
     messages. A subscriber that falls behind (more than 1,024 messages) is resubscribed by the
@@ -178,12 +179,13 @@ components:
       summary: The whole book of a market (first message of a book subscription, or a resync)
       payload:
         type: object
-        required: [type, channel, seq, journal_seq, state, bids, asks]
+        required: [type, channel, seq, journal_seq, ts, state, bids, asks]
         properties:
           type: { const: snapshot }
           channel: { type: string, examples: ['book:1'] }
           seq: { type: integer }
           journal_seq: { type: integer }
+          ts: { type: integer, description: Publish time, microseconds since the Unix epoch }
           state: { $ref: '#/components/schemas/MarketState' }
           bids: { $ref: '#/components/schemas/Levels' }
           asks: { $ref: '#/components/schemas/Levels' }
@@ -191,12 +193,13 @@ components:
       summary: The levels one command changed, with their new totals (0 means the level is gone)
       payload:
         type: object
-        required: [type, channel, seq, journal_seq, state, bids, asks]
+        required: [type, channel, seq, journal_seq, ts, state, bids, asks]
         properties:
           type: { const: delta }
           channel: { type: string }
           seq: { type: integer }
           journal_seq: { type: integer }
+          ts: { type: integer, description: Publish time, microseconds since the Unix epoch }
           state: { $ref: '#/components/schemas/MarketState' }
           bids: { $ref: '#/components/schemas/Levels' }
           asks: { $ref: '#/components/schemas/Levels' }
@@ -204,12 +207,13 @@ components:
       summary: An execution (trades channel; no account identities)
       payload:
         type: object
-        required: [type, channel, seq, journal_seq, price, qty, taker_side]
+        required: [type, channel, seq, journal_seq, ts, price, qty, taker_side]
         properties:
           type: { const: trade }
           channel: { type: string, examples: ['trades:1'] }
           seq: { type: integer }
           journal_seq: { type: integer }
+          ts: { type: integer, description: Publish time, microseconds since the Unix epoch }
           price: { type: integer }
           qty: { type: integer }
           taker_side: { enum: [buy, sell] }
@@ -217,32 +221,35 @@ components:
       summary: First message of a trades or account subscription, with the current seq
       payload:
         type: object
-        required: [type, channel, seq, journal_seq]
+        required: [type, channel, seq, journal_seq, ts]
         properties:
           type: { const: subscribed }
           channel: { type: string }
           seq: { type: integer }
           journal_seq: { type: integer }
+          ts: { type: integer, description: Publish time, microseconds since the Unix epoch }
     resync:
       summary: The server rebuilt its state; messages before this one may be missing
       payload:
         type: object
-        required: [type, channel, seq, journal_seq]
+        required: [type, channel, seq, journal_seq, ts]
         properties:
           type: { const: resync }
           channel: { type: string }
           seq: { type: integer }
           journal_seq: { type: integer }
+          ts: { type: integer, description: Publish time, microseconds since the Unix epoch }
     order:
       summary: One of the subscriber's order events (account channel)
       payload:
         type: object
-        required: [type, channel, seq, journal_seq, event]
+        required: [type, channel, seq, journal_seq, ts, event]
         properties:
           type: { const: order }
           channel: { const: account }
           seq: { type: integer }
           journal_seq: { type: integer }
+          ts: { type: integer, description: Publish time, microseconds since the Unix epoch }
           event: { enum: [accepted, rested, cancelled, amended, duplicate, rejected] }
           order: { type: [integer, 'null'] }
           market: { type: integer, description: accepted only }
@@ -257,12 +264,13 @@ components:
       summary: An execution of one of the subscriber's orders (account channel)
       payload:
         type: object
-        required: [type, channel, seq, journal_seq, order, market, side, price, qty, liquidity]
+        required: [type, channel, seq, journal_seq, ts, order, market, side, price, qty, liquidity]
         properties:
           type: { const: fill }
           channel: { const: account }
           seq: { type: integer }
           journal_seq: { type: integer }
+          ts: { type: integer, description: Publish time, microseconds since the Unix epoch }
           order: { type: integer }
           market: { type: integer }
           side: { enum: [buy, sell] }
