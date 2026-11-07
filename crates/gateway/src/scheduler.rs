@@ -7,6 +7,9 @@
 //!   finished after a crash: if the journal already holds the settlement, the row is completed
 //!   from the `market_journal` read model; otherwise `settle` is sent.
 //!
+//! - **Score.** Sample each open market's price once a minute, and score forecasters when a
+//!   market settles YES or NO ([`crate::forecasts`]).
+//!
 //! [`tick`] does one pass, so tests can drive it with a manual clock.
 
 use std::sync::Arc;
@@ -35,6 +38,10 @@ pub struct TickReport {
     pub closed: usize,
     /// Resolutions settled.
     pub settled: usize,
+    /// Price samples taken for forecaster scores.
+    pub sampled: usize,
+    /// Markets scored.
+    pub scored: usize,
 }
 
 /// One pass: open and close markets by their schedules, then settle what is due.
@@ -44,6 +51,8 @@ pub struct TickReport {
 pub async fn tick(s: &AppState) -> Result<TickReport, ApiError> {
     let mut report = schedule(s).await?;
     report.settled = settle(s).await?;
+    report.sampled = crate::forecasts::sample(s).await?;
+    report.scored = crate::forecasts::score(s).await?;
     Ok(report)
 }
 

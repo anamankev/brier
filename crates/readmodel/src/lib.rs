@@ -35,6 +35,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0004_resolution",
         include_str!("../migrations/0004_resolution.sql"),
     ),
+    (
+        "0005_forecasts",
+        include_str!("../migrations/0005_forecasts.sql"),
+    ),
 ];
 
 /// Arbitrary but fixed key for the advisory lock that serializes migrations across processes.

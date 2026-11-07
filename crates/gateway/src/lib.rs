@@ -10,6 +10,7 @@ pub mod auth;
 pub mod clock;
 pub mod error;
 pub mod feed;
+pub mod forecasts;
 pub mod limits;
 pub mod markets;
 pub mod resolution;
@@ -184,6 +185,11 @@ endpoints! {
     GET "/v1/markets/{id}/resolution" => resolution::get,
     POST "/v1/markets/{id}/resolution" => resolution::propose,
     POST "/v1/resolutions/{id}/disputes" => resolution::dispute,
+    PUT "/v1/markets/{id}/forecast" => forecasts::put,
+    GET "/v1/forecasts" => forecasts::mine,
+    GET "/v1/scorecard" => forecasts::scorecard,
+    GET "/v1/leaderboards/skill" => forecasts::skill_leaderboard,
+    GET "/v1/leaderboards/profit" => forecasts::profit_leaderboard,
     GET "/v1/markets/{id}/trades" => routes::trades,
     GET "/v1/ws" => ws::upgrade,
     POST "/v1/orders" => routes::place,

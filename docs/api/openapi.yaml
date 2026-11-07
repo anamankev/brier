@@ -51,6 +51,7 @@ tags:
   - name: trading
   - name: history
   - name: resolution
+  - name: forecasts
   - name: administration
 paths:
   /v1/health:
@@ -372,6 +373,119 @@ paths:
         '404': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/Error' }
+  /v1/markets/{id}/forecast:
+    put:
+      tags: [forecasts]
+      summary: Record a probability on an open market (not a resolver); changes add a row, never edit one
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [probability]
+              properties:
+                probability: { type: integer, minimum: 1, maximum: 99, description: 'Percent' }
+      responses:
+        '200':
+          description: 'Recorded, timestamped by the server'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [market, probability, at]
+                properties:
+                  market: { type: integer }
+                  probability: { type: integer }
+                  at: { $ref: '#/components/schemas/Instant' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /v1/forecasts:
+    get:
+      tags: [forecasts]
+      summary: "The caller's forecasts, newest first (at most 1,000)"
+      responses:
+        '200':
+          description: Forecasts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [forecasts]
+                properties:
+                  forecasts:
+                    type: array
+                    items:
+                      type: object
+                      required: [market, probability, at]
+                      properties:
+                        market: { type: integer }
+                        probability: { type: integer }
+                        at: { $ref: '#/components/schemas/Instant' }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/scorecard:
+    get:
+      tags: [forecasts]
+      summary: "The caller's forecaster score on every market that resolved YES or NO"
+      description: |
+        Units of 1/10,000. Per market: `brier` is the caller's average Brier score over the
+        samples their forecasts covered, `market_brier` the market price's over every sample,
+        and `skill` the market's score minus the caller's averaged over every sample (0 before
+        the first forecast), rounded half away from zero. Prices are sampled once a minute.
+      responses:
+        '200':
+          description: Scorecard
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [units, markets, average_skill, ranked, min_scored_markets]
+                properties:
+                  units: { const: 1/10000 }
+                  markets: { type: array, items: { type: object } }
+                  average_skill: { type: [integer, 'null'] }
+                  ranked: { type: boolean, description: 'At least min_scored_markets scored markets' }
+                  min_scored_markets: { type: integer }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/leaderboards/skill:
+    get:
+      tags: [forecasts]
+      summary: Forecasters by average skill, with at least 10 scored markets (top 100)
+      security: []
+      responses:
+        '200':
+          description: Leaderboard
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [units, min_scored_markets, leaders]
+                properties:
+                  units: { const: 1/10000 }
+                  min_scored_markets: { type: integer }
+                  leaders: { type: array, items: { type: object, required: [rank, username, markets, skill] } }
+  /v1/leaderboards/profit:
+    get:
+      tags: [forecasts]
+      summary: Traders by settled trading profit, in credits (top 100)
+      security: []
+      responses:
+        '200':
+          description: Leaderboard
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [units, leaders]
+                properties:
+                  units: { const: credits }
+                  leaders: { type: array, items: { type: object, required: [rank, username, markets, profit] } }
   /v1/markets/{id}/trades:
     get:
       tags: [market data]
