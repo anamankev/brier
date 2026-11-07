@@ -1,0 +1,33 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Journals, snapshots, and runtime data (never committed)
+/var/
+*.journal
+*.snapshot
+
+# Rust
+/target/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Web
+node_modules/
+.next/
+
+# Fuzzing and benchmark scratch
+fuzz/artifacts/
+fuzz/corpus/
+criterion-scratch/
+
+# OS clutter
+.DS_Store
