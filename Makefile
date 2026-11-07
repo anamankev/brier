@@ -6,7 +6,7 @@ CARGO ?= cargo
 UV_RUN := uv run --project services --locked
 PIP_AUDIT_VERSION := 2.10.1
 
-.PHONY: help setup check rust-check py-check private-check test-all audit differential-full bench
+.PHONY: help setup check rust-check py-check private-check test-all audit differential-full bench crash
 
 SEED ?= 1
 
@@ -36,6 +36,11 @@ private-check: ## No tracked file mentions the private development tooling
 differential-full: ## The gate study: 10 million random commands through both engines, full invariant checks every 100,000
 	$(CARGO) build --release --locked -p brier-replay
 	cd services && uv run --locked python -m brier_services.differential --binary ../target/release/brier-replay --seed $(SEED) --commands 10000000 --check-every 100000
+
+crash: ## The registered crash study: 1,000 SIGKILLs with recovery checks (docs/notes/durability.md)
+	$(CARGO) build --release --locked -p brier-core
+	rm -rf target/crash-data
+	cd services && uv run --locked python -m brier_services.crash --core ../target/release/brier-core --data ../target/crash-data --cycles 1000 --seed $(SEED)
 
 bench: ## The registered P1/P2 engine benchmark (docs/notes/performance.md); plug in and close heavy apps first
 	$(CARGO) build --release --locked -p brier-bench
