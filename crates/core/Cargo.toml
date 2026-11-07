@@ -1,0 +1,21 @@
+[package]
+name = "brier-core"
+description = "The core process: sequencer, journal with group commit, engine, recovery (SPEC §5)"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "brier-core"
+path = "src/main.rs"
+
+[dependencies]
+brier-engine = { path = "../engine" }
+brier-journal = { path = "../journal" }
+brier-types = { path = "../types" }
+brier-wire = { path = "../wire" }
+serde_json = "1.0"
+
+[lints]
+workspace = true

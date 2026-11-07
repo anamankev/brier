@@ -86,6 +86,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "brier-core"
+version = "1.0.0"
+dependencies = [
+ "brier-engine",
+ "brier-journal",
+ "brier-types",
+ "brier-wire",
+ "serde_json",
+]
+
+[[package]]
 name = "brier-engine"
 version = "1.0.0"
 dependencies = [
