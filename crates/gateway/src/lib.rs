@@ -7,8 +7,10 @@
 
 pub mod auth;
 pub mod error;
+pub mod feed;
 pub mod limits;
 pub mod routes;
+pub mod ws;
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
@@ -62,17 +64,24 @@ pub struct AppState {
     pub auth_limits: Limiter<IpAddr>,
     /// The last sequence number reflected in the read models.
     pub projected: Arc<AtomicU64>,
+    /// The market-data publisher.
+    pub feed: feed::FeedHandle,
+    /// Set to true to close every WebSocket connection (graceful shutdown).
+    pub shutdown: watch::Sender<bool>,
     /// A hash checked when the username is unknown, so login time does not reveal it.
     dummy_hash: String,
 }
 
 impl AppState {
-    /// State for a running core and a migrated database.
+    /// State for a running core and a migrated database; starts the market-data publisher, so
+    /// it must be called inside a Tokio runtime.
     ///
     /// # Errors
     /// [`ApiError`] if hashing the timing-equalizer password fails.
     pub fn new(core: CoreHandle, db: Client) -> Result<Self, ApiError> {
         Ok(Self {
+            feed: feed::spawn(core.clone()),
+            shutdown: watch::channel(false).0,
             core,
             db,
             replays: ReplayCache::default(),
@@ -128,6 +137,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/keys/{id}", delete(r::revoke_key))
         .route("/v1/markets", get(r::markets))
         .route("/v1/markets/{id}/book", get(r::book))
+        .route("/v1/markets/{id}/trades", get(r::trades))
+        .route("/v1/ws", get(ws::upgrade))
         .route("/v1/orders", post(r::place))
         .route("/v1/orders/history", get(r::history))
         .route(

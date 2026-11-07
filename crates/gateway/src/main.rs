@@ -92,9 +92,13 @@ async fn serve(url: &str) -> Result<(), String> {
     info("listening", &json!({ "address": listen.to_string() }));
     axum::serve(
         listener,
-        router(state).into_make_service_with_connect_info::<SocketAddr>(),
+        router(Arc::clone(&state)).into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal())
+    .with_graceful_shutdown(async move {
+        shutdown_signal().await;
+        // WebSocket connections are not HTTP requests the server waits for; close them.
+        state.shutdown.send_replace(true);
+    })
     .await
     .map_err(|e| e.to_string())?;
 

@@ -119,6 +119,9 @@ pub enum Query {
     Book(MarketId),
     /// One account's balances, positions, and open orders.
     Account(AccountId),
+    /// Every market's state and every resting order: the base a market-data publisher builds
+    /// its books on, consistent with the broadcast after `as_of`.
+    Feed,
 }
 
 /// One side of an aggregated book: (price, total resting quantity), best price first.
@@ -155,6 +158,15 @@ pub enum Answer {
         view: Option<AccountView>,
         /// Open orders, ascending by order ID.
         open_orders: Vec<(MarketId, Side, RestingOrder)>,
+    },
+    /// Every market and every resting order.
+    Feed {
+        /// The last durable sequence number this answer reflects.
+        as_of: u64,
+        /// Market IDs and states, ascending.
+        markets: Vec<(MarketId, MarketState)>,
+        /// Resting orders by market, then side (bids, then asks), in priority order.
+        orders: Vec<(MarketId, Side, RestingOrder)>,
     },
 }
 
@@ -369,6 +381,28 @@ fn answer(engine: &Engine, as_of: u64, query: Query) -> Result<Answer, EngineErr
             view: engine.accounts().into_iter().find(|v| v.account == account),
             open_orders: engine.orders_of(account)?,
         },
+        Query::Feed => {
+            let mut markets = Vec::new();
+            let mut orders = Vec::new();
+            for market in engine.markets() {
+                if let Some(state) = engine.market_state(market) {
+                    markets.push((market, state));
+                }
+                for side in [Side::Buy, Side::Sell] {
+                    orders.extend(
+                        engine
+                            .resting(market, side)?
+                            .into_iter()
+                            .map(|o| (market, side, o)),
+                    );
+                }
+            }
+            Answer::Feed {
+                as_of,
+                markets,
+                orders,
+            }
+        }
     })
 }
 

@@ -93,6 +93,17 @@ impl ApiError {
         }
     }
 
+    /// The error object clients see: `code`, `message`, and `seq` when the engine sequenced
+    /// the rejected command.
+    #[must_use]
+    pub fn body(&self) -> serde_json::Value {
+        let mut error = json!({ "code": self.code, "message": self.message });
+        if let (Some(seq), Some(map)) = (self.seq, error.as_object_mut()) {
+            map.insert("seq".to_owned(), seq.into());
+        }
+        error
+    }
+
     /// The HTTP status.
     #[must_use]
     pub const fn status(&self) -> StatusCode {
@@ -108,11 +119,7 @@ impl ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let mut error = json!({ "code": self.code, "message": self.message });
-        if let (Some(seq), Some(map)) = (self.seq, error.as_object_mut()) {
-            map.insert("seq".to_owned(), seq.into());
-        }
-        (self.status, Json(json!({ "error": error }))).into_response()
+        (self.status, Json(json!({ "error": self.body() }))).into_response()
     }
 }
 

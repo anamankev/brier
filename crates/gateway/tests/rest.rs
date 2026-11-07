@@ -10,75 +10,20 @@
     clippy::indexing_slicing
 )] // test code
 
+mod common;
+
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
-use axum::Router;
-use axum::body::{Body, to_bytes};
+use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
 use brier_core::{CoreConfig, start};
 use brier_gateway::auth::signing_payload;
 use brier_gateway::{AppState, router, run_projector};
+use common::{base64_encode, call, connect, login, now_ms, send};
 use ed25519_dalek::{Signer, SigningKey};
-use serde_json::{Value, json};
-use tokio_postgres::{Client, NoTls};
-use tower::ServiceExt;
-
-async fn connect(schema: &str) -> Client {
-    let url = std::env::var("BRIER_TEST_DATABASE_URL")
-        .expect("set BRIER_TEST_DATABASE_URL (make db-url)");
-    let (mut client, connection) = tokio_postgres::connect(&url, NoTls).await.unwrap();
-    tokio::spawn(connection);
-    client
-        .batch_execute(&format!(
-            "CREATE SCHEMA IF NOT EXISTS {schema}; SET search_path TO {schema};"
-        ))
-        .await
-        .unwrap();
-    brier_readmodel::migrate(&mut client).await.unwrap();
-    client
-}
-
-async fn send(app: &Router, req: Request<Body>) -> (StatusCode, Value) {
-    let res = app.clone().oneshot(req).await.unwrap();
-    let status = res.status();
-    let bytes = to_bytes(res.into_body(), 1 << 20).await.unwrap();
-    let value = if bytes.is_empty() {
-        Value::Null
-    } else {
-        serde_json::from_slice(&bytes).unwrap()
-    };
-    (status, value)
-}
-
-async fn call(
-    app: &Router,
-    method: Method,
-    path: &str,
-    token: Option<&str>,
-    body: Option<Value>,
-) -> (StatusCode, Value) {
-    let mut req = Request::builder()
-        .method(method)
-        .uri(path)
-        .header("content-type", "application/json");
-    if let Some(t) = token {
-        req = req.header("authorization", format!("Bearer {t}"));
-    }
-    let body = body.map_or_else(Body::empty, |b| Body::from(b.to_string()));
-    send(app, req.body(body).unwrap()).await
-}
-
-fn now_ms() -> u64 {
-    u64::try_from(
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis(),
-    )
-    .unwrap()
-}
+use serde_json::json;
 
 fn signed(
     key: &SigningKey,
@@ -100,34 +45,10 @@ fn signed(
         .unwrap()
 }
 
-fn base64_encode(bytes: &[u8]) -> String {
-    use base64::Engine as _;
-    base64::engine::general_purpose::STANDARD.encode(bytes)
-}
-
-async fn login(app: &Router, username: &str, password: &str) -> String {
-    let (status, body) = call(
-        app,
-        Method::POST,
-        "/v1/login",
-        None,
-        Some(json!({ "username": username, "password": password })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    body["token"].as_str().unwrap().to_owned()
-}
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "needs PostgreSQL (make up; BRIER_TEST_DATABASE_URL)"]
 async fn the_rest_api_end_to_end() {
-    let schema = format!(
-        "gateway_test_{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    );
+    let schema = common::schema("gateway_rest");
     let data = tempfile::tempdir().unwrap();
     let (core, _, _thread) = start(CoreConfig::new(data.path())).unwrap();
     let state = Arc::new(AppState::new(core.clone(), connect(&schema).await).unwrap());

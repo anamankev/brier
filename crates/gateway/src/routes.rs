@@ -337,9 +337,10 @@ pub async fn book(State(s): Shared, Path(raw): Path<String>) -> ApiResult {
 
 // ---- orders ---------------------------------------------------------------------------------
 
+/// An order as clients send it (REST body, or a WebSocket `place` message).
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct PlaceBody {
+pub(crate) struct PlaceBody {
     market: u32,
     side: String,
     price: u8,
@@ -352,17 +353,43 @@ struct PlaceBody {
     client_order_id: Option<u64>,
 }
 
-async fn trader(s: &AppState, req: &Req) -> Result<(User, AccountId), ApiError> {
+impl PlaceBody {
+    /// The engine command for this order from `account`.
+    pub(crate) fn command(self, account: AccountId) -> Result<Command, ApiError> {
+        let side = side_from_name(&self.side)
+            .ok_or_else(|| ApiError::bad_request("side must be buy or sell"))?;
+        let tif = tif_from_name(self.tif.as_deref().unwrap_or("gtc"))
+            .ok_or_else(|| ApiError::bad_request("tif must be gtc, ioc, or fok"))?;
+        Ok(Command::Place(NewOrder {
+            account,
+            market: MarketId::new(self.market),
+            side,
+            price: self.price,
+            qty: self.qty,
+            tif,
+            post_only: self.post_only,
+            client_order_id: self.client_order_id,
+        }))
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AmendBody {
+    qty: u32,
+}
+
+async fn trader(s: &AppState, req: &Req) -> Result<AccountId, ApiError> {
     let user = req.user(s, true).await?;
     if !s.order_limits.allow(user.id) {
         return Err(ApiError::rate_limited());
     }
-    Ok((user, user.account()?))
+    user.account()
 }
 
 /// The client's view of a place: its order, fills as taker, and where the rest went. Other
 /// accounts' identities and ledger entries are not exposed.
-fn place_result(c: &Committed) -> ApiResult {
+pub(crate) fn place_result(c: &Committed) -> Result<Value, ApiError> {
     let seq = c.seq.get();
     let mut order: Option<OrderId> = None;
     let (mut status, mut remaining, mut cancel_reason) = ("filled", 0, None);
@@ -371,10 +398,7 @@ fn place_result(c: &Committed) -> ApiResult {
         match *e {
             Event::Rejected { reason } => return Err(ApiError::rejected(reject_name(reason), seq)),
             Event::Duplicate { original } => {
-                return Ok(Json(
-                    json!({ "seq": seq, "status": "duplicate", "order": original.get() }),
-                )
-                .into_response());
+                return Ok(json!({ "seq": seq, "status": "duplicate", "order": original.get() }));
             }
             Event::Accepted { order: o } => order = Some(o),
             Event::Trade(t) if Some(t.taker) == order => {
@@ -398,57 +422,52 @@ fn place_result(c: &Committed) -> ApiResult {
     }
     let order =
         order.ok_or_else(|| ApiError::internal(&format!("place answered {:?}", c.events)))?;
-    Ok(Json(json!({
+    Ok(json!({
         "seq": seq, "order": order.get(), "status": status, "filled": filled, "remaining": remaining,
         "cancel_reason": cancel_reason, "fills": fills,
     }))
-    .into_response())
 }
 
-/// `POST /v1/orders`: place an order.
-pub async fn place(State(s): Shared, req: Req) -> ApiResult {
-    let (_, account) = trader(&s, &req).await?;
-    let b: PlaceBody = req.json()?;
-    let side =
-        side_from_name(&b.side).ok_or_else(|| ApiError::bad_request("side must be buy or sell"))?;
-    let tif = tif_from_name(b.tif.as_deref().unwrap_or("gtc"))
-        .ok_or_else(|| ApiError::bad_request("tif must be gtc, ioc, or fok"))?;
-    let command = Command::Place(NewOrder {
-        account,
-        market: MarketId::new(b.market),
-        side,
-        price: b.price,
-        qty: b.qty,
-        tif,
-        post_only: b.post_only,
-        client_order_id: b.client_order_id,
-    });
-    place_result(&s.core.submit(command).await?)
-}
-
-/// `DELETE /v1/orders/{id}`: cancel a resting order.
-pub async fn cancel(State(s): Shared, Path(raw): Path<String>, req: Req) -> ApiResult {
-    let (_, account) = trader(&s, &req).await?;
-    let order = OrderId::new(parse_id(&raw, "order")?);
-    let c = s.core.submit(Command::Cancel { account, order }).await?;
+/// The client's view of a cancel.
+pub(crate) fn cancel_result(c: &Committed, order: OrderId) -> Result<Value, ApiError> {
     match c.events.as_slice() {
-        [Event::Cancelled { remaining, .. }, ..] => {
-            Ok(Json(json!({ "seq": c.seq.get(), "order": order.get(), "status": "cancelled", "cancelled": remaining.contracts() })).into_response())
-        }
+        [Event::Cancelled { remaining, .. }, ..] => Ok(
+            json!({ "seq": c.seq.get(), "order": order.get(), "status": "cancelled", "cancelled": remaining.contracts() }),
+        ),
         [Event::Rejected { reason }] => Err(ApiError::rejected(reject_name(*reason), c.seq.get())),
         other => Err(ApiError::internal(&format!("cancel answered {other:?}"))),
     }
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AmendBody {
-    qty: u32,
+/// The client's view of an amend.
+pub(crate) fn amend_result(c: &Committed, order: OrderId) -> Result<Value, ApiError> {
+    match c.events.as_slice() {
+        [Event::Amended { remaining, .. }, ..] => Ok(
+            json!({ "seq": c.seq.get(), "order": order.get(), "status": "resting", "remaining": remaining.contracts() }),
+        ),
+        [Event::Rejected { reason }] => Err(ApiError::rejected(reject_name(*reason), c.seq.get())),
+        other => Err(ApiError::internal(&format!("amend answered {other:?}"))),
+    }
+}
+
+/// `POST /v1/orders`: place an order.
+pub async fn place(State(s): Shared, req: Req) -> ApiResult {
+    let account = trader(&s, &req).await?;
+    let command = req.json::<PlaceBody>()?.command(account)?;
+    Ok(Json(place_result(&s.core.submit(command).await?)?).into_response())
+}
+
+/// `DELETE /v1/orders/{id}`: cancel a resting order.
+pub async fn cancel(State(s): Shared, Path(raw): Path<String>, req: Req) -> ApiResult {
+    let account = trader(&s, &req).await?;
+    let order = OrderId::new(parse_id(&raw, "order")?);
+    let c = s.core.submit(Command::Cancel { account, order }).await?;
+    Ok(Json(cancel_result(&c, order)?).into_response())
 }
 
 /// `PATCH /v1/orders/{id}`: reduce a resting order's quantity, keeping its time priority.
 pub async fn amend(State(s): Shared, Path(raw): Path<String>, req: Req) -> ApiResult {
-    let (_, account) = trader(&s, &req).await?;
+    let account = trader(&s, &req).await?;
     let order = OrderId::new(parse_id(&raw, "order")?);
     let AmendBody { qty } = req.json()?;
     let c = s
@@ -459,13 +478,29 @@ pub async fn amend(State(s): Shared, Path(raw): Path<String>, req: Req) -> ApiRe
             qty,
         })
         .await?;
-    match c.events.as_slice() {
-        [Event::Amended { remaining, .. }, ..] => {
-            Ok(Json(json!({ "seq": c.seq.get(), "order": order.get(), "status": "resting", "remaining": remaining.contracts() })).into_response())
-        }
-        [Event::Rejected { reason }] => Err(ApiError::rejected(reject_name(*reason), c.seq.get())),
-        other => Err(ApiError::internal(&format!("amend answered {other:?}"))),
-    }
+    Ok(Json(amend_result(&c, order)?).into_response())
+}
+
+/// `GET /v1/markets/{id}/trades`: the market's most recent executions, newest first, from the
+/// read models (no account identities).
+pub async fn trades(State(s): Shared, Path(raw): Path<String>, req: Req) -> ApiResult {
+    let market = i64::from(parse_id::<u32>(&raw, "market")?);
+    let (_, _, limit) = req.query::<Page>()?.bounds()?;
+    let as_of = s.projected.load(Ordering::Acquire);
+    let rows = s
+        .db
+        .query(
+            "SELECT seq, ordinal, price, qty, taker_side FROM fills WHERE market = $1 ORDER BY seq DESC, ordinal DESC LIMIT $2",
+            &[&market, &limit],
+        )
+        .await?;
+    let items: Vec<Value> = rows
+        .iter()
+        .map(|r| {
+            json!({ "seq": r.get::<_, i64>(0), "ordinal": r.get::<_, i32>(1), "price": r.get::<_, i16>(2), "qty": r.get::<_, i32>(3), "taker_side": r.get::<_, &str>(4) })
+        })
+        .collect();
+    Ok(Json(json!({ "as_of": as_of, "market": market, "trades": items })).into_response())
 }
 
 /// `GET /v1/portfolio`: cash, collateral, positions, and open orders, from the engine.
