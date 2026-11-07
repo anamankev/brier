@@ -13,6 +13,15 @@ Updated at every gate review (SPEC §13). Each entry gives the threat, its mitig
 | CI | A workflow given more power than it needs, or a moving action tag swapped | `permissions: contents: read`; third-party actions pinned to commit SHAs | `.github/workflows/*.yml` | None known |
 | Domain values | Invalid prices or quantities, or overflowing money arithmetic, reaching later components | Validated newtypes; checked arithmetic; lints forbidding floats, unchecked arithmetic, and panics in library code | `brier-types` tests and proptests; clippy configuration in `Cargo.toml` | None known |
 
+## Components that exist (G1)
+
+| Asset | Threat | Mitigation | Evidence | Gap |
+|---|---|---|---|---|
+| Matching engine | A logic bug that mismatches orders, breaks priority, or loses quantity | Rule tests per SPEC §3.1 rule; property tests (never crossed, consistent links, quantity conservation) after every command; differential testing against an independent reference engine | `crates/engine/tests/`, `docs/notes/differential.md` | Both engines share one author and one plan text; a shared misreading is guarded only by the rule tests |
+| Matching engine | Nondeterminism making replay diverge from the live run | No clock, randomness, I/O, or unordered iteration in the engine; replay-determinism property test; BLAKE3 state hash | `properties.rs::replay_is_deterministic`, the anti-toy scan in the gate review | The journal (G3) is not built yet; replay currently covers in-memory command lists |
+| Matching engine | Out-of-sequence or duplicated commands | Gap-free sequence check; a gap halts the engine | `rules.rs::a_sequence_gap_halts_the_engine` | The sequencer itself arrives in G3/G4 |
+| Other users' orders | One account cancelling, amending, or probing another's orders | Ownership checked on cancel and amend; other accounts' orders answer `unknown_order`, so their existence is not revealed | `rules.rs::cancel_only_reaches_the_owners_live_orders` | Authentication of who an account is arrives in G4 |
+
 ## Components to come (from SPEC §13), owned by their gates
 
 | Gate | Threat | Planned mitigation |

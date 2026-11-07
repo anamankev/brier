@@ -24,9 +24,9 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 
 | Gate | Scope | State |
 |---|---|---|
-| G0 | Toolchains, domain types, build, CI, security scans | Built; in review |
-| G1 | Matching engine and independent reference engine | Next |
-| G2 | Ledger, collateral, settlement | |
+| G0 | Toolchains, domain types, build, CI, security scans | Done |
+| G1 | Matching engine and independent reference engine | Done |
+| G2 | Ledger, collateral, settlement | Next |
 | G3 | Journal, snapshots, crash recovery | |
 | G4 | Gateway, APIs, PostgreSQL read models | |
 | G5 | Markets, rulebook, resolution | |
@@ -34,6 +34,17 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 | G7 | Market maker, simulation harness | |
 | G8 | Surveillance and its evaluation | |
 | G9 | Release | |
+
+## Measured so far
+
+| What | Result | Evidence |
+|---|---|---|
+| Matching throughput, one core | 12.3 million commands per second (median of 5 runs) | [performance note](docs/notes/performance.md) |
+| Matching latency per command | p99 334 ns, p99.9 500 ns (timer resolution 42 ns) | [performance note](docs/notes/performance.md) |
+| Agreement with an independent reference engine | 10 million random commands, 12.4 million events, 0 divergences | [differential note](docs/notes/differential.md) |
+| Book invariants | Checked after every command in 1,536 random streams per CI run | `crates/engine/tests/properties.rs` |
+
+Measured on a 16 GB Apple M5 MacBook Air on AC power. Both performance hypotheses were registered before the engine existed.
 
 ## Run the checks
 
@@ -43,6 +54,8 @@ Requirements: [Rust via rustup](https://rustup.rs) (the pinned toolchain install
 make setup   # locked Python dependencies and git hooks
 make check   # Rust fmt, clippy (warnings are errors), tests; Python ruff, mypy --strict, tests
 make audit   # known-vulnerability audit of locked dependencies (needs cargo-audit)
+make bench   # the registered engine benchmark
+make differential-full SEED=1   # 10 million commands through both engines
 make help    # every command
 ```
 

@@ -383,7 +383,10 @@ impl Engine {
                 "order map size disagrees with the books",
             ));
         }
-        for (&id, &(market, h)) in &self.orders {
+        // Checked in ascending order ID so the first failure reported is deterministic.
+        let mut entries: Vec<_> = self.orders.iter().collect();
+        entries.sort_unstable_by_key(|&(&id, _)| id);
+        for (&id, &(market, h)) in entries {
             let book = self
                 .markets
                 .get(&market)
