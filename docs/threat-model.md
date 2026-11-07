@@ -32,6 +32,15 @@ Updated at every gate review (SPEC §13). Each entry gives the threat, its mitig
 | Settlement | Paying out more or less than escrow | Escrow = 100 × open interest (I2); settlement must end at exactly zero escrow or the engine halts; void pays 50 to each side (ADR-0002) | `settlement_always_zeroes_escrow`, void and YES rule tests | Who may trigger settlement is G5 (two-step confirmation) |
 | Markets | A runaway account or market during an incident | `cancel_all` by account, market, or everything; `halt_all` | Kill-switch rule tests | Who may trigger them, and the audit log, are G4 |
 
+## Components that exist (G3)
+
+| Asset | Threat | Mitigation | Evidence | Gap |
+|---|---|---|---|---|
+| Journal | An acknowledged command lost in a crash | Group commit: acknowledgment and events only after the batch's `F_FULLFSYNC` (ADR-0004); recovery of torn tails at most one batch long | 1,000-kill study: 0 of 6,058,014 acknowledged lost | SIGKILL proves ordering, not the SSD's honesty on power loss |
+| Journal | Silent corruption of acknowledged data | CRC-32C per record; consecutive sequence numbers; damage outside the last batch stops recovery instead of guessing (ADR-0006) | Corruption and torn-tail property tests | A bit flip in the last 1 MiB of acknowledged data would be read as a torn tail; replication is out of scope |
+| Snapshots | A wrong snapshot silently changing state | Restore checks every invariant and the recorded state hash; a damaged snapshot is skipped and the journal replays further | Snapshot property tests; 998 snapshot recoveries in the crash study matched a clean replay | None known |
+| Core process | A poison command (one that halts the engine) acknowledged and replayed forever | A halting command drops its whole unsynced batch; nothing in it is acknowledged | `brier-core` exit 3 path | A command that halts the engine will halt it again if resubmitted; it needs operator action (runbook, G9) |
+
 ## Components to come (from SPEC §13), owned by their gates
 
 | Gate | Threat | Planned mitigation |

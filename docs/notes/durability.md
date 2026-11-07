@@ -1,6 +1,6 @@
 # Durability: crash recovery, sync cost, and replay speed (G3)
 
-Status: D1, D2, and the sync observation COMPLETE; P5 pending a run on AC power. Registered at `4eb5c41`, before any journal code.
+Status: COMPLETE. Registered at `4eb5c41`, before any journal code.
 
 ## 1. Questions
 1. Does the core ever lose an acknowledged command when killed at an arbitrary moment, and does it always recover to exactly the state a clean replay produces?
@@ -51,13 +51,19 @@ Attempt 3 in detail:
 | Plain `fsync(2)` | 33 µs | 45 µs | 58 µs | 166 µs |
 
 ### Replay speed (P5)
-Pending: a 10-million-command journal is built; the three timed replays will run on AC power, as registered.
+Journal: 10,000,000 commands from the state-aware stream (seed 1), written through `brier-core serve`; 324 MB in 6 segments. Replay: `brier-core verify`, from empty, read-only, with the full invariant check at the end (not included in the time). Code `8e7275d`, AC power.
+
+| Run | 1 | 2 | 3 | Median |
+|---|---|---|---|---|
+| Replay seconds | 7.95 | 7.74 | 7.29 | **7.74** |
+
+All three runs ended at the same state hash (`49d32c5f…`) and passed the invariant check. 7.74 s is about 1.29 million commands per second from disk.
 
 ## 5. Verdicts
 - D1: SUPPORTED on attempt 3. Attempt 2 is reported above: it lost nothing, but failed to restart, which a production system must also not do.
 - D2: SUPPORTED. 1,001 of 1,001 recovered states matched a clean replay, with full invariant checks.
 - Sync observation: `sync_data` costs about 120 times a plain `fsync`, matching a full device flush (`F_FULLFSYNC`). That agrees with the Rust 1.99.1 source (ADR-0004). It sets the floor for order acknowledgment at about 4 ms per batch, so G4's P3 target (p99 ≤ 5 ms at 10,000 orders/s) depends on batching, not on matching speed.
-- P5: pending.
+- P5: SUPPORTED. The median of 7.74 s is well under the 30 s bound. Recovery after a crash replays only the commands since the last snapshot, so in practice a restart takes a fraction of this.
 
 ## 6. Interpretation
 - Group commit is what makes durability affordable. One 4 ms flush covers a whole batch: at 10,000 orders per second, a batch holds about 40 orders, so durability costs about 0.1 ms of device time per order instead of 4.
@@ -69,3 +75,5 @@ Pending: a 10-million-command journal is built; the three timed replays will run
 - The injected tears append garbage after the last synced byte. A real power cut can also lose or reorder unsynced writes inside the last batch. Recovery handles both the same way (truncate within one batch), but only appending was exercised.
 
 ## 8. Next questions
+- Replay runs at about 1.3 M commands/s against the engine's 2.7 M/s in memory. How much of the gap is reading and decoding the journal, and does it matter for P3 in G4?
+- Can power-loss behavior be tested on this hardware at all (an external drive one can unplug), or is it accepted as a stated limit?

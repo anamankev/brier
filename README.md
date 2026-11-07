@@ -6,7 +6,7 @@ Traders buy and sell yes/no contracts on public events, such as "Will October CP
 
 - **Deterministic matching engine.** Price-time priority order book. Replaying the command log reproduces every state hash exactly.
 - **Double-entry ledger.** Fully collateralized contracts and pre-trade collateral checks. A conservation invariant is checked after every event: credits issued = balances + escrow.
-- **Crash-safe journal.** No order is acknowledged before it is on disk, and recovery is proven by killing the engine under load.
+- **Crash-safe journal.** No order is acknowledged before it is on disk (one full flush per batch of orders), and recovery is proven by killing the core 1,000 times under load.
 - **APIs.** REST and WebSocket order entry with signed requests and idempotent retries; sequenced market data with gap recovery.
 - **Evidence-backed resolution.** Every market has a written rulebook entry and resolves from free public sources (FRED, BLS, NOAA), with the evidence stored.
 - **Reference market maker.** Trades only through the public API, quoting around options-implied fair values.
@@ -27,8 +27,8 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 | G0 | Toolchains, domain types, build, CI, security scans | Done |
 | G1 | Matching engine and independent reference engine | Done |
 | G2 | Ledger, collateral, settlement | Done |
-| G3 | Journal, snapshots, crash recovery | Next |
-| G4 | Gateway, APIs, PostgreSQL read models | |
+| G3 | Journal, snapshots, crash recovery | Done |
+| G4 | Gateway, APIs, PostgreSQL read models | Next |
 | G5 | Markets, rulebook, resolution | |
 | G6 | Web app | |
 | G7 | Market maker, simulation harness | |
@@ -44,6 +44,9 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 | Agreement with an independent reference engine | 10 million random commands, 12.4 million events, 0 divergences (matching only) | [differential note](docs/notes/differential.md) |
 | The same, with the ledger | 10 million state-aware commands with accounts, collateral, settlement, and kill switches: 19.6 million events, 696,614 trades, 0 divergences, full invariant checks every 100,000 commands | [differential note](docs/notes/differential.md) |
 | Throughput with the ledger in the order path | 2.69 million commands per second; p99 1.4 µs (65% places, 35% cancels; 38% of places rejected) | [performance note](docs/notes/performance.md) |
+| Crash safety | 1,000 SIGKILLs under load with simulated torn writes: 0 of 6,058,014 acknowledged commands lost; every recovered state equal to a clean replay | [durability note](docs/notes/durability.md) |
+| Durable sync cost | 3.95 ms median per batch (full device flush, `F_FULLFSYNC`); group commit spreads it across every order in the batch | [durability note](docs/notes/durability.md) |
+| Recovery replay | 10 million commands from disk in 7.7 s (median of 3) | [durability note](docs/notes/durability.md) |
 | Book and ledger invariants (I1-I5) | Checked after every command in 2,560 random streams per CI run | `crates/engine/tests/properties.rs` |
 
 Measured on a 16 GB Apple M5 MacBook Air on AC power. Both performance hypotheses were registered before the engine existed.
@@ -58,6 +61,7 @@ make check   # Rust fmt, clippy (warnings are errors), tests; Python ruff, mypy 
 make audit   # known-vulnerability audit of locked dependencies (needs cargo-audit)
 make bench   # the registered engine benchmark
 make differential-full SEED=1   # 10 million commands through both engines
+make crash SEED=1               # 1,000 SIGKILLs against brier-core with recovery checks
 make help    # every command
 ```
 
