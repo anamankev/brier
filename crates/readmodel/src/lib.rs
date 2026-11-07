@@ -16,11 +16,18 @@ use brier_journal::{Follower, JournalError};
 use brier_types::{AccountId, MarketId, OrderId, Seq, Side};
 use tokio_postgres::Client;
 
-/// Embedded migrations, applied in order, each once (`schema_migrations`).
-const MIGRATIONS: &[(&str, &str)] = &[(
-    "0001_read_models",
-    include_str!("../migrations/0001_read_models.sql"),
-)];
+/// Embedded migrations for the whole database (read models and gateway identity), applied in
+/// order, each once (`schema_migrations`).
+const MIGRATIONS: &[(&str, &str)] = &[
+    (
+        "0001_read_models",
+        include_str!("../migrations/0001_read_models.sql"),
+    ),
+    (
+        "0002_identity",
+        include_str!("../migrations/0002_identity.sql"),
+    ),
+];
 
 /// Arbitrary but fixed key for the advisory lock that serializes migrations across processes.
 const MIGRATION_LOCK: i64 = 0x6272_6965_725f_6d67; // "brier_mg"
@@ -44,7 +51,7 @@ pub enum ReadModelError {
 impl fmt::Display for ReadModelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Db(e) => write!(f, "database: {e}"),
+            Self::Db(e) => write!(f, "database: {}", describe_db_error(e)),
             Self::Journal(e) => write!(f, "{e}"),
             Self::Engine(e) => write!(f, "replay: {e}"),
             Self::CursorConflict => {
@@ -53,6 +60,16 @@ impl fmt::Display for ReadModelError {
             Self::OutOfRange(what) => write!(f, "{what} does not fit its column"),
         }
     }
+}
+
+/// A database error with PostgreSQL's own code and message (the plain `Display` of a server
+/// error is only "db error").
+#[must_use]
+pub fn describe_db_error(e: &tokio_postgres::Error) -> String {
+    e.as_db_error().map_or_else(
+        || e.to_string(),
+        |d| format!("{} ({})", d.message(), d.code().code()),
+    )
 }
 
 impl std::error::Error for ReadModelError {}

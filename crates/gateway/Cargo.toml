@@ -1,0 +1,38 @@
+[package]
+name = "brier-gateway"
+description = "HTTP and WebSocket gateway: identity, signed requests, rate limits, REST, market data (SPEC §6)"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "brier-gateway"
+path = "src/main.rs"
+
+[dependencies]
+argon2 = "=0.6.0"
+axum = { version = "=0.8.9", features = ["ws"] }
+base64 = "=0.23.1"
+brier-core = { path = "../core" }
+brier-engine = { path = "../engine" }
+brier-readmodel = { path = "../readmodel" }
+brier-types = { path = "../types" }
+brier-wire = { path = "../wire" }
+ed25519-dalek = "=3.0.0"
+getrandom = "=0.4.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "=0.11.1"
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
+tokio-postgres = "0.7.18"
+
+[dev-dependencies]
+tempfile = "3.27"
+tower = { version = "0.5.3", features = ["util"] }
+
+[lints]
+workspace = true

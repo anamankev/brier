@@ -200,7 +200,9 @@ fn to_command(w: WireCommand) -> Command {
     }
 }
 
-const fn outcome_name(o: Outcome) -> &'static str {
+/// Wire name of an outcome.
+#[must_use]
+pub const fn outcome_name(o: Outcome) -> &'static str {
     match o {
         Outcome::Yes => "yes",
         Outcome::No => "no",
@@ -224,14 +226,18 @@ fn ledger_account_name(a: LedgerAccount) -> String {
     }
 }
 
-const fn side_name(s: Side) -> &'static str {
+/// Wire name of a side.
+#[must_use]
+pub const fn side_name(s: Side) -> &'static str {
     match s {
         Side::Buy => "buy",
         Side::Sell => "sell",
     }
 }
 
-const fn state_name(s: MarketState) -> &'static str {
+/// Wire name of a market state.
+#[must_use]
+pub const fn state_name(s: MarketState) -> &'static str {
     match s {
         MarketState::PreOpen => "pre_open",
         MarketState::Open => "open",
@@ -242,7 +248,9 @@ const fn state_name(s: MarketState) -> &'static str {
     }
 }
 
-const fn cancel_name(r: CancelReason) -> &'static str {
+/// Wire name of a cancel reason.
+#[must_use]
+pub const fn cancel_name(r: CancelReason) -> &'static str {
     match r {
         CancelReason::User => "user",
         CancelReason::IocRemainder => "ioc_remainder",
@@ -252,7 +260,9 @@ const fn cancel_name(r: CancelReason) -> &'static str {
     }
 }
 
-const fn reject_name(r: RejectReason) -> &'static str {
+/// Wire name of a reject reason.
+#[must_use]
+pub const fn reject_name(r: RejectReason) -> &'static str {
     match r {
         RejectReason::UnknownMarket => "unknown_market",
         RejectReason::MarketExists => "market_exists",
@@ -375,4 +385,40 @@ pub fn final_book(engine: &Engine) -> Result<Value, EngineError> {
         .map(|m| json!([m.get(), engine.escrow(m).map(Credits::cents)]))
         .collect();
     Ok(json!({"ev": "final_book", "markets": markets, "accounts": accounts, "escrow": escrow}))
+}
+
+/// The side with this wire name.
+#[must_use]
+pub fn side_from_name(name: &str) -> Option<Side> {
+    [Side::Buy, Side::Sell]
+        .into_iter()
+        .find(|&s| side_name(s) == name)
+}
+
+/// The market state with this wire name.
+#[must_use]
+pub fn state_from_name(name: &str) -> Option<MarketState> {
+    use MarketState::{Closed, Halted, Open, PreOpen, Resolved, Voided};
+    [PreOpen, Open, Halted, Closed, Resolved, Voided]
+        .into_iter()
+        .find(|&s| state_name(s) == name)
+}
+
+/// The outcome with this wire name.
+#[must_use]
+pub fn outcome_from_name(name: &str) -> Option<Outcome> {
+    [Outcome::Yes, Outcome::No, Outcome::Void]
+        .into_iter()
+        .find(|&o| outcome_name(o) == name)
+}
+
+/// The time in force with this wire name (`gtc`, `ioc`, `fok`).
+#[must_use]
+pub fn tif_from_name(name: &str) -> Option<TimeInForce> {
+    match name {
+        "gtc" => Some(TimeInForce::Gtc),
+        "ioc" => Some(TimeInForce::Ioc),
+        "fok" => Some(TimeInForce::Fok),
+        _ => None,
+    }
 }
