@@ -96,9 +96,12 @@ async fn forecasts_are_scored_against_the_market_and_ranked() {
     let (core, _, _thread) = start(CoreConfig::new(data.path())).unwrap();
     let t0 = instant("2026-09-01T13:30:00Z").unwrap();
     let clock = Clock::manual(t0 - 3_600);
+    // Several users sign up and sign in from one test address, beyond the per-address auth
+    // burst; the limit itself is tested in rest.rs.
+    let mut base = AppState::new(core.clone(), connect(&schema).await).unwrap();
+    base.auth_limits = brier_gateway::limits::Limiter::per_minute(1_000, 1_000);
     let state = Arc::new(
-        AppState::new(core.clone(), connect(&schema).await)
-            .unwrap()
+        base.with_totp_key(common::TOTP_KEY)
             .with_clock(clock.clone()),
     );
     tokio::spawn(run_projector(
@@ -131,14 +134,12 @@ async fn forecasts_are_scored_against_the_market_and_ranked() {
     )
     .await
     .unwrap();
-    // Seven registrations and seven logins exceed the per-address auth burst (10); the bucket
-    // refills one attempt every 2 s, so wait for it rather than loosen the limit.
-    tokio::time::sleep(Duration::from_secs(9)).await;
     let mut tokens = Vec::new();
     for name in names {
         tokens.push(login(&w.app, name, pw).await);
     }
     let [alice, rex, ann, ben, cal, bob, dave] = tokens.try_into().unwrap();
+    let alice = common::with_totp(&w.app, &alice, "alice", pw).await;
 
     for m in MARKETS {
         let (status, body) = w

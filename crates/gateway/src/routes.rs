@@ -31,6 +31,7 @@ use serde_json::{Value, json};
 use crate::audit::{self, Actor};
 use crate::auth::{self, Role, User};
 use crate::error::ApiError;
+use crate::totp;
 use crate::{AppState, ClientIp};
 
 pub(crate) type Shared = State<Arc<AppState>>;
@@ -137,6 +138,16 @@ struct Credentials {
     password: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LoginBody {
+    username: String,
+    password: String,
+    /// The current TOTP code, required once TOTP is on.
+    #[serde(default)]
+    totp: Option<String>,
+}
+
 fn check_username(name: &str) -> Result<(), ApiError> {
     let ok = (3..=32).contains(&name.len())
         && name
@@ -189,6 +200,7 @@ pub async fn register(State(s): Shared, req: Req) -> ApiResult {
     let user = User {
         id: row.get(0),
         role: Role::Trader,
+        mfa: false,
     };
     if let Err(e) = ensure_account(&s, user).await {
         // No half-made user: without its engine account the row is removed. If this delete
@@ -209,10 +221,14 @@ pub async fn login(State(s): Shared, req: Req) -> ApiResult {
     if !s.auth_limits.allow(req.ip) {
         return Err(ApiError::rate_limited());
     }
-    let Credentials { username, password } = req.json()?;
+    let LoginBody {
+        username,
+        password,
+        totp,
+    } = req.json()?;
     let row =
         s.db.query_opt(
-            "SELECT id, password_hash, role FROM users WHERE username = $1",
+            "SELECT id, password_hash, role, totp_enabled, totp_secret FROM users WHERE username = $1",
             &[&username],
         )
         .await?;
@@ -222,20 +238,134 @@ pub async fn login(State(s): Shared, req: Req) -> ApiResult {
         .as_ref()
         .map_or_else(|| s.dummy_hash.clone(), |r| r.get::<_, String>(1));
     let matches = blocking(move || auth::verify_password(&password, &stored)).await?;
-    let user = match row {
-        Some(r) if matches => User {
-            id: r.get(0),
-            role: Role::from_name(r.get(2)),
-        },
+    let (user, secret) = match row {
+        Some(r) if matches => {
+            let secret: Option<Vec<u8>> = if r.get::<_, bool>(3) { r.get(4) } else { None };
+            let user = User {
+                id: r.get(0),
+                role: Role::from_name(r.get(2)),
+                mfa: secret.is_some(),
+            };
+            (user, secret)
+        }
         _ => return Err(ApiError::unauthorized("wrong username or password")),
     };
+    if let Some(stored) = secret {
+        let code = totp.ok_or_else(|| {
+            ApiError::new(
+                StatusCode::UNAUTHORIZED,
+                "totp_required",
+                "this account needs its TOTP code",
+            )
+        })?;
+        check_totp(&s, user.id, &stored, &code).await?;
+    }
     ensure_account(&s, user).await?;
-    let token = auth::new_session(&s.db, user.id).await?;
+    let token = auth::new_session(&s.db, user.id, user.mfa).await?;
     let expires = i64::from(auth::SESSION_HOURS).saturating_mul(3_600);
     Ok(
         Json(json!({ "token": token, "user_id": user.id, "expires_in_seconds": expires }))
             .into_response(),
     )
+}
+
+/// Accept `code` for this user once: it must match a step within one of now, and be later than
+/// the last step accepted.
+async fn check_totp(s: &AppState, user: i64, stored: &[u8], code: &str) -> Result<(), ApiError> {
+    let key = totp_key(s)?;
+    let secret = totp::open_secret(&key, stored)?;
+    let now_step = totp::step(auth::now_ms() / 1_000);
+    let matched = totp::matching_step(&secret, code.trim(), now_step)
+        .ok_or_else(|| ApiError::unauthorized("wrong TOTP code"))?;
+    let step = i64::try_from(matched).map_err(|e| ApiError::internal(&e))?;
+    let fresh = s
+        .db
+        .execute(
+            "UPDATE users SET totp_last_step = $2 WHERE id = $1 AND (totp_last_step IS NULL OR totp_last_step < $2)",
+            &[&user, &step],
+        )
+        .await?;
+    if fresh == 1 {
+        Ok(())
+    } else {
+        Err(ApiError::unauthorized("this TOTP code was already used"))
+    }
+}
+
+fn totp_key(s: &AppState) -> Result<[u8; 32], ApiError> {
+    s.totp_key.ok_or_else(|| {
+        ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "unavailable",
+            "TOTP is not configured on this exchange (BRIER_TOTP_KEY)",
+        )
+    })
+}
+
+/// `POST /v1/totp/setup`: a new TOTP secret for the caller (session only), not yet on.
+pub async fn totp_setup(State(s): Shared, req: Req) -> ApiResult {
+    let user = req.user(&s, false).await?;
+    let key = totp_key(&s)?;
+    let (secret, stored) = totp::new_secret(&key)?;
+    let row = s
+        .db
+        .query_opt(
+            "UPDATE users SET totp_secret = $2, totp_last_step = NULL WHERE id = $1 AND NOT totp_enabled RETURNING username",
+            &[&user.id, &stored],
+        )
+        .await?
+        .ok_or_else(|| ApiError::conflict("TOTP is already on for this account"))?;
+    let username: String = row.get(0);
+    let encoded = totp::base32(&secret);
+    let uri = format!(
+        "otpauth://totp/Brier:{username}?secret={encoded}&issuer=Brier&algorithm=SHA1&digits={}&period={}",
+        totp::DIGITS,
+        totp::STEP_SECONDS
+    );
+    Ok(Json(json!({ "secret": encoded, "otpauth_uri": uri })).into_response())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CodeBody {
+    code: String,
+}
+
+/// `POST /v1/totp/enable`: turn TOTP on with one valid code (session only). This session then
+/// counts as signed in with TOTP.
+pub async fn totp_enable(State(s): Shared, req: Req) -> ApiResult {
+    let user = req.user(&s, false).await?;
+    let CodeBody { code } = req.json()?;
+    let row =
+        s.db.query_one(
+            "SELECT totp_secret, totp_enabled FROM users WHERE id = $1",
+            &[&user.id],
+        )
+        .await?;
+    if row.get::<_, bool>(1) {
+        return Err(ApiError::conflict("TOTP is already on for this account"));
+    }
+    let stored: Vec<u8> = row
+        .get::<_, Option<Vec<u8>>>(0)
+        .ok_or_else(|| ApiError::conflict("set up TOTP first (POST /v1/totp/setup)"))?;
+    check_totp(&s, user.id, &stored, &code).await?;
+    s.db.execute(
+        "UPDATE users SET totp_enabled = true WHERE id = $1",
+        &[&user.id],
+    )
+    .await?;
+    if let Some(token) = auth::bearer(&req.headers) {
+        auth::mark_session_mfa(&s.db, token).await?;
+    }
+    audit::record(
+        &s,
+        Actor::User(user.id),
+        "enable_totp",
+        &json!({}),
+        "user turned TOTP on",
+    )
+    .await?;
+    Ok(Json(json!({ "totp": "on" })).into_response())
 }
 
 /// `POST /v1/logout`: end the session.
@@ -730,11 +860,15 @@ pub async fn order(State(s): Shared, Path(raw): Path<String>, req: Req) -> ApiRe
 /// The signed-in user, who must be an admin.
 pub(crate) async fn admin_user(s: &AppState, req: &Req) -> Result<User, ApiError> {
     let user = req.user(s, true).await?;
-    if user.role == Role::Admin {
-        Ok(user)
-    } else {
-        Err(ApiError::forbidden())
+    if user.role != Role::Admin {
+        return Err(ApiError::forbidden());
     }
+    if !user.mfa {
+        return Err(ApiError::forbidden_because(
+            "admin actions need a sign-in with TOTP: turn TOTP on, then sign in with a code",
+        ));
+    }
+    Ok(user)
 }
 
 /// Run an administrative command: admin role required, a reason required, and the command

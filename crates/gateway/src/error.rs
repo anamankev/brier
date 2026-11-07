@@ -23,6 +23,7 @@ pub const GATEWAY_CODES: &[&str] = &[
     "invalid_rulebook",
     "conflict",
     "too_early",
+    "totp_required",
 ];
 
 /// An error answered to a client.

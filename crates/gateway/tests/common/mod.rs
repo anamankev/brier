@@ -3,7 +3,9 @@
     dead_code,
     clippy::unwrap_used,
     clippy::expect_used,
-    clippy::indexing_slicing
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::arithmetic_side_effects
 )] // test code; each test uses a subset
 
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -108,4 +110,56 @@ pub fn rulebook(market: u32) -> Value {
         serde_json::from_str(include_str!("../fixtures/long_window_rulebook.json")).unwrap();
     r["market"] = json!(market);
     r
+}
+
+/// The TOTP key every test exchange is built with.
+pub const TOTP_KEY: [u8; 32] = [0x42; 32];
+
+fn base32_decode(s: &str) -> Vec<u8> {
+    let (mut out, mut buffer, mut bits) = (Vec::new(), 0u32, 0u32);
+    for c in s.bytes() {
+        let v = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'2'..=b'7' => c - b'2' + 26,
+            _ => panic!("not base32: {s}"),
+        };
+        buffer = (buffer << 5) | u32::from(v);
+        bits += 5;
+        if bits >= 8 {
+            bits -= 8;
+            out.push(u8::try_from((buffer >> bits) & 0xff).unwrap());
+        }
+    }
+    out
+}
+
+/// Turn TOTP on for the user signed in with `token`, then sign in again with a code; returns
+/// the new session token, which counts as signed in with TOTP (needed for admin actions).
+pub async fn with_totp(app: &Router, token: &str, username: &str, password: &str) -> String {
+    let (status, setup) = call(app, Method::POST, "/v1/totp/setup", Some(token), None).await;
+    assert_eq!(status, StatusCode::OK, "{setup}");
+    let secret = base32_decode(setup["secret"].as_str().unwrap());
+    let step = brier_gateway::totp::step(now_ms() / 1_000);
+    let code = brier_gateway::totp::hotp(&secret, step);
+    let (status, body) = call(
+        app,
+        Method::POST,
+        "/v1/totp/enable",
+        Some(token),
+        Some(json!({ "code": code })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    // The next step's code: each step is accepted once, and one step ahead is allowed.
+    let next = brier_gateway::totp::hotp(&secret, step + 1);
+    let (status, body) = call(
+        app,
+        Method::POST,
+        "/v1/login",
+        None,
+        Some(json!({ "username": username, "password": password, "totp": next })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body["token"].as_str().unwrap().to_owned()
 }

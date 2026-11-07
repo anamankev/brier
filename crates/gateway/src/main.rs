@@ -8,7 +8,8 @@
 //! ```
 //! Configuration comes from the environment only: `BRIER_DATABASE_URL` (required; never
 //! logged), `BRIER_DATA_DIR` (default `data`), `BRIER_LISTEN` (default `127.0.0.1:8080`),
-//! `BRIER_DISPUTE_WINDOW_SECONDS` (default 86400), and `BRIER_DATABASE_SCHEMA` (optional: keep
+//! `BRIER_DISPUTE_WINDOW_SECONDS` (default 86400), `BRIER_TOTP_KEY` (64 hex digits; the key
+//! TOTP secrets are encrypted under; without it TOTP and admin actions are unavailable), and `BRIER_DATABASE_SCHEMA` (optional: keep
 //! every table in this schema, created if missing, so several exchanges, such as test runs,
 //! can share one database).
 
@@ -110,9 +111,20 @@ async fn serve(url: &str) -> Result<(), String> {
         "recovered",
         &json!({ "next_seq": recovery.next_seq.get(), "replayed": recovery.replayed, "snapshot": recovery.snapshot.map(brier_types::Seq::get) }),
     );
-    let state = AppState::new(core.clone(), db)
+    let mut state = AppState::new(core.clone(), db)
         .map_err(|e| format!("{e:?}"))?
         .with_dispute_window(dispute_window);
+    match std::env::var("BRIER_TOTP_KEY") {
+        Ok(hex) => {
+            let key = brier_gateway::totp::parse_key(&hex)
+                .ok_or("BRIER_TOTP_KEY must be 64 lowercase hex digits")?;
+            state = state.with_totp_key(key);
+        }
+        Err(_) => info(
+            "no BRIER_TOTP_KEY: TOTP and admin actions are unavailable",
+            &json!({}),
+        ),
+    }
     #[cfg(feature = "test-clock")]
     let state = match std::env::var("BRIER_TEST_CLOCK_FILE") {
         Ok(path) => {

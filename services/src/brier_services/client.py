@@ -25,6 +25,7 @@ import asyncio
 import base64
 import contextlib
 import hashlib
+import hmac
 import itertools
 import json
 import time
@@ -199,11 +200,35 @@ class RestClient:
             raise ApiError(e.code, json.loads(e.read() or b"{}")) from None
         return json.loads(raw) if raw else None
 
-    def login(self, username: str, password: str) -> None:
-        """Log in and use the session for later requests."""
-        self.token = self.request(
-            "POST", "/v1/login", {"username": username, "password": password}
-        )["token"]
+    def login(self, username: str, password: str, totp: str | None = None) -> None:
+        """Log in and use the session for later requests. ``totp`` is the current code, needed
+        once TOTP is on."""
+        body = {"username": username, "password": password}
+        if totp is not None:
+            body["totp"] = totp
+        self.token = self.request("POST", "/v1/login", body)["token"]
+
+    def enable_totp(self) -> tuple[str, int]:
+        """Turn TOTP on for the signed-in user; returns the base32 secret and the step whose
+        code was used. Each step's code works once, so sign in again with the next step's code
+        (``totp_code(secret, step + 1)``), which is also accepted; that session counts as
+        signed in with TOTP, which admin actions need."""
+        secret = str(self.request("POST", "/v1/totp/setup")["secret"])
+        step = int(time.time()) // TOTP_STEP_SECONDS
+        self.request("POST", "/v1/totp/enable", {"code": totp_code(secret, step)})
+        return secret, step
+
+
+TOTP_STEP_SECONDS = 30
+
+
+def totp_code(secret_b32: str, step: int) -> str:
+    """The RFC 6238 code (HMAC-SHA-1, 6 digits) for a base32 secret at a 30-second step."""
+    key = base64.b32decode(secret_b32 + "=" * (-len(secret_b32) % 8))
+    digest = hmac.new(key, step.to_bytes(8, "big"), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    word = int.from_bytes(digest[offset : offset + 4], "big") & 0x7FFF_FFFF
+    return f"{word % 1_000_000:06d}"
 
 
 def clock_ms() -> int:

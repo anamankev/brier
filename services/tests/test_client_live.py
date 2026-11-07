@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from brier_services.client import ApiError, Ed25519Key, RestClient, WsClient, clock_ms
+from brier_services.client import ApiError, Ed25519Key, RestClient, WsClient, clock_ms, totp_code
 
 ROOT = Path(__file__).resolve().parents[2]
 RULEBOOK = ROOT / "crates" / "gateway" / "tests" / "fixtures" / "long_window_rulebook.json"
@@ -50,6 +50,7 @@ def gateway(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple[str, dic
         "BRIER_DATABASE_SCHEMA": f"pytest_client_{time.time_ns()}",
         "BRIER_DATA_DIR": str(tmp_path_factory.mktemp("journal")),
         "BRIER_LISTEN": f"127.0.0.1:{port}",
+        "BRIER_TOTP_KEY": "42" * 32,
     }
     binary = str(ROOT / "target" / "release" / "brier-gateway")
     process = subprocess.Popen([binary, "serve"], env=env, stderr=subprocess.PIPE)  # noqa: S603
@@ -116,6 +117,8 @@ def test_the_reference_client_trades_against_a_real_gateway(
     )
     alice = RestClient(base)
     alice.login("alice", PASSWORD)
+    secret, step = alice.enable_totp()
+    alice.login("alice", PASSWORD, totp_code(secret, step + 1))
     rulebook = json.loads(RULEBOOK.read_text())
     alice.request("POST", "/v1/admin/markets", {"rulebook": rulebook, "reason": "live client test"})
     # The rulebook's open time has passed, so the gateway's scheduler opens the market within a

@@ -180,7 +180,11 @@ async fn the_websocket_api_end_to_end() {
     let schema = common::schema("gateway_ws");
     let data = tempfile::tempdir().unwrap();
     let (core, _, _thread) = start(CoreConfig::new(data.path())).unwrap();
-    let state = Arc::new(AppState::new(core.clone(), connect(&schema).await).unwrap());
+    let state = Arc::new(
+        AppState::new(core.clone(), connect(&schema).await)
+            .unwrap()
+            .with_totp_key(common::TOTP_KEY),
+    );
     let admin_db = connect(&schema).await;
     let app = router(Arc::clone(&state));
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -210,6 +214,7 @@ async fn the_websocket_api_end_to_end() {
         .await
         .unwrap();
     let (alice, bob) = (login(&app, "alice", pw).await, login(&app, "bob", pw).await);
+    let alice = common::with_totp(&app, &alice, "alice", pw).await;
     for (path, body) in [
         (
             "/v1/admin/markets",

@@ -36,6 +36,9 @@ info:
     dispute window (24 h), and the gateway then settles it. The journal records the rules hash
     and the evidence hash.
 
+    Second factor. Any account can turn on TOTP (RFC 6238). Admin actions need a session whose
+    sign-in used a TOTP code, or a signed request from an admin with TOTP on.
+
     Authentication. People log in for a session token (`Authorization: Bearer <token>`, valid
     24 h). Bots register an Ed25519 public key with a session, then sign each request (see the
     `signed` scheme). Managing keys needs a session.
@@ -97,13 +100,20 @@ paths:
   /v1/login:
     post:
       tags: [identity]
-      summary: Exchange a username and password for a session token
+      summary: Exchange a username and password (and the TOTP code, once TOTP is on) for a session token
       security: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/Credentials' }
+            schema:
+              type: object
+              additionalProperties: false
+              required: [username, password]
+              properties:
+                username: { type: string, pattern: '^[a-z0-9_]{3,32}$' }
+                password: { type: string, minLength: 12, maxLength: 256 }
+                totp: { type: string, pattern: '^[0-9]{6}$', description: 'Required once TOTP is on (401 totp_required without it); each code works once' }
       responses:
         '200':
           description: A session
@@ -118,6 +128,49 @@ paths:
                   expires_in_seconds: { type: integer, const: 86400 }
         '401': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/Error' }
+  /v1/totp/setup:
+    post:
+      tags: [identity]
+      summary: Create a TOTP secret for the caller (session only); TOTP is not on until enabled
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: 'The secret, for an authenticator app (RFC 6238: SHA-1, 6 digits, 30 s)'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secret, otpauth_uri]
+                properties:
+                  secret: { type: string, description: 'Base32, no padding' }
+                  otpauth_uri: { type: string, description: 'For a QR code' }
+        '401': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/totp/enable:
+    post:
+      tags: [identity]
+      summary: Turn TOTP on with one valid code (session only); this session then counts as signed in with TOTP
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '200':
+          description: 'TOTP is on: `{totp: on}`'
+          content:
+            application/json:
+              schema: { type: object }
+        '401': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
   /v1/logout:
     post:
       tags: [identity]
@@ -965,7 +1018,7 @@ components:
     ErrorCode:
       description: |
         Gateway codes: bad_request (400), invalid_rulebook (400; the message starts with the
-        rulebook error code, docs/rulebook.md), unauthorized (401), forbidden (403), not_found
+        rulebook error code, docs/rulebook.md), unauthorized (401), totp_required (401: this account needs its TOTP code), forbidden (403; also an admin action from a sign-in without TOTP), not_found
         (404), username_taken (409), conflict (409: the state does not allow this), too_early
         (409: allowed later, such as before a release time), too_large (413), rate_limited (429),
         too_many_in_flight (429, WebSocket only), unavailable (503), timeout (504). Every other
@@ -984,6 +1037,7 @@ components:
         - invalid_rulebook
         - conflict
         - too_early
+        - totp_required
         - unknown_market
         - market_exists
         - market_not_open

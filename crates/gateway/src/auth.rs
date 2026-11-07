@@ -42,6 +42,9 @@ pub struct User {
     pub id: i64,
     /// What the user may do.
     pub role: Role,
+    /// Whether this request carries a second factor: a session whose login used TOTP, or a
+    /// signed request from a user with TOTP on (keys are registered from a session).
+    pub mfa: bool,
 }
 
 /// A user's role (the `users.role` column).
@@ -132,16 +135,29 @@ fn hex(bytes: &[u8]) -> String {
 ///
 /// # Errors
 /// [`ApiError`] if randomness or the database fails.
-pub async fn new_session(db: &Client, user_id: i64) -> Result<String, ApiError> {
+pub async fn new_session(db: &Client, user_id: i64, mfa: bool) -> Result<String, ApiError> {
     let mut raw = [0u8; 32];
     getrandom::fill(&mut raw).map_err(|e| ApiError::internal(&e))?;
     let token = URL_SAFE_NO_PAD.encode(raw);
     db.execute(
-        "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, now() + make_interval(hours => $3))",
-        &[&sha256(token.as_bytes()).as_slice(), &user_id, &SESSION_HOURS],
+        "INSERT INTO sessions (token_hash, user_id, expires_at, mfa) VALUES ($1, $2, now() + make_interval(hours => $3), $4)",
+        &[&sha256(token.as_bytes()).as_slice(), &user_id, &SESSION_HOURS, &mfa],
     )
     .await?;
     Ok(token)
+}
+
+/// Mark a session as signed in with TOTP (after TOTP is turned on in it).
+///
+/// # Errors
+/// [`ApiError`] if the database fails.
+pub async fn mark_session_mfa(db: &Client, token: &str) -> Result<(), ApiError> {
+    db.execute(
+        "UPDATE sessions SET mfa = true WHERE token_hash = $1",
+        &[&sha256(token.as_bytes()).as_slice()],
+    )
+    .await?;
+    Ok(())
 }
 
 /// End a session.
@@ -185,7 +201,7 @@ impl ReplayCache {
     }
 }
 
-fn now_ms() -> u64 {
+pub(crate) fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
@@ -305,7 +321,7 @@ pub async fn authenticate(
     if let Some(token) = bearer(headers) {
         let row = db
             .query_opt(
-                "SELECT u.id, u.role FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = $1 AND s.expires_at > now()",
+                "SELECT u.id, u.role, s.mfa FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = $1 AND s.expires_at > now()",
                 &[&sha256(token.as_bytes()).as_slice()],
             )
             .await?;
@@ -313,6 +329,7 @@ pub async fn authenticate(
         return Ok(User {
             id: row.get(0),
             role: Role::from_name(row.get(1)),
+            mfa: row.get(2),
         });
     }
     if !allow_signed {
@@ -329,7 +346,7 @@ pub async fn authenticate(
     check_timestamp(signed.timestamp, now)?;
     let row = db
         .query_opt(
-            "SELECT k.public_key, u.id, u.role FROM api_keys k JOIN users u ON u.id = k.user_id WHERE k.id = $1 AND k.revoked_at IS NULL",
+            "SELECT k.public_key, u.id, u.role, u.totp_enabled FROM api_keys k JOIN users u ON u.id = k.user_id WHERE k.id = $1 AND k.revoked_at IS NULL",
             &[&signed.key_id],
         )
         .await?
@@ -350,6 +367,7 @@ pub async fn authenticate(
     Ok(User {
         id: row.get(1),
         role: Role::from_name(row.get(2)),
+        mfa: row.get(3),
     })
 }
 

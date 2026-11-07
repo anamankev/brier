@@ -237,3 +237,13 @@ def test_the_rest_client_signs_and_maps_errors() -> None:
         assert "authorization" not in headers, "a signed request carries no session"
     finally:
         server.shutdown()
+
+
+def test_totp_codes_match_rfc_6238() -> None:
+    import base64
+
+    from brier_services.client import totp_code
+
+    secret = base64.b32encode(b"12345678901234567890").decode().rstrip("=")
+    for t, eight in [(59, "94287082"), (1_111_111_109, "07081804"), (2_000_000_000, "69279037")]:
+        assert totp_code(secret, t // 30) == eight[2:]

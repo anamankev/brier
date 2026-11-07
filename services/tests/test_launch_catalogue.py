@@ -34,7 +34,7 @@ from typing import Any
 import pytest
 
 from brier_services import resolve as service
-from brier_services.client import ApiError, Ed25519Key, RestClient, clock_ms
+from brier_services.client import ApiError, Ed25519Key, RestClient, clock_ms, totp_code
 from brier_services.resolution.evidence import EvidenceStore, recompute
 from brier_services.resolution.fetch import Request, Response, check_url, redact
 from brier_services.rules import Rulebook, canonical, instant, load_toml
@@ -152,6 +152,7 @@ def exchange(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Exchange]:
         "BRIER_DATABASE_SCHEMA": f"pytest_exit_{time.time_ns()}",
         "BRIER_DATA_DIR": str(work / "journal"),
         "BRIER_LISTEN": f"127.0.0.1:{port}",
+        "BRIER_TOTP_KEY": "42" * 32,
         "BRIER_TEST_CLOCK_FILE": str(clock_file),
         "BRIER_DISPUTE_WINDOW_SECONDS": str(WINDOW),
     }
@@ -183,15 +184,32 @@ def wait_for(what: str, check: Callable[[], bool], seconds: float = 10) -> None:
         time.sleep(0.1)
 
 
+def patiently(call: Callable[[], Any]) -> Any:  # noqa: ANN401 - JSON
+    """``call()``, waiting out the per-address sign-in limit (a burst of 10, then one every
+    2 s): the test signs up and signs in more often than one person would."""
+    for _ in range(20):
+        try:
+            return call()
+        except ApiError as e:
+            if e.code != "rate_limited":
+                raise
+            time.sleep(2.1)
+    pytest.fail("still rate limited")
+
+
 def user(ex: Exchange, name: str, role: str | None = None) -> RestClient:
-    RestClient(ex.base).request("POST", "/v1/register", {"username": name, "password": PASSWORD})
+    body = {"username": name, "password": PASSWORD}
+    patiently(lambda: RestClient(ex.base).request("POST", "/v1/register", body))
     if role is not None:
         subprocess.run(  # noqa: S603 - fixed arguments
             [ex.binary, "role", name, role, "exit test role"], env=ex.env, check=True,
             stderr=subprocess.DEVNULL,
         )  # fmt: skip
     c = RestClient(ex.base)
-    c.login(name, PASSWORD)
+    patiently(lambda: c.login(name, PASSWORD))
+    if role == "admin":
+        secret, step = c.enable_totp()
+        patiently(lambda: c.login(name, PASSWORD, totp_code(secret, step + 1)))
     return c
 
 

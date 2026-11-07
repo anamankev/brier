@@ -26,8 +26,10 @@ brier-wire = { path = "../wire" }
 ed25519-dalek = "=3.0.0"
 futures-util = { version = "=0.3.34", default-features = false, features = ["sink"] }
 getrandom = "=0.4.3"
+hmac = "=0.13.0" # TOTP (RFC 6238)
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sha1 = "=0.11.0" # TOTP: the algorithm authenticator apps support
 sha2 = "=0.11.1"
 tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 tokio-postgres = "0.7.18"

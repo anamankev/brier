@@ -447,6 +447,15 @@ fn one_run(url: &str, run: usize, plan: Plan) -> Run {
             tokens.push(login["token"].as_str().expect("token").to_owned());
         }
         let admin = tokens.remove(0);
+        // Admin actions need a sign-in with TOTP. The benchmark measures order flow, not
+        // sign-in, so it marks the administrator's session directly.
+        admin_db
+            .execute(
+                "UPDATE sessions SET mfa = true WHERE user_id = (SELECT id FROM users WHERE username = 'bench_0')",
+                &[],
+            )
+            .await
+            .expect("mark the admin session");
         for m in 1..=MARKETS {
             http(
                 addr,

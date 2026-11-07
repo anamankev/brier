@@ -16,6 +16,7 @@ pub mod markets;
 pub mod resolution;
 pub mod routes;
 pub mod scheduler;
+pub mod totp;
 pub mod ws;
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -83,6 +84,9 @@ pub struct AppState {
     pub clock: Clock,
     /// Seconds a confirmed resolution stays open to disputes.
     pub dispute_window: Unix,
+    /// The key TOTP secrets are encrypted under (`BRIER_TOTP_KEY`); without it, TOTP cannot be
+    /// set up and admin actions are unavailable.
+    pub totp_key: Option<[u8; 32]>,
     /// A hash checked when the username is unknown, so login time does not reveal it.
     dummy_hash: String,
 }
@@ -115,6 +119,7 @@ impl AppState {
             projected: Arc::new(AtomicU64::new(0)),
             clock: Clock::system(),
             dispute_window: DISPUTE_WINDOW,
+            totp_key: None,
             dummy_hash: auth::hash_password("timing equalizer, never a real password")?,
         })
     }
@@ -125,6 +130,13 @@ impl AppState {
     #[must_use]
     pub fn with_clock(mut self, clock: Clock) -> Self {
         self.clock = clock;
+        self
+    }
+
+    /// The same state with a TOTP key.
+    #[must_use]
+    pub const fn with_totp_key(mut self, key: [u8; 32]) -> Self {
+        self.totp_key = Some(key);
         self
     }
 
@@ -176,6 +188,8 @@ endpoints! {
     POST "/v1/register" => routes::register,
     POST "/v1/login" => routes::login,
     POST "/v1/logout" => routes::logout,
+    POST "/v1/totp/setup" => routes::totp_setup,
+    POST "/v1/totp/enable" => routes::totp_enable,
     POST "/v1/keys" => routes::add_key,
     GET "/v1/keys" => routes::list_keys,
     DELETE "/v1/keys/{id}" => routes::revoke_key,

@@ -51,7 +51,11 @@ async fn the_rest_api_end_to_end() {
     let schema = common::schema("gateway_rest");
     let data = tempfile::tempdir().unwrap();
     let (core, _, _thread) = start(CoreConfig::new(data.path())).unwrap();
-    let state = Arc::new(AppState::new(core.clone(), connect(&schema).await).unwrap());
+    let state = Arc::new(
+        AppState::new(core.clone(), connect(&schema).await)
+            .unwrap()
+            .with_totp_key(common::TOTP_KEY),
+    );
     let admin_db = connect(&schema).await;
     tokio::spawn(run_projector(
         connect(&schema).await,
@@ -131,6 +135,32 @@ async fn the_rest_api_end_to_end() {
         .await
         .unwrap();
     let create = json!({ "rulebook": common::rulebook(1), "reason": "list the first test market" });
+    let (status, body) = call(
+        &app,
+        Method::POST,
+        "/v1/admin/markets",
+        Some(&alice),
+        Some(create.clone()),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "an admin without TOTP: {body}"
+    );
+    let alice = common::with_totp(&app, &alice, "alice", pw).await;
+    let (status, body) = call(
+        &app,
+        Method::POST,
+        "/v1/login",
+        None,
+        Some(json!({ "username": "alice", "password": pw })),
+    )
+    .await;
+    assert_eq!(
+        (status, body["error"]["code"].as_str()),
+        (StatusCode::UNAUTHORIZED, Some("totp_required"))
+    );
     let (status, _) = call(
         &app,
         Method::POST,

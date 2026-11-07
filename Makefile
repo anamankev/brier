@@ -17,8 +17,9 @@ setup: env ## Locked Python dependencies, git hooks, and a local .env (Rust inst
 	uv sync --project services --locked
 	pre-commit install
 
-env: ## Create .env with a generated database password, once (git-ignored)
+env: ## Create .env with a generated database password and TOTP key, once each (git-ignored)
 	@test -f .env || (umask 077 && printf 'BRIER_DB_PASSWORD=%s\n' "$$(openssl rand -hex 24)" > .env && echo "created .env")
+	@grep -q '^BRIER_TOTP_KEY=' .env || (printf 'BRIER_TOTP_KEY=%s\n' "$$(openssl rand -hex 32)" >> .env && echo "added BRIER_TOTP_KEY to .env")
 
 up: env ## Start PostgreSQL in Docker and wait until it is healthy
 	docker compose up -d --wait db

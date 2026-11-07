@@ -114,9 +114,12 @@ async fn markets_resolve_through_propose_confirm_dispute_and_settle() {
     let data = tempfile::tempdir().unwrap();
     let (core, _, _thread) = start(CoreConfig::new(data.path())).unwrap();
     let clock = Clock::manual(t("2026-08-20T00:00:00Z"));
+    // Several users sign up and sign in from one test address, beyond the per-address auth
+    // burst; the limit itself is tested in rest.rs.
+    let mut base = AppState::new(core.clone(), connect(&schema).await).unwrap();
+    base.auth_limits = brier_gateway::limits::Limiter::per_minute(1_000, 1_000);
     let state = Arc::new(
-        AppState::new(core.clone(), connect(&schema).await)
-            .unwrap()
+        base.with_totp_key(common::TOTP_KEY)
             .with_clock(clock.clone())
             .with_dispute_window(WINDOW),
     );
@@ -154,6 +157,8 @@ async fn markets_resolve_through_propose_confirm_dispute_and_settle() {
         tokens.push(login(&w.app, name, pw).await);
     }
     let [alice, carol, rex, bob, dave] = tokens.try_into().unwrap();
+    let alice = common::with_totp(&w.app, &alice, "alice", pw).await;
+    let carol = common::with_totp(&w.app, &carol, "carol", pw).await;
 
     // ---- Listing ---------------------------------------------------------------------------
     let mut bad = cpi(7);
