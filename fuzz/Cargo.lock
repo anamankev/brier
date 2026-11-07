@@ -211,6 +211,7 @@ dependencies = [
  "brier-types",
  "brier-wire",
  "ed25519-dalek",
+ "futures-util",
  "getrandom 0.4.3",
  "serde",
  "serde_json",

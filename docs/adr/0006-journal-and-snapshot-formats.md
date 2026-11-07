@@ -22,6 +22,7 @@ Option 3.
   - Any other bad record is corruption of data that may already have been acknowledged, and recovery stops with an error. That covers a bad record in an earlier segment, or one followed by more than a batch of bytes.
   - A record with a valid CRC but a sequence number other than the next expected one is corruption, wherever it is. Sequence numbers must be strictly consecutive across segments.
   - A segment's header is synced before any record is appended to it. So if the **newest** segment's header is missing or unreadable (short, or wrong magic or version) and the file holds no more than one batch of bytes, the segment was interrupted while being created, and nothing in it was acknowledged. Recovery removes it. The same damage in an older segment is corruption. (Found by the crash study: a kill during rotation followed by a simulated torn write.)
+  - A snapshot body must be the one encoding of its state. Keyed sections (markets, accounts, holdings, client ID windows) must be in strictly increasing key order, and a client ID window must hold between 1 and 10,000 entries. A body breaking either rule is refused even when the state it describes is valid. (Found by the G4 fuzz campaign: accounts out of order restored, then re-snapshotted to different bytes.)
 
 ## Consequences
 - Old journals stay readable: a format change bumps the version, and readers keep decoding every version they have ever written.

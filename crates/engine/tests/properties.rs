@@ -296,3 +296,49 @@ proptest! {
         prop_assert!(Engine::restore(&longer).is_err());
     }
 }
+
+/// A snapshot body with no markets or holdings: the given accounts (all with zero cash) and
+/// client ID windows (account, entries).
+fn body(accounts: &[u64], windows: &[(u64, &[(u64, u64)])]) -> Vec<u8> {
+    let mut b = vec![brier_engine::SNAPSHOT_BODY_VERSION];
+    b.extend_from_slice(&1u64.to_le_bytes()); // next sequence number
+    b.extend_from_slice(&0i64.to_le_bytes()); // issuance
+    b.extend_from_slice(&0u64.to_le_bytes()); // markets
+    b.extend_from_slice(&(accounts.len() as u64).to_le_bytes());
+    for &a in accounts {
+        b.extend_from_slice(&a.to_le_bytes());
+        b.extend_from_slice(&0i64.to_le_bytes());
+    }
+    b.extend_from_slice(&0u64.to_le_bytes()); // holdings
+    b.extend_from_slice(&(windows.len() as u64).to_le_bytes());
+    for &(account, entries) in windows {
+        b.extend_from_slice(&account.to_le_bytes());
+        b.extend_from_slice(&(entries.len() as u64).to_le_bytes());
+        for &(client_id, order) in entries {
+            b.extend_from_slice(&client_id.to_le_bytes());
+            b.extend_from_slice(&order.to_le_bytes());
+        }
+    }
+    b
+}
+
+/// The G4 fuzz finding: accounts out of order restored, then snapshotted to different bytes,
+/// so one state had two encodings. Restore now refuses every non-canonical body.
+#[test]
+fn non_canonical_snapshots_are_refused() {
+    let sorted = body(&[1, 2], &[]);
+    assert_eq!(
+        Engine::restore(&sorted).unwrap().snapshot().unwrap(),
+        sorted
+    );
+    let refused = |b: &[u8], why: &'static str| {
+        assert_eq!(Engine::restore(b).err(), Some(RestoreError::Malformed(why)));
+    };
+    refused(&body(&[2, 1], &[]), "accounts out of order");
+    refused(&body(&[1, 1], &[]), "accounts out of order");
+    refused(
+        &body(&[1, 2], &[(2, &[(7, 1)]), (1, &[(7, 1)])]),
+        "client ID windows out of order",
+    );
+    refused(&body(&[1], &[(1, &[])]), "client ID window size");
+}

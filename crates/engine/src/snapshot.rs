@@ -5,13 +5,19 @@
 //! issuance. Everything else (the order-ID map, per-price resting totals, resting counts,
 //! reserved totals) is rebuilt on restore, and then every invariant is checked. A snapshot
 //! that restores to a state failing any invariant is rejected, never patched.
+//!
+//! The encoding is canonical: one state, one byte string. Restore enforces this, so it refuses
+//! keys out of strictly increasing order (markets, accounts, holdings, client ID windows),
+//! empty client ID windows, and windows longer than [`CLIENT_ID_WINDOW`], since each of
+//! those would restore to a state whose snapshot is different bytes.
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use brier_types::{AccountId, Credits, MarketId, OrderId, Price, Seq, Side};
 
 use crate::book::Book;
-use crate::client_ids::ClientIds;
+use crate::client_ids::{CLIENT_ID_WINDOW, ClientIds};
 use crate::engine::Engine;
 use crate::ledger::{Account, Holding, Ledger};
 use crate::{EngineError, MarketState};
@@ -110,6 +116,40 @@ fn state_from(code: u8) -> Result<MarketState, RestoreError> {
     }
 }
 
+/// Keys of each keyed section must be strictly increasing, the order snapshots write them in.
+fn ascending<K: Ord + Copy>(
+    last: &mut Option<K>,
+    key: K,
+    what: &'static str,
+) -> Result<(), RestoreError> {
+    if last.is_some_and(|prev| prev >= key) {
+        return Err(RestoreError::Malformed(what));
+    }
+    *last = Some(key);
+    Ok(())
+}
+
+/// The client ID windows section (version 2 on), keyed by account in increasing order.
+fn client_windows(r: &mut Reader<'_>) -> Result<BTreeMap<AccountId, ClientIds>, RestoreError> {
+    let mut windows = BTreeMap::new();
+    let mut last = None;
+    for _ in 0..r.len(CLIENT_WINDOW_MIN_BYTES)? {
+        let account = AccountId::new(r.u64()?);
+        ascending(&mut last, account, "client ID windows out of order")?;
+        let entries = r.len(CLIENT_ENTRY_BYTES)?;
+        if entries == 0 || entries > CLIENT_ID_WINDOW {
+            return Err(RestoreError::Malformed("client ID window size"));
+        }
+        let mut window = ClientIds::default();
+        for _ in 0..entries {
+            let client_id = r.u64()?;
+            window.record(client_id, OrderId::new(r.u64()?));
+        }
+        windows.insert(account, window);
+    }
+    Ok(windows)
+}
+
 const ORDER_BYTES: usize = 8 + 8 + 1 + 4;
 const MARKET_MIN_BYTES: usize = 4 + 1 + 8 + 8 + 8;
 const ACCOUNT_BYTES: usize = 8 + 8;
@@ -199,8 +239,10 @@ impl Engine {
         let mut ledger = Ledger::default();
         ledger.issuance = Credits::from_cents(r.i64()?);
         let mut resting: Vec<(MarketId, OrderId, AccountId, Side, Price, u32)> = Vec::new();
+        let mut last_market = None;
         for _ in 0..r.len(MARKET_MIN_BYTES)? {
             let market = MarketId::new(r.u32()?);
+            ascending(&mut last_market, market, "markets out of order")?;
             let mut book = Book::new();
             book.state = state_from(r.u8()?)?;
             ledger.escrow.insert(market, Credits::from_cents(r.i64()?));
@@ -224,8 +266,10 @@ impl Engine {
                 return Err(RestoreError::Malformed("duplicate market"));
             }
         }
+        let mut last_account = None;
         for _ in 0..r.len(ACCOUNT_BYTES)? {
             let account = AccountId::new(r.u64()?);
+            ascending(&mut last_account, account, "accounts out of order")?;
             let cash = Credits::from_cents(r.i64()?);
             let fresh = Account {
                 cash,
@@ -236,9 +280,15 @@ impl Engine {
                 return Err(RestoreError::Malformed("duplicate account"));
             }
         }
+        let mut last_holding = None;
         for _ in 0..r.len(HOLDING_BYTES)? {
             let market = MarketId::new(r.u32()?);
             let account = AccountId::new(r.u64()?);
+            ascending(
+                &mut last_holding,
+                (market, account),
+                "holdings out of order",
+            )?;
             let mut h = Holding::new();
             h.position = r.i64()?;
             h.reserve = Credits::from_cents(r.i64()?);
@@ -255,17 +305,7 @@ impl Engine {
             }
         }
         if version >= 2 {
-            for _ in 0..r.len(CLIENT_WINDOW_MIN_BYTES)? {
-                let account = AccountId::new(r.u64()?);
-                let mut window = ClientIds::default();
-                for _ in 0..r.len(CLIENT_ENTRY_BYTES)? {
-                    let client_id = r.u64()?;
-                    window.record(client_id, OrderId::new(r.u64()?));
-                }
-                if engine.client_ids.insert(account, window).is_some() {
-                    return Err(RestoreError::Malformed("duplicate client ID window"));
-                }
-            }
+            engine.client_ids = client_windows(&mut r)?;
         }
         if !r.0.is_empty() {
             return Err(RestoreError::Malformed("body has trailing bytes"));
