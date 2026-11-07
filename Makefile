@@ -6,7 +6,9 @@ CARGO ?= cargo
 UV_RUN := uv run --project services --locked
 PIP_AUDIT_VERSION := 2.10.1
 
-.PHONY: help setup check rust-check py-check private-check test-all audit
+.PHONY: help setup check rust-check py-check private-check test-all audit differential-full
+
+SEED ?= 1
 
 help: ## List every command
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -30,6 +32,10 @@ py-check: ## ruff, mypy --strict, fast Python tests
 
 private-check: ## No tracked file mentions the private development tooling
 	sh scripts/private_tooling_check.sh
+
+differential-full: ## The G1 gate study: 10 million random commands through both engines (about an hour)
+	$(CARGO) build --release --locked -p brier-replay
+	cd services && uv run --locked python -m brier_services.differential --binary ../target/release/brier-replay --seed $(SEED) --commands 10000000
 
 test-all: check ## Every test, including slow ones
 	$(CARGO) test --workspace --locked -- --include-ignored

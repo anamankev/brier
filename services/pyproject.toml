@@ -39,4 +39,5 @@ testpaths = ["tests"]
 addopts = "-ra --strict-markers --strict-config"
 markers = [
     "slow: longer than a few seconds; excluded from make check",
+    "differential: needs the Rust toolchain; compares the Rust engine with the reference engine",
 ]

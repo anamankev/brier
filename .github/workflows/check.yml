@@ -43,7 +43,25 @@ jobs:
       - run: uv run --locked ruff format --check .
       - run: uv run --locked ruff check .
       - run: uv run --locked mypy
-      - run: uv run --locked pytest -q
+      - run: uv run --locked pytest -q -m "not differential"
+
+  differential:
+    # The Rust engine against the Python reference engine on seeded random streams (SPEC §3.4).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: services
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.6"
+          working-directory: services
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run --locked pytest -q -m differential
 
   private-tooling:
     runs-on: ubuntu-24.04
