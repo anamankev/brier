@@ -82,6 +82,9 @@ class ReferenceEngine:
         self.next_seq = 1
         self.states: dict[int, str] = {}
         self.books: dict[int, list[_Order]] = {}
+        # Which market each resting order is in, so a cancel or amend searches one market's
+        # list instead of every market's. Kept in step with the books at every add and removal.
+        self.market_of: dict[int, int] = {}
 
     # ----- dispatch -----
 
@@ -141,6 +144,8 @@ class ReferenceEngine:
                 }
                 for order in sorted(self.books[market], key=lambda o: o.id)
             )
+            for order in self.books[market]:
+                del self.market_of[order.id]
             self.books[market] = []
         return events
 
@@ -226,10 +231,12 @@ class ReferenceEngine:
             maker.remaining -= fill
             if maker.remaining == 0:
                 book.remove(maker)
+                del self.market_of[maker.id]
         if remaining == 0:
             return events
         if tif == "gtc":
             book.append(_Order(order_id, account, side, price, remaining))
+            self.market_of[order_id] = market
             events.append({"ev": "rested", "order": order_id, "remaining": remaining})
         elif tif == "ioc":
             events.append(
@@ -246,11 +253,14 @@ class ReferenceEngine:
         return events
 
     def _find_own(self, account: int, order_id: int) -> tuple[int, _Order] | None:
-        for market, book in self.books.items():
-            for order in book:
-                if order.id == order_id:
-                    return (market, order) if order.account == account else None
-        return None
+        market = self.market_of.get(order_id)
+        if market is None:
+            return None
+        for order in self.books[market]:
+            if order.id == order_id:
+                return (market, order) if order.account == account else None
+        msg = f"order {order_id} is indexed in market {market} but not in its book"
+        raise EngineHaltedError(msg)
 
     def _cancel(self, account: int, order_id: int) -> list[Event]:
         found = self._find_own(account, order_id)
@@ -258,6 +268,7 @@ class ReferenceEngine:
             return [{"ev": "rejected", "reason": "unknown_order"}]
         market, order = found
         self.books[market].remove(order)
+        del self.market_of[order.id]
         return [
             {"ev": "cancelled", "order": order.id, "remaining": order.remaining, "reason": "user"}
         ]
