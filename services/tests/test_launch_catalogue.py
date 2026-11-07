@@ -36,7 +36,7 @@ import pytest
 from brier_services import resolve as service
 from brier_services.client import ApiError, Ed25519Key, RestClient, clock_ms
 from brier_services.resolution.evidence import EvidenceStore, recompute
-from brier_services.resolution.fetch import Response, check_url, redact
+from brier_services.resolution.fetch import Request, Response, check_url, redact
 from brier_services.rules import Rulebook, canonical, instant, load_toml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -257,14 +257,16 @@ def test_every_launch_market_resolves_end_to_end(exchange: Exchange, tmp_path: P
     ex.set_clock(at("2027-01-04T21:00:01Z"))
     store = EvidenceStore(tmp_path / "evidence")
 
-    def fetcher(url: str) -> Response:
-        check_url(url)
-        q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
+    def fetcher(request: Request) -> Response:
+        check_url(request.url)
+        q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(request.url).query))
+        series = q.get("series_id") or json.loads(request.body or b"{}").get("seriesid", ["?"])[0]
         market = {"CUUR0000SA0": 101, "LNS14000000": 102, "DFEDTARU": 103, "DGS10": 104}.get(
-            q.get("series_id") or url.rsplit("/", 1)[-1].split("?")[0], 105
+            series, 105
         )
         body = MISSING_DGS10 if market == 104 else RESPONSES[market][0]
-        return Response(redact(url), 200, body, iso(ex.now()))
+        sent = None if request.body is None else request.body.decode()
+        return Response(redact(request.url), 200, body, iso(ex.now()), sent)
 
     said: list[tuple[str, dict[str, Any]]] = []
     proposed = service.run_once(

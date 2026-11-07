@@ -16,7 +16,7 @@ from hypothesis import strategies as st
 from brier_services import resolve as cli
 from brier_services.resolution import bls, fred, noaa
 from brier_services.resolution.evidence import EvidenceError, EvidenceStore, recompute
-from brier_services.resolution.fetch import FetchError, Response, check_url, redact
+from brier_services.resolution.fetch import FetchError, Request, Response, check_url, redact
 from brier_services.resolution.resolver import Proposal, SourceError, Wait, resolve
 from brier_services.resolution.sources import MalformedResponseError, Missing
 from brier_services.resolution.values import format_decimal, holds, parse_decimal, round_half_up
@@ -277,15 +277,23 @@ def test_malformed_responses_are_refused(module: Any, rule: Rulebook, body: byte
 
 def test_requests_go_only_to_the_allowed_hosts_and_hide_the_key() -> None:
     for rule, module in [(CPI_SEPT, bls), (TMAX, noaa), (DGS10, fred)]:
-        url = module.request_url(rule, "secret-key", t("2026-11-07T00:00:00Z"))
+        url = module.request(rule, "secret-key", t("2026-11-07T00:00:00Z")).url
         check_url(url)
         assert "secret-key" not in redact(url)
-    assert "realtime_start=2025-07-01" in fred.request_url(DGS10, "k", t("2026-11-07T00:00:00Z"))
+    # BLS ignores the years of a GET (it answers the latest three), so the years go in a POST.
+    cpi = bls.request(CPI_SEPT)
+    assert cpi.url == "https://api.bls.gov/publicAPI/v1/timeseries/data/"
+    assert json.loads(cpi.body or b"{}") == {
+        "seriesid": ["CUUR0000SA0"],
+        "startyear": "2025",
+        "endyear": "2026",
+    }
+    assert "realtime_start=2025-07-01" in fred.request(DGS10, "k", t("2026-11-07T00:00:00Z")).url
     # FRED refuses a real-time start after today, so a not-yet-reached date starts today.
-    early = fred.request_url(FED_UPPER, "k", t("2025-09-17T18:00:00Z"))
+    early = fred.request(FED_UPPER, "k", t("2025-09-17T18:00:00Z")).url
     assert "realtime_start=2025-09-17" in early
     with pytest.raises(ValueError, match="FRED_API_KEY"):
-        fred.request_url(DGS10, None)
+        fred.request(DGS10, None)
     for bad in [
         "http://api.bls.gov/x",
         "https://example.com/x",
@@ -301,9 +309,10 @@ def test_requests_go_only_to_the_allowed_hosts_and_hide_the_key() -> None:
 
 
 def fetcher(body: bytes, retrieved_at: str, status: int = 200) -> Any:  # noqa: ANN401
-    def get(url: str) -> Response:
-        check_url(url)
-        return Response(redact(url), status, body, retrieved_at)
+    def get(request: Request) -> Response:
+        check_url(request.url)
+        sent = None if request.body is None else request.body.decode()
+        return Response(redact(request.url), status, body, retrieved_at, sent)
 
     return get
 

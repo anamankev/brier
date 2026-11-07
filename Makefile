@@ -6,7 +6,7 @@ CARGO ?= cargo
 UV_RUN := uv run --project services --locked
 PIP_AUDIT_VERSION := 2.10.1
 
-.PHONY: help setup env up down db-url check rust-check py-check private-check test-all audit differential-full bench crash gateway-bench dependency-age fuzz-campaign
+.PHONY: help setup env up down db-url check rust-check py-check private-check test-all audit differential-full bench crash gateway-bench dependency-age fuzz-campaign resolution-study
 
 SEED ?= 1
 
@@ -60,6 +60,10 @@ bench: ## The registered P1/P2 engine benchmark (docs/notes/performance.md); plu
 	-sw_vers -productVersion  # macOS only; ignored elsewhere
 	-pmset -g batt | head -1  # macOS power source; ignored elsewhere
 	./target/release/brier-bench
+
+resolution-study: env ## The registered R1/R2 resolver study (docs/notes/resolution.md): downloads ~80 responses into var/study (network; FRED_API_KEY from .env)
+	cd services && set -a && . ../.env && set +a && uv run --locked python -m brier_services.resolution.study fetch --dir ../var/study
+	cd services && uv run --locked python -m brier_services.resolution.study run --dir ../var/study
 
 fuzz-campaign: ## Every fuzz target for 1 hour, 3 at a time (needs nightly-2026-10-20 and cargo-fuzz); plug in first
 	sh scripts/fuzz_campaign.sh

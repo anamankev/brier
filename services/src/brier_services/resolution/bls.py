@@ -1,5 +1,8 @@
 """BLS Public Data API, version 1 (no key; 25 queries a day). CPI-U and the unemployment rate.
 
+The request is a POST with the years in a JSON body: a GET ignores ``startyear`` and
+``endyear`` and answers the latest three years only (found by the R1 study).
+
 Response: ``{"status": "REQUEST_SUCCEEDED", "Results": {"series": [{"seriesID": ..., "data":
 [{"year": "2026", "period": "M09", "value": "336.940", "footnotes": [...]}, ...]}]}}``. A month
 BLS did not publish carries the value ``"-"`` (for example October 2025, during the lapse in
@@ -8,8 +11,10 @@ appropriations); a month not yet published is absent.
 
 from __future__ import annotations
 
+import json
 import re
 
+from brier_services.resolution.fetch import Request
 from brier_services.resolution.sources import (
     MalformedResponseError,
     Missing,
@@ -29,13 +34,16 @@ def _year_month(observation: str) -> tuple[int, int]:
     return int(year), int(month)
 
 
-def request_url(rule: Rulebook, api_key: str | None = None, now: int | None = None) -> str:
+def request(rule: Rulebook, api_key: str | None = None, now: int | None = None) -> Request:
     """The year before the observation's and its own, so a 12-month change has both months."""
     year, _ = _year_month(rule.observation)
-    return (
-        f"https://{HOST}/publicAPI/v1/timeseries/data/{rule.series.id}"
-        f"?startyear={year - 1}&endyear={year}"
-    )
+    return years(rule.series.id, year - 1, year)
+
+
+def years(series_id: str, first: int, last: int) -> Request:
+    """Every month of ``series_id`` from ``first`` to ``last`` (at most 10 years in version 1)."""
+    body = {"seriesid": [series_id], "startyear": str(first), "endyear": str(last)}
+    return Request(f"https://{HOST}/publicAPI/v1/timeseries/data/", json.dumps(body).encode())
 
 
 def _months(body: bytes, series_id: str) -> dict[tuple[int, int], str]:

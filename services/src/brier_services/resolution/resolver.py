@@ -22,7 +22,7 @@ from brier_services.resolution.sources import MalformedResponseError, Missing, R
 from brier_services.resolution.values import format_decimal, holds, round_half_up
 from brier_services.rules import Provider, Rulebook, instant
 
-RESOLVER_VERSION = "brier-resolver 1"  # bump with any change to fetching, parsing, or deciding
+RESOLVER_VERSION = "brier-resolver 2"  # bump with any change to fetching, parsing, or deciding
 
 SOURCES: dict[Provider, ModuleType] = {Provider.BLS: bls, Provider.FRED: fred, Provider.NOAA: noaa}
 
@@ -86,6 +86,7 @@ def evidence_record(
         "value": value,
         "missing": reading.why if isinstance(reading, Missing) else None,
         "request_url": response.url,
+        "request_body": response.request_body,
         "http_status": response.status,
         "body_sha256": hashlib.sha256(response.body).hexdigest(),
         "body_bytes": len(response.body),
@@ -100,7 +101,7 @@ def resolve(
     if now < rule.times.release:
         return Wait("before the release time")
     source = SOURCES[rule.provider]
-    response = fetcher(source.request_url(rule, api_key, now))
+    response = fetcher(source.request(rule, api_key, now))
     if response.status != 200:
         msg = f"{response.url} answered HTTP {response.status}"
         raise SourceError(msg)

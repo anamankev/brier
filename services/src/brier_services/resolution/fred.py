@@ -12,6 +12,7 @@ from __future__ import annotations
 import datetime as dt
 import re
 
+from brier_services.resolution.fetch import Request
 from brier_services.resolution.sources import (
     MalformedResponseError,
     Missing,
@@ -26,7 +27,7 @@ HOST = "api.stlouisfed.org"
 _DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 
-def request_url(rule: Rulebook, api_key: str | None, now: int | None = None) -> str:
+def request(rule: Rulebook, api_key: str | None, now: int | None = None) -> Request:
     """FRED refuses a real-time start after today, so it is the observation date or today."""
     if not api_key:
         msg = "FRED needs FRED_API_KEY"
@@ -39,7 +40,7 @@ def request_url(rule: Rulebook, api_key: str | None, now: int | None = None) -> 
         .isoformat()
     )
     start = min(rule.observation, today)
-    return (
+    return Request(
         f"https://{HOST}/fred/series/observations?series_id={rule.series.id}"
         f"&observation_start={rule.observation}&observation_end={rule.observation}"
         f"&realtime_start={start}&realtime_end=9999-12-31&output_type=4&file_type=json"

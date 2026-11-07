@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from fractions import Fraction
 
+from brier_services.resolution.fetch import Request
 from brier_services.resolution.sources import (
     MalformedResponseError,
     Missing,
@@ -30,9 +31,9 @@ def _station_and_type(rule: Rulebook) -> tuple[str, str]:
     return station, data_type
 
 
-def request_url(rule: Rulebook, api_key: str | None = None, now: int | None = None) -> str:
+def request(rule: Rulebook, api_key: str | None = None, now: int | None = None) -> Request:
     station, data_type = _station_and_type(rule)
-    return (
+    return Request(
         f"https://{HOST}/access/services/data/v1?dataset=daily-summaries&stations={station}"
         f"&startDate={rule.observation}&endDate={rule.observation}&dataTypes={data_type}"
         "&units=metric&format=json"

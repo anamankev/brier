@@ -1,6 +1,6 @@
 # Resolution: do the resolvers read the sources correctly? (G5)
 
-Status: REGISTERED. Written before any resolver code exists. The registering commit is the first commit that contains this file.
+Status: COMPLETE (registered before any resolver code existed; the registering commit is the first commit that contains this file). Results in §4.
 
 ## 1. Questions
 1. For each launch-catalogue market type, does the resolver extract the value the source actually published, for the right period, with exact arithmetic?
@@ -30,4 +30,28 @@ The windows are fixed here and not changed after results are seen.
 - **Command:** `make resolution-study` (added in G5 unit 7).
 
 ## 4. Results
-Not yet run.
+Run with `make resolution-study` on 7 November 2026 (responses retrieved 23:17-23:19 UTC; hashes in `var/study/results.json`). Three attempts; the windows, comparators, and equality rules are as registered in all three.
+
+| Attempt | Code | Outcome |
+|---|---|---|
+| 1 | G5 unit 6 (`c5595a0`) | **BLS types untested** (20-32 of 59 months on the resolver side). Cause: the BLS resolver asked with a GET, and BLS API v1 ignores `startyear` and `endyear` on a GET, answering the latest three years only. A market on a month older than that would have waited, then voided wrongly. **Fixed:** the resolver POSTs the years as JSON (resolver version 2). The other four types passed. |
+| 2 | BLS fix | All BLS types passed. The FOMC comparator matched only 55 of 64 rate decisions: the Board's pages write fractions with a non-breaking hyphen ("1‑1/2"), and two statements say "decided today to" and "point, to". **Fixed in the comparator parser** (study code only; no resolver change). |
+| 3 | both fixes | **All pass**, below. |
+
+**R1 (values): passed for every type.**
+
+| Type | Instances | Compared | Mismatches | One-sided | In the window, in neither source |
+|---|---|---|---|---|---|
+| CPI 12-month change | 59 | 59 | 0 | 0 | 2025-10 (not published: lapse in appropriations) |
+| CPI index level (3 decimals) | 59 | 59 | 0 | 0 | 2025-10 |
+| Unemployment rate | 59 | 59 | 0 | 0 | 2025-10 |
+| FOMC upper limit | 64 | 64 | 0 | 0 | none |
+| 10-year Treasury yield | 249 | 249 | 0 | 0 | 116 weekend and holiday dates |
+| Central Park maximum (°C) | 365 | 365 | 0 | 0 | none |
+
+- An instance is a period that at least one source reports a value for. The registration did not define it; this reading is the one under which "a date present in only one of the two sources" is meaningful. Under it no type is near the 2% missing limit.
+- FOMC: 69 statements were fetched (January 2019 to October 2026). The comparator found a target-range decision in 64. The other five state none: 11 October 2019 (reserve management purchases), 23 and 31 March 2020 (emergency facilities), 27 August 2020 and 22 August 2025 (longer-run goals and strategy).
+
+**R2 (evidence determines the decision): passed for every type.** Every decision against the median threshold (CPI 3.4%, index 312.332, unemployment 4.0%, upper limit 3.75%, yield 4.29%, 64 °F) was the same when computed from the response as it arrived and when recomputed from the stored bytes alone, in a separate process with networking disabled: 59, 59, 59, 64, 249, and 365 decisions, no differences.
+
+**What this does not show:** the agencies' own figures being right (both sides derive from them), and the "first release counts" policy, which current-vintage comparisons cannot test (covered by construction and by the exit test).

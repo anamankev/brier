@@ -24,6 +24,14 @@ class FetchError(Exception):
 
 
 @dataclass(frozen=True)
+class Request:
+    """A GET, or a POST with a JSON body."""
+
+    url: str
+    body: bytes | None = None
+
+
+@dataclass(frozen=True)
 class Response:
     """One source response, as kept in evidence."""
 
@@ -31,9 +39,10 @@ class Response:
     status: int
     body: bytes
     retrieved_at: str  # YYYY-MM-DDTHH:MM:SSZ
+    request_body: str | None = None  # the JSON a POST sent
 
 
-Fetcher = Callable[[str], Response]
+Fetcher = Callable[[Request], Response]
 
 
 def redact(url: str) -> str:
@@ -86,16 +95,21 @@ def _read_bounded(stream: IO[bytes]) -> bytes:
     return body
 
 
-def fetch(url: str) -> Response:
-    """GET ``url``. An HTTP error status is a response (kept as evidence), not an exception."""
+def fetch(request: Request) -> Response:
+    """Send ``request``. An HTTP error status is a response (kept as evidence), not an exception."""
+    url = request.url
     check_url(url)
     retrieved_at = now_instant()
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})  # noqa: S310 - scheme and host checked above
+    headers = {"User-Agent": USER_AGENT}
+    if request.body is not None:
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=request.body, headers=headers)  # noqa: S310 - scheme and host checked above
+    sent = None if request.body is None else request.body.decode()
     try:
         with _OPENER.open(req, timeout=TIMEOUT_SECONDS) as res:
-            return Response(redact(url), res.status, _read_bounded(res), retrieved_at)
+            return Response(redact(url), res.status, _read_bounded(res), retrieved_at, sent)
     except urllib.error.HTTPError as e:
-        return Response(redact(url), e.code, _read_bounded(e), retrieved_at)
+        return Response(redact(url), e.code, _read_bounded(e), retrieved_at, sent)
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         msg = f"fetching {redact(url)} failed: {e}"
         raise FetchError(msg) from e
