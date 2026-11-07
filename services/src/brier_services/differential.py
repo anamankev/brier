@@ -40,6 +40,10 @@ BURST_EVERY = 1_000_000  # a resting-order-limit burst every million commands
 BURST_AT = 2_500  # the first burst starts after this many commands
 BURST_SIZE = MAX_RESTING_ORDERS + 1
 AIMED = 0.9  # share of cancels, amends, places, and settles aimed at a valid target
+# Most markets trading at once. Above this the oldest is closed, so it settles and returns its
+# escrow; without a cap, positions pile up in markets that never settle and lock the busy
+# accounts' cash (docs/notes/differential.md, post-G2 audit).
+MAX_LIVE_MARKETS = 6
 
 # Weights for the next state of a market, from its current state (allowed transitions only).
 NEXT_STATE: dict[str, tuple[list[str], list[int]]] = {
@@ -208,6 +212,9 @@ class StreamGenerator:
     # ----- the stream -----
 
     def _next_commands(self) -> list[dict[str, Any]]:
+        live = self.pools["open"].items + self.pools["halted"].items
+        if len(live) > MAX_LIVE_MARKETS:
+            return [{"cmd": "set_state", "market": min(live), "state": "closed"}]
         rng = self.rng
         roll = rng.random()
         if roll < 0.55:
