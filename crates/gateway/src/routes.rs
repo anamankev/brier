@@ -379,6 +379,13 @@ struct AmendBody {
     qty: u32,
 }
 
+/// The engine command for a REST order body from `account`.
+pub fn decode_order(body: &[u8], account: AccountId) -> Result<Command, ApiError> {
+    serde_json::from_slice::<PlaceBody>(body)
+        .map_err(|e| ApiError::bad_request(format!("invalid body: {e}")))?
+        .command(account)
+}
+
 async fn trader(s: &AppState, req: &Req) -> Result<AccountId, ApiError> {
     let user = req.user(s, true).await?;
     if !s.order_limits.allow(user.id) {
@@ -453,7 +460,7 @@ pub(crate) fn amend_result(c: &Committed, order: OrderId) -> Result<Value, ApiEr
 /// `POST /v1/orders`: place an order.
 pub async fn place(State(s): Shared, req: Req) -> ApiResult {
     let account = trader(&s, &req).await?;
-    let command = req.json::<PlaceBody>()?.command(account)?;
+    let command = decode_order(&req.body, account)?;
     Ok(Json(place_result(&s.core.submit(command).await?)?).into_response())
 }
 

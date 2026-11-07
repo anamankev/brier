@@ -183,6 +183,88 @@ pub fn signing_payload(
     .into_bytes()
 }
 
+/// The three signed-request headers, parsed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SignedHeaders {
+    /// `Brier-Key`: the API key's ID.
+    pub key_id: i64,
+    /// `Brier-Timestamp`: milliseconds since the Unix epoch.
+    pub timestamp: u64,
+    /// `Brier-Signature`, decoded.
+    pub signature: [u8; 64],
+}
+
+/// The signed-request headers, if the request has any.
+///
+/// # Errors
+/// [`ApiError::unauthorized`] if some are present but missing or malformed.
+pub fn signed_headers(headers: &HeaderMap) -> Result<Option<SignedHeaders>, ApiError> {
+    let header = |name: &str| headers.get(name).map(|v| v.to_str().ok());
+    let (key_id, timestamp, signature) = match (
+        header("brier-key"),
+        header("brier-timestamp"),
+        header("brier-signature"),
+    ) {
+        (None, None, None) => return Ok(None),
+        (Some(Some(k)), Some(Some(t)), Some(Some(s))) => (k, t, s),
+        _ => {
+            return Err(ApiError::unauthorized(
+                "a signed request needs Brier-Key, Brier-Timestamp, and Brier-Signature",
+            ));
+        }
+    };
+    Ok(Some(SignedHeaders {
+        key_id: key_id
+            .parse()
+            .map_err(|_| ApiError::unauthorized("bad Brier-Key"))?,
+        timestamp: timestamp
+            .parse()
+            .map_err(|_| ApiError::unauthorized("bad Brier-Timestamp"))?,
+        signature: STANDARD
+            .decode(signature)
+            .ok()
+            .and_then(|b| b.try_into().ok())
+            .ok_or_else(|| ApiError::unauthorized("bad Brier-Signature"))?,
+    }))
+}
+
+/// Refuse a timestamp more than [`MAX_CLOCK_SKEW_MS`] from `now_ms`.
+///
+/// # Errors
+/// [`ApiError::unauthorized`] for a stale or future timestamp.
+pub fn check_timestamp(timestamp: u64, now_ms: u64) -> Result<(), ApiError> {
+    if now_ms.abs_diff(timestamp) > MAX_CLOCK_SKEW_MS {
+        return Err(ApiError::unauthorized(
+            "the request timestamp is too far from the server clock",
+        ));
+    }
+    Ok(())
+}
+
+/// Verify a signed request against a stored public key, strictly (RFC 8032 with the
+/// small-order and non-canonical encodings refused).
+///
+/// # Errors
+/// [`ApiError::unauthorized`] if the key is invalid or the signature does not verify.
+pub fn verify_signature(
+    public_key: &[u8],
+    signed: &SignedHeaders,
+    method: &Method,
+    path_and_query: &str,
+    body: &[u8],
+) -> Result<(), ApiError> {
+    let public: [u8; 32] = public_key
+        .try_into()
+        .map_err(|_| ApiError::unauthorized("the API key is not 32 bytes"))?;
+    let key = VerifyingKey::from_bytes(&public)
+        .map_err(|_| ApiError::unauthorized("the API key is not a valid Ed25519 key"))?;
+    key.verify_strict(
+        &signing_payload(signed.timestamp, method, path_and_query, body),
+        &Signature::from_bytes(&signed.signature),
+    )
+    .map_err(|_| ApiError::unauthorized("the signature does not verify"))
+}
+
 /// Identify the caller: a session token, or a signed request. `allow_signed` is false for
 /// endpoints only people may use (managing API keys).
 ///
@@ -215,51 +297,28 @@ pub async fn authenticate(
             "this endpoint needs a session token",
         ));
     }
-    let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
-    let (Some(key_id), Some(timestamp), Some(signature)) = (
-        header("brier-key"),
-        header("brier-timestamp"),
-        header("brier-signature"),
-    ) else {
+    let Some(signed) = signed_headers(headers)? else {
         return Err(ApiError::unauthorized(
             "send a session token or a signed request",
         ));
     };
-    let key_id: i64 = key_id
-        .parse()
-        .map_err(|_| ApiError::unauthorized("bad Brier-Key"))?;
-    let timestamp: u64 = timestamp
-        .parse()
-        .map_err(|_| ApiError::unauthorized("bad Brier-Timestamp"))?;
     let now = now_ms();
-    if now.abs_diff(timestamp) > MAX_CLOCK_SKEW_MS {
-        return Err(ApiError::unauthorized(
-            "the request timestamp is too far from the server clock",
-        ));
-    }
-    let signature: [u8; 64] = STANDARD
-        .decode(signature)
-        .ok()
-        .and_then(|b| b.try_into().ok())
-        .ok_or_else(|| ApiError::unauthorized("bad Brier-Signature"))?;
+    check_timestamp(signed.timestamp, now)?;
     let row = db
         .query_opt(
             "SELECT k.public_key, u.id, u.role FROM api_keys k JOIN users u ON u.id = k.user_id WHERE k.id = $1 AND k.revoked_at IS NULL",
-            &[&key_id],
+            &[&signed.key_id],
         )
         .await?
         .ok_or_else(|| ApiError::unauthorized("unknown or revoked API key"))?;
-    let public: [u8; 32] = row
-        .get::<_, &[u8]>(0)
-        .try_into()
-        .map_err(|_| ApiError::internal(&"stored key is not 32 bytes"))?;
-    let key = VerifyingKey::from_bytes(&public)
-        .map_err(|_| ApiError::unauthorized("the API key is not a valid Ed25519 key"))?;
-    key.verify_strict(
-        &signing_payload(timestamp, method, path_and_query, body),
-        &Signature::from_bytes(&signature),
-    )
-    .map_err(|_| ApiError::unauthorized("the signature does not verify"))?;
+    verify_signature(
+        row.get::<_, &[u8]>(0),
+        &signed,
+        method,
+        path_and_query,
+        body,
+    )?;
+    let signature = signed.signature;
     if !replays.first_use(signature, now) {
         return Err(ApiError::unauthorized(
             "this signed request was already used",

@@ -20,7 +20,7 @@ use axum::extract::{Extension, State};
 use axum::http::{HeaderMap, HeaderValue, Method};
 use axum::response::Response;
 use brier_engine::Command;
-use brier_types::OrderId;
+use brier_types::{AccountId, OrderId};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value, json};
@@ -154,6 +154,55 @@ fn parse<T: DeserializeOwned>(body: Map<String, Value>) -> Result<T, ApiError> {
         .map_err(|e| ApiError::bad_request(format!("invalid message: {e}")))
 }
 
+/// A client message: its `op`, its `id`, and the remaining fields.
+pub type Parsed = (String, Option<Value>, Map<String, Value>);
+
+/// A client message split into its `op`, its `id` (echoed in the reply), and the rest.
+///
+/// # Errors
+/// The `id` (if one could be read) and a `bad_request` error for anything that is not a JSON
+/// object with a string `op`.
+pub fn parse_message(text: &str) -> Result<Parsed, (Option<Value>, ApiError)> {
+    let mut body: Map<String, Value> = serde_json::from_str(text).map_err(|e| {
+        (
+            None,
+            ApiError::bad_request(format!("messages are JSON objects: {e}")),
+        )
+    })?;
+    let id = body.remove("id");
+    match body.remove("op") {
+        Some(Value::String(op)) => Ok((op, id, body)),
+        _ => Err((id, ApiError::bad_request("every message needs an op"))),
+    }
+}
+
+/// The engine command for a `place`, `cancel`, or `amend` message from `account`.
+///
+/// # Errors
+/// `bad_request` for a malformed body or an op that is not an order op.
+pub fn order_command(
+    op: &str,
+    body: Map<String, Value>,
+    account: AccountId,
+) -> Result<Command, ApiError> {
+    match op {
+        "place" => parse::<PlaceBody>(body)?.command(account),
+        "cancel" => Ok(Command::Cancel {
+            account,
+            order: OrderId::new(parse::<OrderMessage>(body)?.order),
+        }),
+        "amend" => {
+            let AmendMessage { order, qty } = parse(body)?;
+            Ok(Command::Amend {
+                account,
+                order: OrderId::new(order),
+                qty,
+            })
+        }
+        _ => Err(ApiError::bad_request("not an order op")),
+    }
+}
+
 /// Handle one client message; returns the immediate answer, if any (order replies come later,
 /// through the outbox).
 async fn handle(
@@ -162,23 +211,9 @@ async fn handle(
     out: &mpsc::Sender<Utf8Bytes>,
     text: &str,
 ) -> Option<Utf8Bytes> {
-    let mut body: Map<String, Value> = match serde_json::from_str(text) {
-        Ok(m) => m,
-        Err(e) => {
-            return Some(reply(
-                None,
-                Err(ApiError::bad_request(format!(
-                    "messages are JSON objects: {e}"
-                ))),
-            ));
-        }
-    };
-    let id = body.remove("id");
-    let Some(Value::String(op)) = body.remove("op") else {
-        return Some(reply(
-            id.as_ref(),
-            Err(ApiError::bad_request("every message needs an op")),
-        ));
+    let (op, id, body) = match parse_message(text) {
+        Ok(parts) => parts,
+        Err((id, e)) => return Some(reply(id.as_ref(), Err(e))),
     };
     let result = match op.as_str() {
         "ping" => Ok(json!({ "pong": true })),
@@ -328,12 +363,6 @@ struct AmendMessage {
     qty: u32,
 }
 
-enum Kind {
-    Place,
-    Cancel(OrderId),
-    Amend(OrderId),
-}
-
 /// Start an order command; its reply goes to the outbox once durable.
 fn order(
     s: &AppState,
@@ -346,26 +375,7 @@ fn order(
     let user = session
         .user
         .ok_or_else(|| ApiError::unauthorized("orders need auth first"))?;
-    let account = user.account()?;
-    let (kind, command) = match op {
-        "place" => (Kind::Place, parse::<PlaceBody>(body)?.command(account)?),
-        "cancel" => {
-            let order = OrderId::new(parse::<OrderMessage>(body)?.order);
-            (Kind::Cancel(order), Command::Cancel { account, order })
-        }
-        _ => {
-            let AmendMessage { order, qty } = parse(body)?;
-            let order = OrderId::new(order);
-            (
-                Kind::Amend(order),
-                Command::Amend {
-                    account,
-                    order,
-                    qty,
-                },
-            )
-        }
-    };
+    let command = order_command(op, body, user.account()?)?;
     if !s.order_limits.allow(user.id) {
         return Err(ApiError::rate_limited());
     }
@@ -381,10 +391,10 @@ fn order(
     let (core, out) = (s.core.clone(), out.clone());
     tokio::spawn(async move {
         let result = match core.submit(command).await {
-            Ok(c) => match kind {
-                Kind::Place => place_result(&c),
-                Kind::Cancel(order) => cancel_result(&c, order),
-                Kind::Amend(order) => amend_result(&c, order),
+            Ok(c) => match command {
+                Command::Cancel { order, .. } => cancel_result(&c, order),
+                Command::Amend { order, .. } => amend_result(&c, order),
+                _ => place_result(&c),
             },
             Err(e) => Err(e.into()),
         };
