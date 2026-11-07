@@ -112,7 +112,7 @@ class ReferenceEngine:
         self.cash: dict[int, int] = {}
         self.issuance = 0
         self.escrow: dict[int, int] = {}
-        self.positions: dict[tuple[int, int], int] = {}  # (market, account) -> contracts
+        self.positions: dict[int, dict[int, int]] = {}  # market -> account -> contracts
         self.reserve: dict[tuple[int, int], int] = {}  # (account, market) -> last charged
         self.reserved_by_account: dict[int, int] = {}  # sum of `reserve` per account
         self.resting_count: dict[int, int] = {}
@@ -173,7 +173,7 @@ class ReferenceEngine:
         orders = [o for o in self.books.get(market, []) if o.account == account]
         if extra is not None:
             orders.append(extra)
-        x = self.positions.get((market, account), 0)
+        x = self.positions.get(market, {}).get(account, 0)
         total = 0
         free = max(0, -x)  # NO contracts held cover the cheapest buy units
         for o in sorted((o for o in orders if o.side == "buy"), key=lambda o: o.price):
@@ -268,16 +268,16 @@ class ReferenceEngine:
             return [{"ev": "rejected", "reason": "invalid_transition"}]
         self.states[market] = "voided" if outcome == "void" else "resolved"
         events: list[Event] = [{"ev": "settled", "market": market, "outcome": outcome}]
-        holders = sorted(a for (m, a) in self.positions if m == market)
-        for account in holders:
-            x = self.positions[(market, account)]
+        held = self.positions.get(market, {})
+        for account in sorted(held):
+            x = held[account]
             if outcome == "void":
                 amount = 50 * abs(x)
             elif (outcome == "yes" and x > 0) or (outcome == "no" and x < 0):
                 amount = PAYOUT_TICKS * abs(x)
             else:
                 amount = 0
-            self.positions[(market, account)] = 0
+            held[account] = 0
             if amount:
                 self.escrow[market] -= amount
                 self.cash[account] += amount
@@ -324,8 +324,9 @@ class ReferenceEngine:
 
     def _trade(self, market: int, buyer: int, seller: int, price: int, qty: int) -> Event:
         """Cash and positions for one trade (G2 plan, "Positions and trade cash")."""
-        xb = self.positions.get((market, buyer), 0)
-        xs = self.positions.get((market, seller), 0)
+        held = self.positions.setdefault(market, {})
+        xb = held.get(buyer, 0)
+        xs = held.get(seller, 0)
         buyer_closing = min(qty, max(0, -xb))
         seller_opening = qty - min(qty, max(0, xs))
         buyer_cash = -price * qty + PAYOUT_TICKS * buyer_closing
@@ -334,8 +335,8 @@ class ReferenceEngine:
         self.cash[buyer] += buyer_cash
         self.cash[seller] += seller_cash
         self.escrow[market] += escrow_change
-        self.positions[(market, buyer)] = xb + qty
-        self.positions[(market, seller)] = xs - qty
+        held[buyer] = xb + qty
+        held[seller] = xs - qty
         self.touched.add((buyer, market))
         self.touched.add((seller, market))
         return _entry(
@@ -504,16 +505,28 @@ class ReferenceEngine:
             msg = "I1: credits are not conserved"
             raise EngineHaltedError(msg)
         for market, escrow in self.escrow.items():
-            long = sum(x for (m, _), x in self.positions.items() if m == market and x > 0)
-            short = sum(-x for (m, _), x in self.positions.items() if m == market and x < 0)
+            held = self.positions.get(market, {}).values()
+            long = sum(x for x in held if x > 0)
+            short = sum(-x for x in held if x < 0)
             if long != short or escrow != PAYOUT_TICKS * long:
                 msg = f"I2: escrow of market {market} is not 100 x open interest"
                 raise EngineHaltedError(msg)
+        # Every (account, market) that holds an order, a position, or a charged reserve.
+        pairs = {(o.account, m) for m, book in self.books.items() for o in book}
+        pairs |= {(a, m) for m, held in self.positions.items() for a, x in held.items() if x}
+        pairs |= {pair for pair, r in self.reserve.items() if r}
+        needed: dict[int, int] = {}
+        for account, market in pairs:
+            required = self._reserve_of(account, market)
+            if required != self.reserve.get((account, market), 0):
+                msg = f"I4: reserve of account {account} in market {market} is stale"
+                raise EngineHaltedError(msg)
+            needed[account] = needed.get(account, 0) + required
         for account, cash in self.cash.items():
-            reserved = sum(self._reserve_of(account, market) for market in self.books)
-            charged = sum(r for (a, _), r in self.reserve.items() if a == account)
-            if not reserved == charged == self._reserved_total(account) or cash < reserved:
-                msg = f"I3/I4: account {account} reserve is stale or exceeds its cash"
+            if needed.get(account, 0) != self._reserved_total(account) or cash < needed.get(
+                account, 0
+            ):
+                msg = f"I3/I4: account {account} reserve total is wrong or exceeds its cash"
                 raise EngineHaltedError(msg)
 
     def final_book(self) -> Event:
@@ -537,7 +550,9 @@ class ReferenceEngine:
                 "cash": self.cash[account],
                 "reserved": self._reserved_total(account),
                 "positions": sorted(
-                    [m, x] for (m, a), x in self.positions.items() if a == account and x != 0
+                    [m, held[account]]
+                    for m, held in self.positions.items()
+                    if held.get(account, 0) != 0
                 ),
             }
             for account in sorted(self.cash)
