@@ -11,7 +11,8 @@
 use std::collections::BTreeMap;
 
 use brier_engine::{
-    Command, Engine, EntryKind, Event, LedgerAccount, MarketState, NewOrder, Sequenced, TimeInForce,
+    Command, Engine, EntryKind, Event, LedgerAccount, MarketState, NewOrder, RestoreError,
+    Sequenced, TimeInForce,
 };
 use brier_types::{AccountId, Credits, MarketId, OrderId, Outcome, Seq, Side};
 use proptest::prelude::*;
@@ -240,5 +241,44 @@ proptest! {
                 }
             }
         }
+    }
+    /// A snapshot taken anywhere restores to the same state: same hash now, and the same
+    /// events and final hash for every command after it (SPEC §5, G3 plan unit 3).
+    #[test]
+    fn snapshot_and_restore_preserve_state_and_future_behavior(commands in stream(), cut in any::<prop::sample::Index>()) {
+        let split = cut.index(commands.len() + 1);
+        let (head, tail) = commands.split_at(split);
+        let (_, _, engine) = run(head);
+        let mut restored = Engine::restore(&engine.snapshot().unwrap()).unwrap();
+        prop_assert_eq!(restored.state_hash().unwrap(), engine.state_hash().unwrap());
+        let mut original = engine;
+        for (i, &command) in tail.iter().enumerate() {
+            let seq = Seq::from_raw(u64::try_from(split + i).unwrap() + 1);
+            let (mut a, mut b) = (Vec::new(), Vec::new());
+            original.apply(&Sequenced { seq, command }, &mut a).unwrap();
+            restored.apply(&Sequenced { seq, command }, &mut b).unwrap();
+            prop_assert_eq!(a, b);
+        }
+        prop_assert_eq!(restored.state_hash().unwrap(), original.state_hash().unwrap());
+    }
+
+    /// Damaged snapshot bytes are refused, never restored into a different state.
+    #[test]
+    fn damaged_snapshots_are_refused(commands in stream(), at in any::<prop::sample::Index>(), bit in 0u8..8) {
+        let (_, _, engine) = run(&commands);
+        let good = engine.snapshot().unwrap();
+        let mut bad = good.clone();
+        let i = at.index(bad.len());
+        *bad.get_mut(i).unwrap() ^= 1 << bit;
+        match Engine::restore(&bad) {
+            // A flip can still decode to a valid state (say, a different account ID that
+            // breaks nothing); then it must at least not equal the original state.
+            Ok(other) => prop_assert_ne!(other.state_hash().unwrap(), engine.state_hash().unwrap()),
+            Err(RestoreError::Malformed(_) | RestoreError::Invalid(_)) => {}
+        }
+        prop_assert!(Engine::restore(good.get(..good.len() - 1).unwrap()).is_err());
+        let mut longer = good;
+        longer.push(0);
+        prop_assert!(Engine::restore(&longer).is_err());
     }
 }

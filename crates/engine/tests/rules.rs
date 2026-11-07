@@ -162,6 +162,13 @@ fn a_sequence_gap_halts_the_engine_for_good() {
         })
     );
     assert_eq!(engine.halted(), Some((Seq::from_raw(2), err)));
+    // A halted engine's state is not trustworthy, so it cannot be snapshotted.
+    assert_eq!(
+        engine.snapshot(),
+        Err(EngineError::Halted {
+            at: Seq::from_raw(2)
+        })
+    );
     assert_eq!(out, [] as [Event; 0]);
 }
 

@@ -90,13 +90,13 @@ pub struct AccountView {
 
 /// The matching engine and ledger for every market (SPEC §3, §4).
 pub struct Engine {
-    next_seq: Seq,
-    markets: BTreeMap<MarketId, Book>,
+    pub(crate) next_seq: Seq,
+    pub(crate) markets: BTreeMap<MarketId, Book>,
     /// Lookup only; never iterated without sorting, so its order cannot affect output.
-    orders: HashMap<OrderId, (MarketId, Handle)>,
-    ledger: Ledger,
+    pub(crate) orders: HashMap<OrderId, (MarketId, Handle)>,
+    pub(crate) ledger: Ledger,
     /// Set by the first failed command; every later command is refused.
-    halted: Option<(Seq, EngineError)>,
+    pub(crate) halted: Option<(Seq, EngineError)>,
 }
 
 impl Default for Engine {

@@ -41,7 +41,7 @@ pub(crate) struct Holding {
 }
 
 impl Holding {
-    const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             position: 0,
             buy_qty: [0; LEVELS],
@@ -144,6 +144,12 @@ pub(crate) struct Ledger {
 }
 
 impl Ledger {
+    /// Forget the pairs touched so far (restoring a snapshot rests orders without running a
+    /// command, so there is nothing to report).
+    pub(crate) fn clear_touched(&mut self) {
+        self.touched.clear();
+    }
+
     pub(crate) fn has_account(&self, a: AccountId) -> bool {
         self.accounts.contains_key(&a)
     }
