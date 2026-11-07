@@ -5,6 +5,7 @@
 mod codec;
 mod crc;
 mod log;
+mod snapshot;
 
 pub use codec::{CodecError, decode, encode};
 pub use crc::{Crc32c, crc32c};
@@ -12,3 +13,4 @@ pub use log::{
     JournalError, JournalWriter, MAX_BATCH_BYTES, MAX_PAYLOAD, Recovered, SEGMENT_BYTES,
     Truncation, recover,
 };
+pub use snapshot::{KEEP_SNAPSHOTS, LatestSnapshot, SnapshotFile, latest_snapshot, write_snapshot};
