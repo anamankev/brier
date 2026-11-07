@@ -35,7 +35,9 @@ Collateral, positions, the resting-order limit, and kill switches are G2 (SPEC Â
   - `market_created`, `market_state`, `accepted`, `rested`, `amended`, `rejected`;
   - `trade`: maker, taker, maker_account, taker_account, taker_side, price, qty;
   - `cancelled`: order, remaining, reason.
-- At end of input, a `final_book` record: per market in ascending ID, the state, bids from best price down, and asks from best price up, each level FIFO as `[order, account, remaining]`.
+- Event fields: `market_created` (market), `market_state` (market, state), `accepted` (order), `trade` (market, maker, taker, maker_account, taker_account, taker_side, price, qty), `rested` / `amended` (order, remaining), `cancelled` (order, remaining, reason), `rejected` (reason).
+- At end of input, one `final_book` record: per market in ascending ID, its state, `bids` (best price first) and `asks` (best price first), each a list of `[order, account, price, remaining]` in time priority.
+- Wire value ranges: `price` is 0-255 and `qty` 0-4294967295 (u8 and u32). Values outside those are malformed input, which stops the replay tool, not a rejection.
 
 ## Units
 1. Register P1 and P2 in `docs/notes/performance.md` before measuring.
