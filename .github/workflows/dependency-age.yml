@@ -1,0 +1,20 @@
+# Supply-chain rule: a lockfile change may only bring in versions published at least 14 days
+# earlier (scripts/dependency_age.py). Runs only when a lockfile changes.
+name: dependency-age
+
+on:
+  push:
+    paths: [Cargo.lock, fuzz/Cargo.lock, services/uv.lock, scripts/dependency_age.py]
+  pull_request:
+    paths: [Cargo.lock, fuzz/Cargo.lock, services/uv.lock, scripts/dependency_age.py]
+
+permissions:
+  contents: read
+
+jobs:
+  age:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 scripts/dependency_age.py

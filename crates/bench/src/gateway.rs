@@ -505,6 +505,23 @@ fn one_run(url: &str, run: usize, plan: Plan) -> Run {
     }
 }
 
+/// Swap in use, as `sysctl vm.swapusage` reports it (macOS), for the run record.
+fn swap() -> String {
+    std::process::Command::new("sysctl")
+        .args(["-n", "vm.swapusage"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+        .unwrap_or_default()
+}
+
+/// Whether macOS reports battery power (`pmset`); false elsewhere or if unknown.
+fn on_battery() -> bool {
+    std::process::Command::new("pmset")
+        .args(["-g", "batt"])
+        .output()
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("'Battery Power'"))
+}
+
 fn main() -> ExitCode {
     let Ok(url) = std::env::var("BRIER_DATABASE_URL") else {
         eprintln!("set BRIER_DATABASE_URL (make db-url); start PostgreSQL with make up");
@@ -515,12 +532,22 @@ fn main() -> ExitCode {
     let plan = if dry_run { DRY_RUN } else { REGISTERED };
     if dry_run {
         eprintln!("dry run: checks the harness only; the output below is not a result");
+    } else if on_battery() {
+        // The registered environment is AC power (docs/notes/gateway.md §3).
+        eprintln!("on battery power: plug in before a registered run (or use --dry-run)");
+        return ExitCode::FAILURE;
     }
+    let mut valid = true;
     for run in 1..=plan.runs {
+        let (battery_at_start, swap_at_start) = (on_battery(), swap());
         let r = one_run(&url, run, plan);
+        let battery = battery_at_start || on_battery(); // the source can change during a run
+        valid &= !battery;
         println!(
             "{}",
-            json!({ "run": run, "p3_order_to_ack": summary(&r.p3), "p3_schedule_lag": summary(&r.p3_lag), "p3_outcomes": r.outcomes,
+            json!({ "run": run, "power": if battery { "battery at start or end" } else { "ac" },
+                    "swap_at_start": swap_at_start, "swap_at_end": swap(),
+                    "p3_order_to_ack": summary(&r.p3), "p3_schedule_lag": summary(&r.p3_lag), "p3_outcomes": r.outcomes,
                     "p4_fanout": summary(&r.p4), "p4_order_to_ack_during_fanout": summary(&r.p4_orders) })
         );
         p3.add(&r.p3).expect("merge");
@@ -528,12 +555,22 @@ fn main() -> ExitCode {
     }
     let p3_p99 = p3.value_at_quantile(0.99) as f64 / 1_000.0;
     let p4_p99 = p4.value_at_quantile(0.99) as f64 / 1_000.0;
+    let verdict = |ok: bool| match (dry_run || !valid, ok) {
+        (true, _) => "not a result",
+        (false, true) => "supported",
+        (false, false) => "refuted",
+    };
     println!(
         "{}",
         json!({ "pooled": { "p3_order_to_ack": summary(&p3), "p4_fanout": summary(&p4) },
-                "verdicts": { "P3 (p99 <= 5 ms)": if p3_p99 <= 5.0 { "supported" } else { "refuted" },
-                              "P3b (p99 <= 9.9 ms)": if p3_p99 <= 9.9 { "supported" } else { "refuted" },
-                              "P4 (p99 <= 10 ms)": if p4_p99 <= 10.0 { "supported" } else { "refuted" } } })
+                "valid": valid && !dry_run,
+                "verdicts": { "P3 (p99 <= 5 ms)": verdict(p3_p99 <= 5.0),
+                              "P3b (p99 <= 9.9 ms)": verdict(p3_p99 <= 9.9),
+                              "P4 (p99 <= 10 ms)": verdict(p4_p99 <= 10.0) } })
     );
-    ExitCode::SUCCESS
+    if valid || dry_run {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }

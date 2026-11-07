@@ -122,7 +122,14 @@ async fn connection(s: Arc<AppState>, mut socket: WebSocket, ip: IpAddr) {
                     closing = Some((close_code::UNSUPPORTED, "text frames only"));
                     break;
                 }
-                Some(Ok(Message::Close(_)) | Err(_)) | None => break,
+                Some(Ok(Message::Close(_))) => {
+                    // The library queues the close reply (RFC 6455 §5.5.1); reading on sends it
+                    // and then sees the connection end.
+                    let drain = async { while let Some(Ok(_)) = socket.recv().await {} };
+                    let _ = tokio::time::timeout(std::time::Duration::from_secs(1), drain).await;
+                    break;
+                }
+                Some(Err(_)) | None => break,
                 Some(Ok(_)) => {} // ping and pong: answered by the library
             },
             Some(message) = outbox.recv() => {

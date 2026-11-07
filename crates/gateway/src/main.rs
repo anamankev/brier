@@ -5,7 +5,9 @@
 //! brier-gateway promote <user> <reason> give a user the admin role (audit-logged)
 //! ```
 //! Configuration comes from the environment only: `BRIER_DATABASE_URL` (required; never
-//! logged), `BRIER_DATA_DIR` (default `data`), `BRIER_LISTEN` (default `127.0.0.1:8080`).
+//! logged), `BRIER_DATA_DIR` (default `data`), `BRIER_LISTEN` (default `127.0.0.1:8080`), and
+//! `BRIER_DATABASE_SCHEMA` (optional: keep every table in this schema, created if missing, so
+//! several exchanges, such as test runs, can share one database).
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -37,6 +39,26 @@ async fn connect(url: &str) -> Result<Client, String> {
             );
         }
     });
+    if let Ok(schema) = std::env::var("BRIER_DATABASE_SCHEMA") {
+        let valid = (1..=63).contains(&schema.len())
+            && schema
+                .bytes()
+                .next()
+                .is_some_and(|b| b.is_ascii_lowercase() || b == b'_')
+            && schema
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+        if !valid {
+            return Err("BRIER_DATABASE_SCHEMA must match ^[a-z_][a-z0-9_]{0,62}$".to_owned());
+        }
+        // Safe to interpolate: the name was just checked against a closed character set.
+        client
+            .batch_execute(&format!(
+                "CREATE SCHEMA IF NOT EXISTS {schema}; SET search_path TO {schema};"
+            ))
+            .await
+            .map_err(|e| format!("database: {}", brier_readmodel::describe_db_error(&e)))?;
+    }
     Ok(client)
 }
 

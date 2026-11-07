@@ -27,9 +27,10 @@ jobs:
       - run: cargo test --workspace --locked
 
   integration:
-    # Tests that need PostgreSQL: the read models must equal a rebuild from the journal.
+    # Tests that need PostgreSQL: read models equal a rebuild from the journal; the REST and
+    # WebSocket APIs end to end; the Python reference client against a real gateway process.
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16.15-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
@@ -48,6 +49,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup show active-toolchain || rustup toolchain install
       - run: cargo test --workspace --locked -- --ignored
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.6"
+          working-directory: services
+          enable-cache: true
+      - run: uv sync --locked
+        working-directory: services
+      - run: uv run --locked pytest -q -m integration
+        working-directory: services
 
   python:
     runs-on: ubuntu-24.04

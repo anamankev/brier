@@ -21,6 +21,28 @@ Status: REGISTERED (hypotheses committed before any gateway code exists)
 
 ## 4. Results
 
+### Deviations from the registered design
+Decided while building the harness, before any registered run:
+1. **One process, separate runtimes.** The gateway runs in the benchmark process on its own 4-thread Tokio runtime, with the load client and subscribers on a second 4-thread runtime, the core on its own thread, and the read-model follower writing to PostgreSQL in Docker. Requests still cross real localhost TCP and WebSocket framing. In-process setup lets the benchmark raise the per-address limits, which would otherwise refuse 1,100 connections from one address (the per-account order limit stays as in production).
+2. **The fan-out stamp is the publisher's wall clock**, taken when it publishes each message (`ts`, in microseconds), not the core's monotonic clock: the stamp has to cross the wire, and both ends read the same machine's clock. It starts after the core's broadcast hop (microseconds), so it slightly understates the registered interval.
+3. **Order latency runs from the actual send**, not the scheduled time. The schedule's lag is reported beside it; a run whose sends fell behind schedule shows it there.
+4. **P4's updates come from the P3 load** running at the same time (10,000 orders/s over 10 markets, so `book:1` gets about a tenth of them). The registration did not say where updates come from.
+5. The registered window is 10 s warm-up plus 60 s measured, per phase, per run.
+6. **Power.** The first attempt started on battery power (the machine was unplugged between the pre-run check and the start). Its numbers are kept below as a non-result. The harness now refuses to start on battery and marks a run invalid if the power source reads battery at its start or end.
+
+### Attempt 1: on battery power (not a result)
+Code `62da8ff`, macOS 26.6, rustc 1.99.1, about 10 GB of swap already in use by other apps. The power source read battery when the run started, so the registered environment was not met and no verdict is drawn from it. Kept because it shows what the next run must explain.
+
+| Run | Order to ack p50 | p99 | Schedule lag p99 | Fan-out p50 | p99 |
+|---|---|---|---|---|---|
+| 1 | 4.83 ms | 8.88 ms | 1.82 ms | 5.25 ms | 16.7 ms |
+| 2 | 4.74 ms | 23.7 ms | 2.01 ms | 5.89 ms | 115 ms |
+| 3 | 4.83 ms | 8.10 ms | 1.77 ms | 5.68 ms | 18.3 ms |
+| Pooled | | 11.6 ms | | | 60.3 ms |
+
+- Each run sent 600,000 orders in the measured window (10,000 per second, as scheduled). About 22% were rejected for insufficient collateral: P1's mix rests orders faster than it cancels them, so accounts run out of free credits. Rejections are sequenced and acknowledged like any command, so they are part of the latency sample.
+- Run 2 was disturbed by something outside the benchmark (its p99 tripled while the schedule lag stayed normal). With swap that heavy, paging is the first suspect; the registered run will record swap before and after.
+
 ## 5. Verdicts
 
 ## 6. Interpretation

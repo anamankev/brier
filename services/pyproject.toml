@@ -3,15 +3,23 @@ name = "brier-services"
 version = "1.0.0"
 description = "Exchange services and research: reference engine, resolvers, market maker, surveillance, simulation"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "cryptography==50.0.2", # Ed25519 request signing in the reference client
+    "websockets==17.3", # the reference client's WebSocket transport
+]
 
 [dependency-groups]
 dev = [
-    "pytest>=9.2,<10",
+    "pytest>=9.1,<10",
     "hypothesis>=6.170,<7",
     "ruff>=0.17,<0.18", # minor pinned: Ruff adds and changes rules between minor versions
     "mypy>=2.4,<3",
 ]
+
+[tool.uv]
+# Supply-chain rule: nothing newer than this date resolves, so every locked version was public
+# for at least 14 days when chosen. Move it forward deliberately, by itself, to upgrade.
+exclude-newer = "2026-10-24T00:00:00Z"
 
 [build-system]
 requires = ["uv_build>=0.13.6,<0.14"]
@@ -40,4 +48,5 @@ addopts = "-ra --strict-markers --strict-config"
 markers = [
     "slow: longer than a few seconds; excluded from make check",
     "differential: needs the Rust toolchain; compares the Rust engine with the reference engine",
+    "integration: needs the Rust toolchain and PostgreSQL (BRIER_TEST_DATABASE_URL); skipped otherwise",
 ]

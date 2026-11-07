@@ -6,7 +6,7 @@ CARGO ?= cargo
 UV_RUN := uv run --project services --locked
 PIP_AUDIT_VERSION := 2.10.1
 
-.PHONY: help setup env up down db-url check rust-check py-check private-check test-all audit differential-full bench crash gateway-bench
+.PHONY: help setup env up down db-url check rust-check py-check private-check test-all audit differential-full bench crash gateway-bench dependency-age
 
 SEED ?= 1
 
@@ -61,6 +61,9 @@ bench: ## The registered P1/P2 engine benchmark (docs/notes/performance.md); plu
 	-pmset -g batt | head -1  # macOS power source; ignored elsewhere
 	./target/release/brier-bench
 
+dependency-age: ## Every locked dependency was published at least 14 days ago (network: crates.io, PyPI)
+	python3 scripts/dependency_age.py
+
 gateway-bench: up ## The registered P3/P3b/P4 gateway benchmark (docs/notes/gateway.md); plug in and close heavy apps first
 	$(CARGO) build --release --locked -p brier-bench
 	rustc --version
@@ -70,7 +73,7 @@ gateway-bench: up ## The registered P3/P3b/P4 gateway benchmark (docs/notes/gate
 
 test-all: check up ## Every test, including slow ones and the database tests (starts PostgreSQL)
 	BRIER_TEST_DATABASE_URL="$$($(MAKE) -s db-url)" $(CARGO) test --workspace --locked -- --include-ignored
-	cd services && uv run --locked pytest -q
+	cd services && BRIER_TEST_DATABASE_URL="$$($(MAKE) -s -C .. db-url)" uv run --locked pytest -q
 
 audit: ## Known-vulnerability audit of locked Rust and Python dependencies
 	@command -v cargo-audit >/dev/null 2>&1 || { echo "cargo-audit is not installed: run 'cargo install cargo-audit --locked' (CI always runs it)"; exit 1; }

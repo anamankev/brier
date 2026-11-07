@@ -41,15 +41,29 @@ Updated at every gate review (SPEC §13). Each entry gives the threat, its mitig
 | Snapshots | A wrong snapshot silently changing state | Restore checks every invariant and the recorded state hash; a damaged snapshot is skipped and the journal replays further | Snapshot property tests; 998 snapshot recoveries in the crash study matched a clean replay | None known |
 | Core process | A poison command (one that halts the engine) acknowledged and replayed forever | A halting command drops its whole unsynced batch; nothing in it is acknowledged | `brier-core` exit 3 path | A command that halts the engine will halt it again if resubmitted; it needs operator action (runbook, G9) |
 
+## Components that exist (G4)
+
+| Asset | Threat | Mitigation | Evidence | Gap |
+|---|---|---|---|---|
+| User accounts | Account takeover by password guessing | Argon2id (the `argon2` crate's defaults: 19 MiB, 2 passes, OWASP's minimum), 12 to 256 characters; 30 login or registration attempts per minute per address; an unknown username costs the same hash as a known one | `auth.rs` tests; `rest.rs` login cases | No TOTP yet (G6, with the web login). No breached-password check. No per-account lockout, on purpose: lockout lets anyone lock a victim out |
+| Sessions | A stolen or leaked session token | 256-bit random tokens; only their SHA-256 is stored; 24-hour expiry; logout deletes the row; the role is re-read on every request, so a demotion takes effect at once | `rest.rs` logout case | Tokens are bearer credentials: whoever holds one is the user until it expires. No session list or remote sign-out yet |
+| Orders | Forged requests | Ed25519 signatures over timestamp, method, path with query, and the body's SHA-256, verified strictly (`verify_strict`); the server stores only public keys; keys are added and revoked only with a session | `rest.rs` signed cases (valid, tampered body, revoked, key endpoints); `signature_verify` fuzz target | The private key's safety is the client's job |
+| Orders | Replayed requests | Timestamps more than 5 s from the server clock are refused; a signature seen within the window is refused | `rest.rs` replay and stale cases; `test_client_live.py` replay case | The replay cache lives in the process: right after a restart, a request signed in the previous 5 s could be accepted once. Orders with a `client_order_id` stay idempotent across that. Several gateways would need a shared cache |
+| Orders | Duplicate orders from retries | Client order IDs, deduplicated by the engine over each account's last 10,000 accepted orders; a timed-out request says it is safe to retry | Differential tests with 10% reused IDs; `rest.rs` duplicate case | A retry after more than 10,000 newer accepted orders is placed again |
+| Gateway | Abuse and denial of service | Token buckets: 200 orders/s per account (burst 400), 500 requests/s per address (burst 1,000); 8 KiB bodies and WebSocket messages; 10 s request timeout; 64 subscriptions and 256 orders in flight per connection; a slow subscriber is resynchronized, never buffered without bound | `limits.rs` tests; `rest.rs` body-limit case; `ws.rs` forced-lag case | Buckets are per process. The per-address limit sees a proxy's address behind a proxy (forwarded headers are not trusted, on purpose). Connections per address are not capped yet |
+| Gateway parsers | A crafted request crashing or confusing the server | Unknown fields refused; typed decoding with no clipping; fuzzed | `gateway_request` and `signature_verify` fuzz targets (G4 campaign in `docs/gates/G4-review.md`) | None known |
+| Administration | Admin misuse | Admin role checked on every request; a reason (3-500 characters) is required; the audit row is written before the command is submitted and completed with its sequence number and the engine's answer; promotion only through the operator CLI, which also audits | `rest.rs` audit count and role cases | One step, not two (two-step resolution is G5). The database role can rewrite `audit_log`; it is not append-only. No admin second factor (G6) |
+| Privacy | One user learning about another's activity | Other accounts' orders answer `unknown_order` or 404; order replies show only the caller's fills; public trades and the trades channel carry no account identities | `rest.rs` and `ws.rs` cases | Registration reveals whether a username is taken (rate-limited, as on most exchanges) |
+| Read models | History that is wrong or silently stale | Projected from the journal, one transaction per batch with its cursor; every history answer states `as_of` | `rebuild.rs` (live equals rebuild) | None known |
+| Dependencies | A fresh, compromised release | Every locked version must have been public for 14 days: Python resolution has a fixed cutoff (`exclude-newer`), and `scripts/dependency_age.py` checks all three lockfiles against crates.io and PyPI whenever one changes. G4's first check found 5 Python dev tools and 16 transitive crates that broke the rule; all were rolled back | `services/pyproject.toml`, `dependency-age.yml` | Cargo has no resolution cutoff, so a `cargo update` can still pick a fresh crate; the check catches it at push time |
+
 ## Components to come (from SPEC §13), owned by their gates
 
 | Gate | Threat | Planned mitigation |
 |---|---|---|
 | G1-G2 | Engine or ledger bug that creates or destroys credits | Invariants I1-I5 checked after every event; differential tests against the reference engine; halt on violation |
 | G3 | Acknowledged order lost in a crash; corrupt journal | Sync before acknowledgment (F_FULLFSYNC on macOS); CRC32C per record; SIGKILL crash harness |
-| G4 | Forged or replayed orders | Ed25519-signed requests; timestamp window; nonces; idempotent client order IDs |
-| G4 | API abuse, denial of service | Per-account and per-IP token buckets; payload size limits; fuzzed parsers |
-| G4 | Account takeover | Argon2id password hashing; optional TOTP; session expiry |
 | G5 | Wrong or manipulated resolution | Recorded source evidence; two-step admin confirmation; dispute window; audit log |
+| G6 | Account takeover | TOTP second factor for people and admins |
 | G5-G6 | Admin misuse | Every admin action is a sequenced, audit-logged command; least-privilege roles |
 | G8 | Multi-accounting and collusion | Account-linkage signals in surveillance; credits have no value, which limits the incentive |

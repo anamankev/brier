@@ -11,6 +11,9 @@ every client needs and gets wrong most often:
 - ``SequenceTracker``: the same gap rule for ``trades:<market>`` and ``account``, which have no
   snapshot: after a gap the client re-reads state over REST.
 - ``RestClient``: REST over the standard library, with session tokens or signed requests.
+- ``Ed25519Key``: a bot's key pair (``cryptography``); only the public half is sent.
+- ``WsClient``: the WebSocket API (``websockets``): auth, order entry with replies paired by
+  ``id``, and channels kept by the trackers, resubscribing by itself after a gap.
 
 The trackers are pure: they take decoded messages and return what to do, so any transport
 can drive them, and the tests drive them with dropped, duplicated, and reordered messages.
@@ -18,15 +21,24 @@ can drive them, and the tests drive them with dropped, duplicated, and reordered
 
 from __future__ import annotations
 
+import asyncio
 import base64
+import contextlib
 import hashlib
+import itertools
 import json
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from types import TracebackType
+from typing import Any, Self
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from websockets.asyncio.client import ClientConnection, connect
 
 
 def signing_payload(timestamp_ms: int, method: str, path_and_query: str, body: bytes) -> bytes:
@@ -192,3 +204,122 @@ class RestClient:
         self.token = self.request(
             "POST", "/v1/login", {"username": username, "password": password}
         )["token"]
+
+
+def clock_ms() -> int:
+    """Unix time in milliseconds, for ``Brier-Timestamp``."""
+    return time.time_ns() // 1_000_000
+
+
+class Ed25519Key:
+    """A bot's signing key. Register ``public_key_b64()`` with ``POST /v1/keys``."""
+
+    def __init__(self, private: Ed25519PrivateKey | None = None) -> None:
+        self._private = private or Ed25519PrivateKey.generate()
+
+    def public_key_b64(self) -> str:
+        """The 32-byte public key, standard base64, as ``POST /v1/keys`` takes it."""
+        raw = self._private.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+        return base64.b64encode(raw).decode()
+
+    def sign(self, payload: bytes) -> bytes:
+        """The 64-byte Ed25519 signature of ``payload``."""
+        return self._private.sign(payload)
+
+    def ws_auth(self, key_id: int) -> dict[str, Any]:
+        """The fields of a WebSocket ``auth`` message signed with this key."""
+        ts = clock_ms()
+        signature = self.sign(signing_payload(ts, "GET", "/v1/ws", b""))
+        return {"key": key_id, "timestamp": ts, "signature": base64.b64encode(signature).decode()}
+
+
+class WsClient:
+    """The WebSocket API: requests with replies, and channels kept current by trackers.
+
+    Use as ``async with WsClient(url) as ws:``. Book channels resubscribe by themselves after
+    a gap; ``refetches`` counts the times a snapshot-less channel lost messages, when a real
+    client would re-read the state over REST.
+    """
+
+    def __init__(self, url: str) -> None:
+        self.url = url
+        self.books: dict[int, BookTracker] = {}
+        self.sequences: dict[str, SequenceTracker] = {}
+        self.refetches = 0
+        self._ids = itertools.count(1)
+        self._waiting: dict[int, asyncio.Future[dict[str, Any]]] = {}
+        self._socket: ClientConnection | None = None
+        self._reader: asyncio.Task[None] | None = None
+        self._background: set[asyncio.Task[Any]] = set()
+
+    async def __aenter__(self) -> Self:
+        self._socket = await connect(self.url)
+        self._reader = asyncio.create_task(self._read())
+        return self
+
+    async def __aexit__(
+        self,
+        kind: type[BaseException] | None,
+        error: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        if self._socket is not None:
+            await self._socket.close()
+        if self._reader is not None:
+            self._reader.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._reader  # a reader error after our own close is surfaced here
+
+    async def request(self, op: str, **fields: Any) -> dict[str, Any]:  # noqa: ANN401 - JSON
+        """Send one message and wait for its reply; raise ``ApiError`` if it failed."""
+        if self._socket is None:
+            raise RuntimeError("use WsClient as an async context manager")
+        request_id = next(self._ids)
+        reply = asyncio.get_running_loop().create_future()
+        self._waiting[request_id] = reply
+        await self._socket.send(json.dumps({"op": op, "id": request_id, **fields}))
+        answer = await reply
+        if not answer["ok"]:
+            raise ApiError(0, {"error": answer["error"]})
+        result: dict[str, Any] = answer["result"]
+        return result
+
+    async def subscribe_book(self, market: int) -> BookTracker:
+        """Subscribe to ``book:<market>``; the tracker fills as messages arrive."""
+        tracker = self.books.setdefault(market, BookTracker())
+        await self.request("subscribe", channel=f"book:{market}")
+        return tracker
+
+    async def subscribe(self, channel: str) -> SequenceTracker:
+        """Subscribe to ``trades:<market>`` or ``account``."""
+        tracker = self.sequences.setdefault(channel, SequenceTracker())
+        await self.request("subscribe", channel=channel)
+        return tracker
+
+    async def _resubscribe(self, channel: str) -> None:
+        await self.request("unsubscribe", channel=channel)
+        await self.request("subscribe", channel=channel)
+
+    def _later(self, work: Any) -> None:  # noqa: ANN401 - a coroutine
+        task = asyncio.create_task(work)
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+
+    async def _read(self) -> None:
+        assert self._socket is not None  # noqa: S101 - set before the reader starts
+        async for raw in self._socket:
+            m: dict[str, Any] = json.loads(raw)
+            if m["type"] == "reply":
+                waiting = self._waiting.pop(m["id"], None) if isinstance(m["id"], int) else None
+                if waiting is not None and not waiting.done():
+                    waiting.set_result(m)
+                continue
+            channel = str(m["channel"])
+            if channel.startswith("book:"):
+                action = self.books[int(channel[5:])].on_message(m)
+            else:
+                action = self.sequences[channel].on_message(m)
+            if action is Action.RESUBSCRIBE:
+                self._later(self._resubscribe(channel))
+            if action in (Action.RESUBSCRIBE, Action.REFETCH) and not channel.startswith("book:"):
+                self.refetches += 1
