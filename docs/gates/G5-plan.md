@@ -77,7 +77,7 @@ Canonical form: RFC 8785 (JSON Canonicalization Scheme), implemented in both Rus
 
 ### Resolvers (`services/src/brier_services/resolution/`)
 Each provider is a small module: `fetch(rule) -> Response`, `parse(response, rule) -> Value | NotYetPublished`, and a shared `decide`. The providers:
-- **FRED/ALFRED** (St. Louis Fed API; needs a free API key, see Credentials). Covers the FOMC target upper bound (`DFEDTARU`) and the S&P 500 close (`SP500`, if O3 allows). ALFRED vintages give the value as first released, which is how the "first release counts" policy is checked.
+- **FRED/ALFRED** (St. Louis Fed API; needs a free API key, see Credentials). Covers the FOMC target upper bound (`DFEDTARU`) and the 10-year Treasury yield (`DGS10`). The S&P 500 is excluded: its series is licensed from S&P Dow Jones Indices (`docs/data-licenses.md`). ALFRED vintages give the value as first released, which is how the "first release counts" policy is checked.
 - **BLS public API.** Covers CPI-U (`CUUR0000SA0`) and the unemployment rate (`LNS14000000`). Version 1 needs no key.
 - **NOAA NCEI Access Data Service** (GHCN-Daily). Covers the daily maximum temperature at a named station. Needs no token.
 
@@ -85,7 +85,7 @@ Each provider is a small module: `fetch(rule) -> Response`, `parse(response, rul
 - the request URL with any key removed;
 - retrieval time;
 - HTTP status;
-- the SHA-256 of the raw body, which is kept under `data/evidence/<hash>`;
+- the SHA-256 of the raw body, which is kept under `var/evidence/<hash>`;
 - the parsed value, the decision, and the resolver's version.
 
 **Safety:**
@@ -100,20 +100,19 @@ Five markets, one per SPEC §7 example:
 - CPI 12-month change above a threshold;
 - the FOMC upper bound after a meeting;
 - the unemployment rate;
-- the S&P 500 close above a level;
+- the 10-year Treasury yield above a level on a date (in place of the S&P 500; O3, O6);
 - the Central Park daily maximum temperature.
 
-Each one names its source, release time, and void conditions. If O3 forbids a source, its market is replaced with a permitted one, and the swap is recorded.
+Each one names its source, release time, and void conditions. O3 is settled in `docs/data-licenses.md`: raw BLS and NOAA responses are committed as fixtures; FRED responses stay local, and CI uses fixtures written by hand in FRED's format.
 
 ## Credentials
 - FRED needs a free API key that only you can create, at fred.stlouisfed.org, under My Account and then API Keys. Put it in `.env` as `FRED_API_KEY`. It is never committed, logged, or shown in chat; evidence records strip it.
 - BLS v1 and NOAA's Access Data Service need no key.
 
 ## Registered study: resolver correctness against history (`docs/notes/resolution.md`, registered before any resolver exists)
-- **R1.** For every launch-catalogue market type, the resolver's parsed value equals the officially published first-release value. The check runs over all instances in a fixed window, set in the note before running, for example the last 60 monthly CPI and unemployment releases, every FOMC meeting since 2019, and 365 station days.
-  - Refuted if a single value differs.
-  - The comparison values come from an independent path: the agencies' published release tables or ALFRED vintages, never the resolver's own code.
-- **R2.** For every instance, the decision is the same whether the evidence is parsed live or replayed from the stored raw response. Refuted on a single difference.
+- **R1 (values):** each resolver's values equal an independent comparator's (a different system or product, parsed by separate code) over fixed windows: 60 months of CPI and unemployment, every FOMC statement since 2019, and every day of 2025 for the 10-year yield and the Central Park maximum temperature. Refuted by one mismatch.
+- **R2 (evidence determines the decision):** recomputing every decision from the stored raw bytes alone, offline, gives the same outcome. Refuted by one difference.
+- Full design, comparators, and limits: `docs/notes/resolution.md`.
 
 ## Units
 1. This plan; the registered note; O3: read each source's terms and record them in `docs/data-licenses.md`, including whether its raw responses may be committed as test fixtures. Where they may not, fixtures keep only hashes plus a minimal excerpt, or are re-fetched locally.

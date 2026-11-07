@@ -128,7 +128,7 @@ Cancel-all per account, per market, or everywhere, and a global halt of every op
   - Voided markets are not scored. Integer arithmetic, in units of 1/10,000.
   - Leaderboards rank by average skill over at least `MIN_SCORED_MARKETS` (10) resolved markets, and separately by settled trading profit.
   - Forecasts are timestamped by the server, cannot be backdated, and are frozen at close.
-- Launch catalogue examples: monthly CPI year-on-year above a threshold; the FOMC target upper bound after a meeting; the unemployment rate; S&P 500 close above a level on a date; the daily maximum temperature at a named station.
+- Launch catalogue examples: monthly CPI year-on-year above a threshold; the FOMC target upper bound after a meeting; the unemployment rate; the 10-year Treasury yield above a level on a date (replacing the S&P 500 close, whose FRED series is licensed from S&P Dow Jones Indices; `docs/data-licenses.md`, O6); the daily maximum temperature at a named station.
 
 ## 8. Reference market maker
 - A Python service that trades only through the public API, with the same limits as any user.
@@ -221,6 +221,7 @@ Where this project can be better than the leaders: open, verifiable engineering 
 ## 19. Open items
 - O1: Kalshi and Polymarket API features (FIX availability, rate limits, order types) from their official docs, for §16.
 - O2: Whether twofold's European pipeline is ready to serve fair values live, or only in studies (G7).
-- O3: Terms of use for FRED, BLS, and NOAA data as resolution sources (G5).
+- O3: Terms of use for FRED, BLS, and NOAA data as resolution sources (G5). Resolved 7 November 2026 in `docs/data-licenses.md`: BLS and NOAA public domain, raw responses committable; FRED usable for public-domain series only, raw responses kept local; S&P 500 excluded.
+- O6: A source for index markets (S&P 500) whose terms allow this use; until then no index markets, which affects the market maker's fair value in §8 (decided in G7).
 - O4: The Rust crate choices (serialization, hashing, WebSocket) and their licenses (G0).
 - O5: A $0, card-free host for a public demo; otherwise the release is local-run plus recorded demo (G9).
