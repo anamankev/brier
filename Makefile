@@ -40,8 +40,8 @@ differential-full: ## The gate study: 10 million random commands through both en
 bench: ## The registered P1/P2 engine benchmark (docs/notes/performance.md); plug in and close heavy apps first
 	$(CARGO) build --release --locked -p brier-bench
 	rustc --version
-	sw_vers -productVersion
-	pmset -g batt | head -1
+	-sw_vers -productVersion  # macOS only; ignored elsewhere
+	-pmset -g batt | head -1  # macOS power source; ignored elsewhere
 	./target/release/brier-bench
 
 test-all: check ## Every test, including slow ones
@@ -51,5 +51,6 @@ test-all: check ## Every test, including slow ones
 audit: ## Known-vulnerability audit of locked Rust and Python dependencies
 	@command -v cargo-audit >/dev/null 2>&1 || { echo "cargo-audit is not installed: run 'cargo install cargo-audit --locked' (CI always runs it)"; exit 1; }
 	$(CARGO) audit
+	mkdir -p target
 	cd services && uv export --locked --all-groups --no-emit-project --format requirements-txt > ../target/requirements-audit.txt
 	uvx --from pip-audit==$(PIP_AUDIT_VERSION) pip-audit --strict --requirement target/requirements-audit.txt

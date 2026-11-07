@@ -183,7 +183,43 @@ impl Workload {
 /// The setup commands (open every account, list and open every market) followed by random
 /// workload commands,
 /// `total` in all.
-fn generate(seed: u64, total: usize) -> Result<Vec<Sequenced>, EngineError> {
+/// What the generated workload did, counted from the generating engine's events. The timed
+/// runs replay the same commands on fresh engines, so they do exactly this work too.
+#[derive(Default)]
+struct Mix {
+    places: u64,
+    cancels: u64,
+    accepted: u64,
+    rejected: u64,
+    trades: u64,
+}
+
+impl Mix {
+    fn add(&mut self, command: Command, events: &[Event]) {
+        match command {
+            Command::Place(_) => self.places += 1,
+            Command::Cancel { .. } => self.cancels += 1,
+            _ => {}
+        }
+        for e in events {
+            match e {
+                Event::Accepted { .. } => self.accepted += 1,
+                Event::Rejected { .. } => self.rejected += 1,
+                Event::Trade(_) => self.trades += 1,
+                _ => {}
+            }
+        }
+    }
+
+    fn json(&self) -> String {
+        format!(
+            "{{\"places\": {}, \"cancels\": {}, \"accepted\": {}, \"rejected\": {}, \"trades\": {}}}",
+            self.places, self.cancels, self.accepted, self.rejected, self.trades
+        )
+    }
+}
+
+fn generate(seed: u64, total: usize, mix: &mut Mix) -> Result<Vec<Sequenced>, EngineError> {
     let mut workload = Workload {
         rng: SplitMix64(seed),
         live: Vec::new(),
@@ -217,6 +253,9 @@ fn generate(seed: u64, total: usize) -> Result<Vec<Sequenced>, EngineError> {
         events.clear();
         engine.apply(&cmd, &mut events)?;
         workload.observe(command, &events)?;
+        if commands.len() >= WARMUP {
+            mix.add(command, &events);
+        }
         commands.push(cmd);
         seq = seq.next()?;
     }
@@ -308,8 +347,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let overhead = timer_overhead()?;
     let mut pooled = new_histogram()?;
     let mut rates = Vec::new();
+    let mut mix = Mix::default();
     for seed in SEEDS {
-        let commands = generate(seed, WARMUP + MEASURED)?;
+        let commands = generate(seed, WARMUP + MEASURED, &mut mix)?;
         let rate = throughput(&commands)?;
         latency(&commands, &mut pooled)?;
         eprintln!("seed {seed}: {rate:.0} commands/s");
@@ -320,10 +360,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let median = sorted.get(sorted.len() / 2).copied().unwrap_or(0.0);
     let rates_json: Vec<String> = rates.iter().map(|r| format!("{r:.0}")).collect();
     println!(
-        "{{\"throughput_per_seed\": [{}], \"throughput_median\": {median:.0}, \"latency_pooled\": {}, \"timer_overhead\": {}}}",
+        "{{\"throughput_per_seed\": [{}], \"throughput_median\": {median:.0}, \"latency_pooled\": {}, \"timer_overhead\": {}, \"measured_mix\": {}}}",
         rates_json.join(", "),
         percentiles(&pooled),
-        percentiles(&overhead)
+        percentiles(&overhead),
+        mix.json()
     );
     Ok(())
 }
