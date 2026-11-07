@@ -95,6 +95,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "brier-journal"
+version = "1.0.0"
+dependencies = [
+ "brier-engine",
+ "brier-types",
+ "proptest",
+]
+
+[[package]]
 name = "brier-replay"
 version = "1.0.0"
 dependencies = [

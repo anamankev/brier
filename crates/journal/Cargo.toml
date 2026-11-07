@@ -1,0 +1,19 @@
+[package]
+name = "brier-journal"
+description = "Append-only, checksummed command journal and snapshots (SPEC §5, ADR-0004, ADR-0006)"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+# No dependencies beyond the engine: the journal's bytes must not depend on any outside
+# library's encoding (ADR-0006).
+[dependencies]
+brier-engine = { path = "../engine" }
+brier-types = { path = "../types" }
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true
