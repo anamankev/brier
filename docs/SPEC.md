@@ -78,24 +78,24 @@ A second, deliberately simple engine (Python, list-based, O(n) per operation) im
 ## 4. Ledger and pre-trade risk
 
 ### 4.1 Accounts
-Per user: `available`, `reserved`. Per market: `escrow`. System: `issuance` (negative balance equal to all credits ever granted).
+Per user: `cash`, the only user ledger balance. Collateral is a lock on cash, not a ledger account: `reserved(a)` = Σ over markets of `reserve(a, m)` (§4.4), and `available(a)` = cash − reserved (ADR-0005). Per market: `escrow`. System: `issuance` (negative balance equal to all credits ever granted).
 
 ### 4.2 Double-entry
-Every movement is a journal entry with balanced debits and credits. Entry types: `Grant`, `Reserve`, `Release`, `TradeOpen`, `TradeTransfer`, `TradeClose`, `Settle`, `VoidSettle`. No other type exists (§1.2 test).
+Every movement is a journal entry whose legs sum to zero. Entry types: `Grant` (issuance → cash), `Trade` (buyer cash, seller cash, escrow; one entry covers pair creation, transfer, and pair destruction), `Settle` (escrow → cash, for YES, NO, and void payouts alike). No other type exists (§1.2 test). Reservations are lock changes, reported as `reserved` events, not ledger entries.
 
 ### 4.3 Invariants (checked after every event in debug and test builds; on every snapshot in release)
-- I1 conservation: Σ available + Σ reserved + Σ escrow + issuance = 0.
+- I1 conservation: Σ cash + Σ escrow + issuance = 0 (equivalently Σ available + Σ reserved + Σ escrow + issuance = 0).
 - I2 escrow: escrow(m) = 100 × open interest(m), where open interest = Σ positive positions = Σ |negative positions|.
-- I3 no negative balances: available ≥ 0 and reserved ≥ 0 for every user.
-- I4 reservations: an account's reserved total equals the worst-case cost of its resting opening orders.
+- I3 no negative balances: cash ≥ reserved ≥ 0 for every user, so available ≥ 0.
+- I4 reservations: an account's reserved total equals Σ over markets of `reserve(a, m)`, recomputed from its resting orders and position by the worst-case rule in §4.4.
 - I5 book: never crossed; every resting order has quantity > 0; order count matches the ID map.
 A violated invariant halts the engine with `InvariantViolation` and the offending sequence number. Nothing ever adjusts a balance to restore an invariant.
 
 ### 4.4 Pre-trade checks (in order; each rejection has a typed reason)
-Market state; price in [1, 99]; quantity in [1, `MAX_ORDER_QTY`]; per-account resting-order limit; per-account message rate limit (enforced at the gateway); collateral: the opening part of the order (quantity beyond the account's unreserved closing capacity) must be covered by `available`, and is reserved on acceptance.
+Market state; price in [1, 99]; quantity in [1, `MAX_ORDER_QTY`]; per-account resting-order limit; per-account message rate limit (enforced at the gateway); collateral: counting the incoming order as if it rests in full, `reserve(a, m)` may grow by at most `available(a)`. `reserve(a, m)` charges the price of each resting buy unit and (100 − price) of each resting sell unit, except that the account's held contracts (NO for buys, YES for sells) cover the cheapest units on that side, since closing needs no cash. The exact rule, its proof of sufficiency, and the order of checks are in `docs/gates/G2-plan.md` and ADR-0005.
 
 ### 4.5 Kill switches
-Cancel-all per account, per market, and global halt. Each is a sequenced command, audit-logged with actor and reason.
+Cancel-all per account, per market, or everywhere, and a global halt of every open market. Each is a sequenced command; the gateway (G4) audit-logs it with actor and reason.
 
 ## 5. Journal, snapshots, recovery
 - Journal: append-only segments. Each record = length, CRC32C, sequence number, command bytes. A torn or corrupt tail is detected on open and truncated to the last valid record, and the truncation is logged.
