@@ -60,7 +60,7 @@ fn command(max_id: u64) -> impl Strategy<Value = Command> {
     prop_oneof![
         60 => (account.clone(), market.clone(), side(), price(), qty(), tif(), prop::bool::weighted(0.1))
             .prop_map(|(account, market, side, price, qty, tif, post_only)| {
-                Command::Place(NewOrder { account, market, side, price, qty, tif, post_only })
+                Command::Place(NewOrder { account, market, side, price, qty, tif, post_only, client_order_id: None })
             }),
         25 => (account.clone(), order.clone()).prop_map(|(account, order)| Command::Cancel { account, order }),
         8 => (account, order, qty()).prop_map(|(account, order, qty)| Command::Amend { account, order, qty }),
@@ -260,6 +260,20 @@ proptest! {
             prop_assert_eq!(a, b);
         }
         prop_assert_eq!(restored.state_hash().unwrap(), original.state_hash().unwrap());
+    }
+
+    /// A version 1 snapshot (no client ID windows) still restores, to an engine without them.
+    #[test]
+    fn version_1_snapshots_still_restore(commands in stream()) {
+        let (_, _, engine) = run(&commands);
+        let v2 = engine.snapshot().unwrap();
+        // The generated streams use no client order IDs, so the v2 body ends with a zero window
+        // count; v1 is that body without it, with version byte 1.
+        prop_assert_eq!(v2.get(v2.len() - 8..).unwrap(), &[0u8; 8]);
+        let mut v1 = v2.get(..v2.len() - 8).unwrap().to_vec();
+        *v1.first_mut().unwrap() = 1;
+        let restored = Engine::restore(&v1).unwrap();
+        prop_assert_eq!(restored.state_hash().unwrap(), engine.state_hash().unwrap());
     }
 
     /// Damaged snapshot bytes are refused, never restored into a different state.

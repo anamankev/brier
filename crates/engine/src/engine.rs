@@ -7,6 +7,7 @@ use brier_types::{
 };
 
 use crate::book::{Book, Handle};
+use crate::client_ids::ClientIds;
 use crate::ledger::{Ledger, MAX_RESTING_ORDERS};
 use crate::{
     CancelReason, Command, Event, MarketState, NewOrder, RejectReason, Sequenced, TimeInForce,
@@ -97,6 +98,8 @@ pub struct Engine {
     pub(crate) ledger: Ledger,
     /// Set by the first failed command; every later command is refused.
     pub(crate) halted: Option<(Seq, EngineError)>,
+    /// Each account's window of accepted client order IDs (`client_ids.rs`).
+    pub(crate) client_ids: BTreeMap<AccountId, ClientIds>,
 }
 
 impl Default for Engine {
@@ -115,6 +118,7 @@ impl Engine {
             orders: HashMap::new(),
             ledger: Ledger::default(),
             halted: None,
+            client_ids: BTreeMap::new(),
         }
     }
 
@@ -364,6 +368,15 @@ impl Engine {
             });
             return Ok(());
         }
+        if let Some(client_id) = o.client_order_id
+            && let Some(original) = self
+                .client_ids
+                .get(&o.account)
+                .and_then(|w| w.get(client_id))
+        {
+            out.push(Event::Duplicate { original });
+            return Ok(());
+        }
         let (price, qty) = match validate_place(book, &self.ledger, &o)? {
             Ok(valid) => valid,
             Err(reason) => {
@@ -373,6 +386,12 @@ impl Engine {
         };
         let id = OrderId::new(seq.get());
         out.push(Event::Accepted { order: id });
+        if let Some(client_id) = o.client_order_id {
+            self.client_ids
+                .entry(o.account)
+                .or_default()
+                .record(client_id, id);
+        }
         let Some(remaining) = self.match_incoming(id, &o, price, qty.contracts(), out)? else {
             return Ok(()); // self-trade prevention cancelled the remainder
         };
@@ -703,6 +722,13 @@ impl Engine {
             }
         }
         self.ledger.check()?;
+        for (account, window) in &self.client_ids {
+            if !window.consistent() || !self.ledger.has_account(*account) {
+                return Err(EngineError::Corrupt(
+                    "client order ID window is inconsistent",
+                ));
+            }
+        }
         self.check_resting_totals()
     }
 
@@ -771,7 +797,7 @@ impl Engine {
     /// [`EngineError::Corrupt`] if a book's links are broken.
     pub fn state_hash(&self) -> Result<[u8; 32], EngineError> {
         let mut hasher = blake3::Hasher::new();
-        hasher.update(b"brier-engine-state-v2");
+        hasher.update(b"brier-engine-state-v3");
         hasher.update(&self.next_seq.get().to_le_bytes());
         hasher.update(&(self.markets.len() as u64).to_le_bytes());
         for (market, book) in &self.markets {
@@ -812,6 +838,15 @@ impl Engine {
             hasher.update(&a.get().to_le_bytes());
             hasher.update(&h.position.to_le_bytes());
             hasher.update(&h.reserve.cents().to_le_bytes());
+        }
+        hasher.update(&(self.client_ids.len() as u64).to_le_bytes());
+        for (account, window) in &self.client_ids {
+            hasher.update(&account.get().to_le_bytes());
+            hasher.update(&(window.len() as u64).to_le_bytes());
+            for (client_id, order) in window.entries() {
+                hasher.update(&client_id.to_le_bytes());
+                hasher.update(&order.get().to_le_bytes());
+            }
         }
         Ok(*hasher.finalize().as_bytes())
     }

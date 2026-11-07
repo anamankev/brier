@@ -20,7 +20,10 @@ pub const MAX_BATCH_BYTES: usize = 1024 * 1024;
 pub const MAX_PAYLOAD: usize = 64;
 
 const MAGIC: &[u8; 8] = b"BRIERJNL";
-const VERSION: u16 = 1;
+/// The format written by this code (ADR-0006). Version 1 lacks client order IDs.
+const VERSION: u16 = crate::codec::FORMAT_VERSION;
+/// Versions this code can read.
+const READABLE: std::ops::RangeInclusive<u16> = 1..=VERSION;
 const HEADER_LEN: usize = 8 + 2 + 8;
 const RECORD_HEADER_LEN: usize = 4 + 4 + 8;
 
@@ -135,6 +138,20 @@ fn segments(dir: &Path) -> Result<Vec<(u64, PathBuf)>, JournalError> {
     Ok(found)
 }
 
+/// The format version in a segment's header.
+fn segment_version(path: &Path) -> Result<u16, JournalError> {
+    let bytes = fs::read(path)?;
+    bytes
+        .get(8..10)
+        .and_then(|b| b.try_into().ok())
+        .map(u16::from_le_bytes)
+        .ok_or_else(|| JournalError::Corrupt {
+            segment: path.to_path_buf(),
+            offset: 8,
+            reason: "short segment header",
+        })
+}
+
 fn sync_dir(dir: &Path) -> Result<(), JournalError> {
     File::open(dir)?.sync_all()?;
     Ok(())
@@ -164,7 +181,11 @@ enum BadRecord {
 }
 
 /// Read one record at the start of `bytes`: its total length, sequence, and command.
-fn read_record(bytes: &[u8], expected: u64) -> Result<(usize, u64, Command), BadRecord> {
+fn read_record(
+    bytes: &[u8],
+    expected: u64,
+    version: u16,
+) -> Result<(usize, u64, Command), BadRecord> {
     let (head, rest) = bytes
         .split_at_checked(RECORD_HEADER_LEN)
         .ok_or(BadRecord::Torn("short record header"))?;
@@ -201,7 +222,7 @@ fn read_record(bytes: &[u8], expected: u64) -> Result<(usize, u64, Command), Bad
         ));
     }
     let command =
-        decode(payload).map_err(|_| BadRecord::Inconsistent("payload does not decode"))?;
+        decode(payload, version).map_err(|_| BadRecord::Inconsistent("payload does not decode"))?;
     let total = RECORD_HEADER_LEN
         .checked_add(len)
         .ok_or(BadRecord::Torn("record length"))?;
@@ -259,8 +280,8 @@ where
 
 /// What a segment's header says about the segment.
 enum Header {
-    /// Readable, the right version, and starting at the expected sequence number.
-    Valid,
+    /// Readable, a supported version (carried), and starting at the expected sequence number.
+    Valid(u16),
     /// The newest segment, interrupted while being created (see [`check_header`]).
     TornCreation,
 }
@@ -276,9 +297,13 @@ fn check_header(
     first: u64,
     expected: u64,
 ) -> Result<Header, (usize, &'static str)> {
+    let version = bytes
+        .get(8..10)
+        .and_then(|b| b.try_into().ok())
+        .map(u16::from_le_bytes);
     let unreadable = bytes.len() < HEADER_LEN
         || bytes.get(..8) != Some(MAGIC.as_slice())
-        || bytes.get(8..10) != Some(VERSION.to_le_bytes().as_slice());
+        || !version.is_some_and(|v| READABLE.contains(&v));
     if unreadable && is_last && bytes.len() <= HEADER_LEN.saturating_add(MAX_BATCH_BYTES) {
         return Ok(Header::TornCreation);
     }
@@ -288,9 +313,9 @@ fn check_header(
     if bytes.get(..8) != Some(MAGIC.as_slice()) {
         return Err((0, "bad segment magic"));
     }
-    if bytes.get(8..10) != Some(VERSION.to_le_bytes().as_slice()) {
+    let Some(version) = version.filter(|v| READABLE.contains(v)) else {
         return Err((8, "unsupported segment version"));
-    }
+    };
     let header_first = bytes
         .get(10..18)
         .and_then(|b| b.try_into().ok())
@@ -298,7 +323,7 @@ fn check_header(
     if header_first != Some(first) || first != expected {
         return Err((10, "segment does not start at the next sequence number"));
     }
-    Ok(Header::Valid)
+    Ok(Header::Valid(version))
 }
 
 fn scan<E>(
@@ -339,8 +364,8 @@ where
             reason,
         };
         let bytes = fs::read(path).map_err(JournalError::from)?;
-        match check_header(&bytes, is_last, *first, expected) {
-            Ok(Header::Valid) => {}
+        let version = match check_header(&bytes, is_last, *first, expected) {
+            Ok(Header::Valid(v)) => v,
             Ok(Header::TornCreation) => {
                 if repair {
                     fs::remove_file(path).map_err(JournalError::from)?;
@@ -358,10 +383,10 @@ where
                 });
             }
             Err((offset, reason)) => return Err(corrupt(offset, reason).into()),
-        }
+        };
         let mut offset = HEADER_LEN;
         while let Some(rest) = bytes.get(offset..).filter(|r| !r.is_empty()) {
-            match read_record(rest, expected) {
+            match read_record(rest, expected, version) {
                 Ok((total, seq, command)) => {
                     apply(Seq::from_raw(seq), command)?;
                     last_seq = Some(Seq::from_raw(seq));
@@ -438,12 +463,14 @@ impl JournalWriter {
     ) -> Result<Self, JournalError> {
         fs::create_dir_all(dir)?;
         let (file, segment_len) = match segments(dir)?.pop() {
-            Some((_, path)) => {
+            // Never mix formats in one segment: an older segment is left as it is, and the next
+            // record starts a new segment in the current format.
+            Some((_, path)) if segment_version(&path)? == VERSION => {
                 let file = OpenOptions::new().append(true).open(&path)?;
                 let len = file.metadata()?.len();
                 (file, len)
             }
-            None => Self::create_segment(dir, next)?,
+            Some(_) | None => Self::create_segment(dir, next)?,
         };
         Ok(Self {
             dir: dir.to_path_buf(),
@@ -675,6 +702,44 @@ mod tests {
         let r =
             recover_after::<JournalError>(dir.path(), Seq::from_raw(20), |_, _| Ok(())).unwrap();
         assert_eq!(r.last_seq, Some(Seq::from_raw(20)));
+    }
+
+    #[test]
+    fn a_version_1_segment_is_read_and_never_appended_to() {
+        let dir = tempfile::tempdir().unwrap();
+        // Hand-build a version 1 segment holding one order (no client order ID field).
+        let order = Command::Place(brier_engine::NewOrder {
+            account: AccountId::new(1),
+            market: MarketId::new(1),
+            side: brier_types::Side::Buy,
+            price: 40,
+            qty: 3,
+            tif: brier_engine::TimeInForce::Gtc,
+            post_only: false,
+            client_order_id: None,
+        });
+        let mut v2 = Vec::new();
+        encode(&order, &mut v2);
+        let v1 = v2.get(..v2.len() - 1).unwrap().to_vec(); // drop the presence byte
+        let mut seg = Vec::new();
+        seg.extend_from_slice(MAGIC);
+        seg.extend_from_slice(&1u16.to_le_bytes());
+        seg.extend_from_slice(&1u64.to_le_bytes());
+        seg.extend_from_slice(&u32::try_from(v1.len()).unwrap().to_le_bytes());
+        seg.extend_from_slice(&record_checksum(1, &v1).to_le_bytes());
+        seg.extend_from_slice(&1u64.to_le_bytes());
+        seg.extend_from_slice(&v1);
+        fs::write(segment_path(dir.path(), Seq::FIRST), seg).unwrap();
+        let mut w = JournalWriter::open(dir.path(), Seq::from_raw(2)).unwrap();
+        w.append(Seq::from_raw(2), &cmd(2)).unwrap();
+        w.commit().unwrap();
+        assert_eq!(
+            segments(dir.path()).unwrap().len(),
+            2,
+            "the new record went into a new segment"
+        );
+        let (got, _) = read(dir.path());
+        assert_eq!(got, vec![(1, order), (2, cmd(2))]);
     }
 
     #[test]

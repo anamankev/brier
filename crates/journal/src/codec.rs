@@ -10,6 +10,10 @@ use std::fmt;
 use brier_engine::{Command, MarketState, NewOrder, TimeInForce};
 use brier_types::{AccountId, MarketId, OrderId, Outcome, Side};
 
+/// The journal format version this code writes (ADR-0006). Version 2 added client order IDs
+/// to `place`; version 1 is still read.
+pub const FORMAT_VERSION: u16 = 2;
+
 const TAG_CREATE_MARKET: u8 = 1;
 const TAG_SET_STATE: u8 = 2;
 const TAG_PLACE: u8 = 3;
@@ -46,7 +50,7 @@ impl fmt::Display for CodecError {
 
 impl std::error::Error for CodecError {}
 
-/// Append the canonical encoding of `command` to `out`.
+/// Append the canonical encoding of `command` to `out`, in the current journal format.
 pub fn encode(command: &Command, out: &mut Vec<u8>) {
     match *command {
         Command::CreateMarket { market } => {
@@ -74,6 +78,13 @@ pub fn encode(command: &Command, out: &mut Vec<u8>) {
                 TimeInForce::Fok => 2,
             });
             out.push(u8::from(o.post_only));
+            match o.client_order_id {
+                Some(id) => {
+                    out.push(1);
+                    out.extend_from_slice(&id.to_le_bytes());
+                }
+                None => out.push(0),
+            }
         }
         Command::Cancel { account, order } => {
             out.push(TAG_CANCEL);
@@ -177,11 +188,12 @@ fn state_from(code: u8) -> Result<MarketState, CodecError> {
     }
 }
 
-/// Decode exactly one command from `payload`.
+/// Decode exactly one command from `payload`, written in journal format `version`.
+/// Version 1 has no client order ID; version 2 adds it to `place` (ADR-0006).
 ///
 /// # Errors
 /// A [`CodecError`] if the payload is not the canonical encoding of a command.
-pub fn decode(payload: &[u8]) -> Result<Command, CodecError> {
+pub fn decode(payload: &[u8], version: u16) -> Result<Command, CodecError> {
     let mut r = Reader { rest: payload };
     let command = match r.u8()? {
         TAG_CREATE_MARKET => Command::CreateMarket {
@@ -211,6 +223,11 @@ pub fn decode(payload: &[u8]) -> Result<Command, CodecError> {
                 _ => return Err(CodecError::BadCode("tif")),
             };
             let post_only = r.flag("post_only")?;
+            let client_order_id = if version >= 2 && r.flag("client order ID presence")? {
+                Some(r.u64()?)
+            } else {
+                None
+            };
             Command::Place(NewOrder {
                 account,
                 market,
@@ -219,6 +236,7 @@ pub fn decode(payload: &[u8]) -> Result<Command, CodecError> {
                 qty,
                 tif,
                 post_only,
+                client_order_id,
             })
         }
         TAG_CANCEL => {
@@ -298,19 +316,23 @@ mod tests {
                 any::<u8>(),
                 any::<u32>(),
                 tif,
-                any::<bool>()
+                any::<bool>(),
+                prop::option::of(any::<u64>())
             )
-                .prop_map(|(account, market, side, price, qty, tif, post_only)| {
-                    Command::Place(NewOrder {
-                        account,
-                        market,
-                        side,
-                        price,
-                        qty,
-                        tif,
-                        post_only,
-                    })
-                }),
+                .prop_map(
+                    |(account, market, side, price, qty, tif, post_only, client_order_id)| {
+                        Command::Place(NewOrder {
+                            account,
+                            market,
+                            side,
+                            price,
+                            qty,
+                            tif,
+                            post_only,
+                            client_order_id,
+                        })
+                    }
+                ),
             (account.clone(), any::<u64>()).prop_map(|(account, o)| Command::Cancel {
                 account,
                 order: OrderId::new(o)
@@ -342,14 +364,14 @@ mod tests {
     proptest! {
         #[test]
         fn every_command_round_trips(c in command()) {
-            prop_assert_eq!(decode(&bytes(&c)), Ok(c));
+            prop_assert_eq!(decode(&bytes(&c), FORMAT_VERSION), Ok(c));
         }
 
         #[test]
         fn every_strict_prefix_is_truncated(c in command()) {
             let full = bytes(&c);
             for len in 0..full.len() {
-                prop_assert_eq!(decode(full.get(..len).unwrap()), Err(CodecError::Truncated));
+                prop_assert_eq!(decode(full.get(..len).unwrap(), FORMAT_VERSION), Err(CodecError::Truncated));
             }
         }
 
@@ -357,26 +379,35 @@ mod tests {
         fn a_trailing_byte_is_rejected(c in command(), extra in any::<u8>()) {
             let mut b = bytes(&c);
             b.push(extra);
-            prop_assert_eq!(decode(&b), Err(CodecError::TrailingBytes));
+            prop_assert_eq!(decode(&b, FORMAT_VERSION), Err(CodecError::TrailingBytes));
         }
     }
 
     #[test]
     fn unknown_tags_and_codes_are_rejected() {
-        assert_eq!(decode(&[0]), Err(CodecError::UnknownTag(0)));
-        assert_eq!(decode(&[10]), Err(CodecError::UnknownTag(10)));
+        assert_eq!(decode(&[0], FORMAT_VERSION), Err(CodecError::UnknownTag(0)));
+        assert_eq!(
+            decode(&[10], FORMAT_VERSION),
+            Err(CodecError::UnknownTag(10))
+        );
         let mut set = bytes(&Command::SetState {
             market: MarketId::new(1),
             state: MarketState::Open,
         });
         *set.last_mut().unwrap() = 6;
-        assert_eq!(decode(&set), Err(CodecError::BadCode("state")));
+        assert_eq!(
+            decode(&set, FORMAT_VERSION),
+            Err(CodecError::BadCode("state"))
+        );
         let mut all = bytes(&Command::CancelAll {
             account: None,
             market: None,
         });
         *all.get_mut(1).unwrap() = 2;
-        assert_eq!(decode(&all), Err(CodecError::BadCode("account presence")));
+        assert_eq!(
+            decode(&all, FORMAT_VERSION),
+            Err(CodecError::BadCode("account presence"))
+        );
     }
 
     #[test]
@@ -391,13 +422,25 @@ mod tests {
             qty: 300,
             tif: TimeInForce::Ioc,
             post_only: false,
+            client_order_id: None,
         });
-        assert_eq!(
-            bytes(&place),
-            [
-                3, 7, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 1, 45, 44, 1, 0, 0, 1, 0
-            ]
-        );
+        // Version 2: the version 1 bytes, then a client order ID presence byte.
+        let v1: [u8; 21] = [
+            3, 7, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 1, 45, 44, 1, 0, 0, 1, 0,
+        ];
+        let mut v2 = v1.to_vec();
+        v2.push(0);
+        assert_eq!(bytes(&place), v2);
+        let Command::Place(mut with_id) = place else {
+            unreachable!()
+        };
+        with_id.client_order_id = Some(0x0102);
+        let mut v2_id = v1.to_vec();
+        v2_id.extend_from_slice(&[1, 2, 1, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(bytes(&Command::Place(with_id)), v2_id);
         assert_eq!(bytes(&Command::HaltAll), [9]);
+        // Version 1 records still decode, as orders without a client order ID.
+        assert_eq!(decode(&v1, 1), Ok(place));
+        assert_eq!(decode(&v2, 1), Err(CodecError::TrailingBytes));
     }
 }

@@ -26,6 +26,7 @@ fn setup() -> Vec<Command> {
             qty: 5,
             tif: TimeInForce::Gtc,
             post_only: false,
+            client_order_id: None,
         }),
         Command::Place(NewOrder {
             account: A,
@@ -35,6 +36,7 @@ fn setup() -> Vec<Command> {
             qty: 2,
             tif: TimeInForce::Gtc,
             post_only: false,
+            client_order_id: None,
         }),
     ]
 }
@@ -106,6 +108,7 @@ async fn a_restart_recovers_every_acknowledged_command() {
             qty: 6,
             tif: TimeInForce::Ioc,
             post_only: false,
+            client_order_id: None,
         }))
         .await
         .unwrap();

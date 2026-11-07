@@ -216,6 +216,12 @@ pub enum Event {
         /// The new reserve.
         amount: Credits,
     },
+    /// An order repeated a client order ID the account already used: nothing was placed, and
+    /// `original` is the order that ID refers to.
+    Duplicate {
+        /// The order first placed with this client order ID.
+        original: OrderId,
+    },
     /// A closed market settled; payout entries follow.
     Settled {
         /// The market.

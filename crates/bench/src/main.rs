@@ -97,6 +97,7 @@ impl Workload {
                 qty,
                 tif: TimeInForce::Gtc,
                 post_only: false,
+                client_order_id: None,
             }));
         }
         if roll < 95 && !self.live.is_empty() {
@@ -130,6 +131,7 @@ impl Workload {
             qty,
             tif: TimeInForce::Ioc,
             post_only: false,
+            client_order_id: None,
         }))
     }
 

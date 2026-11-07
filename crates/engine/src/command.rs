@@ -73,6 +73,8 @@ pub struct NewOrder {
     pub tif: TimeInForce,
     /// Reject instead of trading if the order would cross on arrival. Only valid with GTC.
     pub post_only: bool,
+    /// The client's own ID for this order, for idempotent retries (docs/protocol.md §3).
+    pub client_order_id: Option<u64>,
 }
 
 /// One input to the engine.

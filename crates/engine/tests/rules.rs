@@ -83,6 +83,7 @@ impl Harness {
             qty,
             tif,
             post_only: false,
+            client_order_id: None,
         }))
     }
 
@@ -199,6 +200,7 @@ fn markets_are_created_once_and_must_exist() {
         qty: 1,
         tif: TimeInForce::Gtc,
         post_only: false,
+        client_order_id: None,
     }));
     assert_eq!(e, rejected(RejectReason::UnknownMarket));
 }
@@ -263,6 +265,7 @@ fn post_only_rests_or_is_rejected_and_needs_gtc() {
             qty: 1,
             tif,
             post_only: true,
+            client_order_id: None,
         })
     };
     assert_eq!(

@@ -4,8 +4,8 @@
 #![allow(clippy::unwrap_used)] // test helpers: a failure must stop the test
 
 use brier_engine::{
-    CancelReason, Command, Engine, Entry, EntryKind, Event, LedgerAccount, MAX_RESTING_ORDERS,
-    MarketState, NewOrder, RejectReason, SIGNUP_GRANT, Sequenced, TimeInForce,
+    CLIENT_ID_WINDOW, CancelReason, Command, Engine, Entry, EntryKind, Event, LedgerAccount,
+    MAX_RESTING_ORDERS, MarketState, NewOrder, RejectReason, SIGNUP_GRANT, Sequenced, TimeInForce,
 };
 use brier_types::{AccountId, Credits, MarketId, OrderId, Outcome, Seq, Side};
 
@@ -77,6 +77,7 @@ impl Harness {
             qty,
             tif,
             post_only: false,
+            client_order_id: None,
         }))
     }
 
@@ -580,4 +581,67 @@ fn an_unbalanced_entry_cannot_be_built() {
     )
     .unwrap();
     assert_eq!(e.legs().len(), 2, "zero legs are dropped");
+}
+
+fn with_id(account: AccountId, price: u8, tif: TimeInForce, client_order_id: u64) -> Command {
+    Command::Place(NewOrder {
+        account,
+        market: M,
+        side: Side::Buy,
+        price,
+        qty: 1,
+        tif,
+        post_only: false,
+        client_order_id: Some(client_order_id),
+    })
+}
+
+#[test]
+fn a_repeated_client_order_id_returns_the_original_order_and_trades_nothing() {
+    // docs/protocol.md §3: duplicates are answered with the original order ID.
+    let mut h = Harness::new();
+    let first = h.next_id();
+    assert!(matches!(
+        h.cmd(with_id(ALICE, 10, TimeInForce::Gtc, 42)).first(),
+        Some(Event::Accepted { .. })
+    ));
+    assert_eq!(
+        h.cmd(with_id(ALICE, 10, TimeInForce::Gtc, 42)),
+        vec![Event::Duplicate { original: first }]
+    );
+    // The same ID from another account is a different order.
+    assert!(matches!(
+        h.cmd(with_id(BOB, 10, TimeInForce::Gtc, 42)).first(),
+        Some(Event::Accepted { .. })
+    ));
+    // A rejected order does not use up its ID: the retry is placed.
+    assert_eq!(
+        h.cmd(with_id(ALICE, 0, TimeInForce::Gtc, 7)),
+        vec![Event::Rejected {
+            reason: RejectReason::InvalidPrice
+        }]
+    );
+    assert!(matches!(
+        h.cmd(with_id(ALICE, 10, TimeInForce::Gtc, 7)).first(),
+        Some(Event::Accepted { .. })
+    ));
+}
+
+#[test]
+fn the_client_id_window_forgets_the_oldest_beyond_its_size() {
+    let mut h = Harness::new();
+    let window = u64::try_from(CLIENT_ID_WINDOW).unwrap();
+    for id in 0..=window {
+        // IOC buys at 1 that cross nothing: accepted, then cancelled; nothing rests.
+        h.cmd(with_id(ALICE, 1, TimeInForce::Ioc, id));
+    }
+    // ID 0 was evicted by the 10,001st, so it is new again; ID 1 is still remembered.
+    assert!(matches!(
+        h.cmd(with_id(ALICE, 1, TimeInForce::Ioc, 0)).first(),
+        Some(Event::Accepted { .. })
+    ));
+    assert!(matches!(
+        h.cmd(with_id(ALICE, 1, TimeInForce::Ioc, 2)).first(),
+        Some(Event::Duplicate { .. })
+    ));
 }

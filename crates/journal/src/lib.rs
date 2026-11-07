@@ -7,7 +7,7 @@ mod crc;
 mod log;
 mod snapshot;
 
-pub use codec::{CodecError, decode, encode};
+pub use codec::{CodecError, FORMAT_VERSION, decode, encode};
 pub use crc::{Crc32c, crc32c};
 pub use log::{
     JournalError, JournalWriter, MAX_BATCH_BYTES, MAX_PAYLOAD, Recovered, SEGMENT_BYTES,

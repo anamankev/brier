@@ -60,6 +60,8 @@ enum WireCommand {
         qty: u32,
         tif: WireTif,
         post_only: bool,
+        #[serde(default)]
+        client_order_id: Option<u64>,
     },
     Cancel {
         account: u64,
@@ -151,6 +153,7 @@ fn to_command(w: WireCommand) -> Command {
             qty,
             tif,
             post_only,
+            client_order_id,
         } => Command::Place(NewOrder {
             account: AccountId::new(account),
             market: MarketId::new(market),
@@ -163,6 +166,7 @@ fn to_command(w: WireCommand) -> Command {
                 WireTif::Fok => TimeInForce::Fok,
             },
             post_only,
+            client_order_id,
         }),
         WireCommand::Cancel { account, order } => Command::Cancel {
             account: AccountId::new(account),
@@ -298,6 +302,9 @@ pub fn event_json(seq: u64, e: &Event) -> Value {
         }),
         Event::Amended { order, remaining } => {
             json!({"seq": seq, "ev": "amended", "order": order.get(), "remaining": remaining.contracts()})
+        }
+        Event::Duplicate { original } => {
+            json!({"seq": seq, "ev": "duplicate", "order": original.get()})
         }
         Event::Rejected { reason } => {
             json!({"seq": seq, "ev": "rejected", "reason": reject_name(reason)})

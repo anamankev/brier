@@ -11,12 +11,15 @@ use std::fmt;
 use brier_types::{AccountId, Credits, MarketId, OrderId, Price, Seq, Side};
 
 use crate::book::Book;
+use crate::client_ids::ClientIds;
 use crate::engine::Engine;
 use crate::ledger::{Account, Holding, Ledger};
 use crate::{EngineError, MarketState};
 
 /// Version of the snapshot body encoding. Bump on any change; keep decoding old versions.
-pub const SNAPSHOT_BODY_VERSION: u8 = 1;
+pub const SNAPSHOT_BODY_VERSION: u8 = 2;
+/// The first version, without client order ID windows; still restorable.
+const SNAPSHOT_BODY_V1: u8 = 1;
 
 /// Why a snapshot could not be restored.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,6 +114,8 @@ const ORDER_BYTES: usize = 8 + 8 + 1 + 4;
 const MARKET_MIN_BYTES: usize = 4 + 1 + 8 + 8 + 8;
 const ACCOUNT_BYTES: usize = 8 + 8;
 const HOLDING_BYTES: usize = 4 + 8 + 8 + 8;
+const CLIENT_WINDOW_MIN_BYTES: usize = 8 + 8;
+const CLIENT_ENTRY_BYTES: usize = 8 + 8;
 
 impl Engine {
     /// The whole engine state as canonical bytes, valid as of the last applied command
@@ -162,6 +167,15 @@ impl Engine {
             w.i64(h.position);
             w.i64(h.reserve.cents());
         }
+        w.len(self.client_ids.len());
+        for (account, window) in &self.client_ids {
+            w.u64(account.get());
+            w.len(window.len());
+            for (client_id, order) in window.entries() {
+                w.u64(client_id);
+                w.u64(order.get());
+            }
+        }
         Ok(w.0)
     }
 
@@ -172,7 +186,8 @@ impl Engine {
     /// [`RestoreError::Invalid`] if they describe a state that breaks an invariant.
     pub fn restore(body: &[u8]) -> Result<Self, RestoreError> {
         let mut r = Reader(body);
-        if r.u8()? != SNAPSHOT_BODY_VERSION {
+        let version = r.u8()?;
+        if version != SNAPSHOT_BODY_VERSION && version != SNAPSHOT_BODY_V1 {
             return Err(RestoreError::Malformed("unsupported snapshot version"));
         }
         let invalid = RestoreError::Invalid;
@@ -237,6 +252,19 @@ impl Engine {
                 .map_err(|_| RestoreError::Malformed("reserve overflow"))?;
             if ledger.holdings.insert((market, account), h).is_some() {
                 return Err(RestoreError::Malformed("duplicate holding"));
+            }
+        }
+        if version >= 2 {
+            for _ in 0..r.len(CLIENT_WINDOW_MIN_BYTES)? {
+                let account = AccountId::new(r.u64()?);
+                let mut window = ClientIds::default();
+                for _ in 0..r.len(CLIENT_ENTRY_BYTES)? {
+                    let client_id = r.u64()?;
+                    window.record(client_id, OrderId::new(r.u64()?));
+                }
+                if engine.client_ids.insert(account, window).is_some() {
+                    return Err(RestoreError::Malformed("duplicate client ID window"));
+                }
             }
         }
         if !r.0.is_empty() {

@@ -9,12 +9,14 @@
 //! fixed in `docs/protocol.md`, which the Python reference engine also implements.
 
 mod book;
+mod client_ids;
 mod command;
 mod engine;
 mod event;
 mod ledger;
 mod snapshot;
 
+pub use client_ids::CLIENT_ID_WINDOW;
 pub use command::{Command, MarketState, NewOrder, Sequenced, TimeInForce};
 pub use engine::{AccountView, Engine, EngineError, RestingOrder};
 pub use event::{CancelReason, Entry, EntryKind, Event, LedgerAccount, RejectReason, Trade};
