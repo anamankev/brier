@@ -304,6 +304,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "brier-rules"
+version = "1.0.0"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "brier-types"
 version = "1.0.0"
 dependencies = [

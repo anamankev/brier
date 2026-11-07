@@ -32,7 +32,7 @@ proposal ──> an admin confirms (four eyes: never the proposer) ──> dispu
 - As a result, the journal alone proves which rules a market was listed under and which evidence settled it. Anyone with the rules file and the evidence record can recompute both hashes.
 - The wire format, `docs/protocol.md`, the reference engine, the differential generator, and the fuzz targets change together.
 
-### Rulebook (`docs/api/rulebook.schema.json`, one TOML file per market in `markets/`)
+### Rulebook (`docs/rulebook.md`, `crates/rules`, one TOML file per market in `markets/`)
 Fields required by SPEC §7:
 - question, and the exact YES condition;
 - source: provider, series ID, URL;

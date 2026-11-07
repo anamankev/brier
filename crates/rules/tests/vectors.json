@@ -1,0 +1,1254 @@
+[
+ {
+  "name": "cpi_valid",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": null,
+  "canonical": "{\"condition\":{\"op\":\">\",\"threshold\":\"3.0\",\"transform\":\"pct_change_12m\"},\"market\":101,\"observation\":\"2026-09\",\"question\":\"Will the 12-month change in CPI-U for September 2026 be above 3.0%?\",\"revision\":\"first_release\",\"schedule\":{\"close\":\"2026-10-15T12:00:00Z\",\"deadline\":\"2026-12-15T12:30:00Z\",\"open\":\"2026-09-01T13:30:00Z\",\"release\":\"2026-10-15T12:30:00Z\"},\"schema\":1,\"source\":{\"provider\":\"bls\",\"series\":\"CUUR0000SA0\",\"url\":\"https://data.bls.gov/timeseries/CUUR0000SA0\"},\"title\":\"CPI inflation above 3.0% in September 2026\",\"void\":[\"no_value_by_deadline\",\"source_discontinued\"]}",
+  "sha256": "c78849a4dfb0c6012ebdd5fb46a9c16c18f5d0924d5577f268c5eec7e666c9da"
+ },
+ {
+  "name": "unrate_valid",
+  "input": {
+   "schema": 1,
+   "market": 102,
+   "title": "Unemployment at or above 4.5% in October 2026",
+   "question": "Will the October 2026 unemployment rate be at least 4.5%?",
+   "source": {
+    "provider": "bls",
+    "series": "LNS14000000",
+    "url": "https://data.bls.gov/timeseries/LNS14000000"
+   },
+   "observation": "2026-10",
+   "condition": {
+    "transform": "level",
+    "op": ">=",
+    "threshold": "4.5"
+   },
+   "schedule": {
+    "open": "2026-10-01T13:30:00Z",
+    "close": "2026-11-06T13:00:00Z",
+    "release": "2026-11-06T13:30:00Z",
+    "deadline": "2027-01-06T13:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ]
+  },
+  "error": null,
+  "canonical": "{\"condition\":{\"op\":\">=\",\"threshold\":\"4.5\",\"transform\":\"level\"},\"market\":102,\"observation\":\"2026-10\",\"question\":\"Will the October 2026 unemployment rate be at least 4.5%?\",\"revision\":\"first_release\",\"schedule\":{\"close\":\"2026-11-06T13:00:00Z\",\"deadline\":\"2027-01-06T13:30:00Z\",\"open\":\"2026-10-01T13:30:00Z\",\"release\":\"2026-11-06T13:30:00Z\"},\"schema\":1,\"source\":{\"provider\":\"bls\",\"series\":\"LNS14000000\",\"url\":\"https://data.bls.gov/timeseries/LNS14000000\"},\"title\":\"Unemployment at or above 4.5% in October 2026\",\"void\":[\"no_value_by_deadline\"]}",
+  "sha256": "9682d5dc42ab4dec5d7f82e978913dd8ec8918ba91b07266a339ca27e3a9d92e"
+ },
+ {
+  "name": "fomc_valid_release_before_effective_day",
+  "input": {
+   "schema": 1,
+   "market": 103,
+   "title": "Fed upper bound above 3.75% after December 2026",
+   "question": "Will the federal funds target range upper limit be above 3.75% on 17 December 2026?",
+   "source": {
+    "provider": "fred",
+    "series": "DFEDTARU",
+    "url": "https://fred.stlouisfed.org/series/DFEDTARU"
+   },
+   "observation": "2026-12-17",
+   "condition": {
+    "transform": "level",
+    "op": ">",
+    "threshold": "3.75"
+   },
+   "schedule": {
+    "open": "2026-11-01T14:00:00Z",
+    "close": "2026-12-16T18:55:00Z",
+    "release": "2026-12-16T19:00:00Z",
+    "deadline": "2027-01-16T19:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ]
+  },
+  "error": null,
+  "canonical": "{\"condition\":{\"op\":\">\",\"threshold\":\"3.75\",\"transform\":\"level\"},\"market\":103,\"observation\":\"2026-12-17\",\"question\":\"Will the federal funds target range upper limit be above 3.75% on 17 December 2026?\",\"revision\":\"first_release\",\"schedule\":{\"close\":\"2026-12-16T18:55:00Z\",\"deadline\":\"2027-01-16T19:00:00Z\",\"open\":\"2026-11-01T14:00:00Z\",\"release\":\"2026-12-16T19:00:00Z\"},\"schema\":1,\"source\":{\"provider\":\"fred\",\"series\":\"DFEDTARU\",\"url\":\"https://fred.stlouisfed.org/series/DFEDTARU\"},\"title\":\"Fed upper bound above 3.75% after December 2026\",\"void\":[\"no_value_by_deadline\"]}",
+  "sha256": "7769159ae5f0bcf408265bb5334cfdea9e6f3216c741a459eea3168cbd01e5d8"
+ },
+ {
+  "name": "dgs10_valid_close_at_period_start",
+  "input": {
+   "schema": 1,
+   "market": 104,
+   "title": "10-year yield below 4.00% on 31 December 2026",
+   "question": "Will the 10-year Treasury yield for 31 December 2026 be below 4.00%?",
+   "source": {
+    "provider": "fred",
+    "series": "DGS10",
+    "url": "https://fred.stlouisfed.org/series/DGS10"
+   },
+   "observation": "2026-12-31",
+   "condition": {
+    "transform": "level",
+    "op": "<",
+    "threshold": "4"
+   },
+   "schedule": {
+    "open": "2026-12-01T14:30:00Z",
+    "close": "2026-12-31T00:00:00Z",
+    "release": "2027-01-04T21:15:00Z",
+    "deadline": "2027-02-04T21:15:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ]
+  },
+  "error": null,
+  "canonical": "{\"condition\":{\"op\":\"<\",\"threshold\":\"4\",\"transform\":\"level\"},\"market\":104,\"observation\":\"2026-12-31\",\"question\":\"Will the 10-year Treasury yield for 31 December 2026 be below 4.00%?\",\"revision\":\"first_release\",\"schedule\":{\"close\":\"2026-12-31T00:00:00Z\",\"deadline\":\"2027-02-04T21:15:00Z\",\"open\":\"2026-12-01T14:30:00Z\",\"release\":\"2027-01-04T21:15:00Z\"},\"schema\":1,\"source\":{\"provider\":\"fred\",\"series\":\"DGS10\",\"url\":\"https://fred.stlouisfed.org/series/DGS10\"},\"title\":\"10-year yield below 4.00% on 31 December 2026\",\"void\":[\"no_value_by_deadline\"]}",
+  "sha256": "b226a90bde926fe6e3c925ee74ab4707267ec5da1bb280e2bbe41fe406aab2fd"
+ },
+ {
+  "name": "tmax_valid_non_ascii_title",
+  "input": {
+   "schema": 1,
+   "market": 105,
+   "title": "Central Park reaches 90 °F on 4 July 2027 ✓",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be at least 90 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": ">=",
+    "threshold": "90"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ]
+  },
+  "error": null,
+  "canonical": "{\"condition\":{\"op\":\">=\",\"threshold\":\"90\",\"transform\":\"level\"},\"market\":105,\"observation\":\"2027-07-04\",\"question\":\"Will the maximum temperature at Central Park on 4 July 2027 be at least 90 °F?\",\"revision\":\"first_release\",\"schedule\":{\"close\":\"2027-07-03T23:59:00Z\",\"deadline\":\"2027-08-05T00:00:00Z\",\"open\":\"2027-06-01T12:00:00Z\",\"release\":\"2027-07-06T00:00:00Z\"},\"schema\":1,\"source\":{\"provider\":\"noaa\",\"series\":\"USW00094728/TMAX\",\"url\":\"https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX\"},\"title\":\"Central Park reaches 90 °F on 4 July 2027 ✓\",\"void\":[\"no_value_by_deadline\"]}",
+  "sha256": "40da6bbb9201ea1bc00af76159eec66a65514c494b1c392c9c715902d27eb012"
+ },
+ {
+  "name": "unknown_field",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ],
+   "notes": "x"
+  },
+  "error": "malformed"
+ },
+ {
+  "name": "unknown_nested_field",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0",
+    "dataset": "x"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "malformed"
+ },
+ {
+  "name": "missing_field",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "malformed"
+ },
+ {
+  "name": "threshold_as_number",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": 3
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "malformed"
+ },
+ {
+  "name": "unknown_op",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": "==",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "malformed"
+ },
+ {
+  "name": "unknown_provider",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "yahoo",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "malformed"
+ },
+ {
+  "name": "schema_2",
+  "input": {
+   "schema": 2,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "unsupported_schema"
+ },
+ {
+  "name": "market_zero",
+  "input": {
+   "schema": 1,
+   "market": 0,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "market_id"
+ },
+ {
+  "name": "title_padded",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": " CPI",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "title"
+ },
+ {
+  "name": "title_too_long",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "title"
+ },
+ {
+  "name": "title_control_char",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI\nabove",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "title"
+ },
+ {
+  "name": "question_empty",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "question"
+ },
+ {
+  "name": "series_not_registered",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUSR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "unknown_series"
+ },
+ {
+  "name": "series_wrong_provider",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "fred",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "unknown_series"
+ },
+ {
+  "name": "url_mismatch",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://example.com/cpi"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "source_url"
+ },
+ {
+  "name": "transform_not_allowed",
+  "input": {
+   "schema": 1,
+   "market": 102,
+   "title": "Unemployment at or above 4.5% in October 2026",
+   "question": "Will the October 2026 unemployment rate be at least 4.5%?",
+   "source": {
+    "provider": "bls",
+    "series": "LNS14000000",
+    "url": "https://data.bls.gov/timeseries/LNS14000000"
+   },
+   "observation": "2026-10",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">=",
+    "threshold": "4.5"
+   },
+   "schedule": {
+    "open": "2026-10-01T13:30:00Z",
+    "close": "2026-11-06T13:00:00Z",
+    "release": "2026-11-06T13:30:00Z",
+    "deadline": "2027-01-06T13:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ]
+  },
+  "error": "transform"
+ },
+ {
+  "name": "threshold_too_precise",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.00"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "threshold"
+ },
+ {
+  "name": "threshold_leading_zero",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "03.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "threshold"
+ },
+ {
+  "name": "threshold_negative_zero",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "-0.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "threshold"
+ },
+ {
+  "name": "threshold_trailing_point",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3."
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "threshold"
+ },
+ {
+  "name": "threshold_plus_sign",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "+3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "threshold"
+ },
+ {
+  "name": "threshold_too_large",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "1000000"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "threshold"
+ },
+ {
+  "name": "observation_unpadded",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-9",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "observation"
+ },
+ {
+  "name": "observation_wrong_kind",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09-01",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "observation"
+ },
+ {
+  "name": "time_with_offset",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00+00:00",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "time"
+ },
+ {
+  "name": "time_fraction",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00.000Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "time"
+ },
+ {
+  "name": "close_equals_release",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:30:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "schedule_order"
+ },
+ {
+  "name": "open_after_close",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-10-15T12:10:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "schedule_order"
+ },
+ {
+  "name": "live_close_after_period_start",
+  "input": {
+   "schema": 1,
+   "market": 104,
+   "title": "10-year yield below 4.00% on 31 December 2026",
+   "question": "Will the 10-year Treasury yield for 31 December 2026 be below 4.00%?",
+   "source": {
+    "provider": "fred",
+    "series": "DGS10",
+    "url": "https://fred.stlouisfed.org/series/DGS10"
+   },
+   "observation": "2026-12-31",
+   "condition": {
+    "transform": "level",
+    "op": "<",
+    "threshold": "4"
+   },
+   "schedule": {
+    "open": "2026-12-01T14:30:00Z",
+    "close": "2026-12-31T15:00:00Z",
+    "release": "2027-01-04T21:15:00Z",
+    "deadline": "2027-02-04T21:15:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ]
+  },
+  "error": "close_after_observable"
+ },
+ {
+  "name": "release_inside_period",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-09-29T12:00:00Z",
+    "release": "2026-09-30T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "release_before_period_end"
+ },
+ {
+  "name": "deadline_too_far",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2027-01-16T12:30:01Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "deadline_too_far"
+ },
+ {
+  "name": "void_unsorted",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "source_discontinued",
+    "no_value_by_deadline"
+   ]
+  },
+  "error": "void_conditions"
+ },
+ {
+  "name": "void_repeated",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "no_value_by_deadline"
+   ]
+  },
+  "error": "void_conditions"
+ },
+ {
+  "name": "void_missing_deadline",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "source_discontinued"
+   ]
+  },
+  "error": "void_conditions"
+ }
+]
