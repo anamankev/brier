@@ -8,6 +8,8 @@ Collateral, positions, the resting-order limit, and kill switches are G2 (SPEC Â
 - **Order IDs:** an accepted order's ID equals the sequence number of the command that placed it.
 - **Sequence:** commands must arrive with gap-free sequence numbers starting at 1. A gap is an engine error that halts the engine. It is not a rejection.
 - **Event order within one command:** `accepted`, then each `trade` in match order, then at most one of `rested` or `cancelled` for the incoming order.
+- **Check order** (the first failing check names the rejection). Place: `unknown_market`, `market_not_open`, `invalid_price`, `invalid_quantity`, `invalid_order`, `post_only_would_cross`, `fok_unfillable`. Cancel: `unknown_order`. Amend: `unknown_order`, `market_not_open`, `invalid_quantity`, `invalid_amend`. Set state: `unknown_market`, `invalid_transition`. Create: `market_exists`.
+- **Closing a market** emits `market_state` first, then the `cancelled` events.
 - **Rejections** change no state:
   - `unknown_market`, `market_exists`, `market_not_open` (place or amend when the state is not Open);
   - `invalid_transition`, `invalid_order` (post-only without GTC), `invalid_price`, `invalid_quantity` (wire-level values out of range);

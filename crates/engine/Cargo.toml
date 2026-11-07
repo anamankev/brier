@@ -1,0 +1,17 @@
+[package]
+name = "brier-engine"
+description = "Deterministic price-time priority matching engine for binary contracts (SPEC §3)"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+brier-types = { path = "../types" }
+blake3 = "1.8"
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true
