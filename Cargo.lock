@@ -110,7 +110,7 @@ version = "1.0.0"
 dependencies = [
  "brier-engine",
  "brier-types",
- "serde",
+ "brier-wire",
  "serde_json",
 ]
 
@@ -119,6 +119,16 @@ name = "brier-types"
 version = "1.0.0"
 dependencies = [
  "proptest",
+]
+
+[[package]]
+name = "brier-wire"
+version = "1.0.0"
+dependencies = [
+ "brier-engine",
+ "brier-types",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

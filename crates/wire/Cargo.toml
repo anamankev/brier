@@ -1,0 +1,16 @@
+[package]
+name = "brier-wire"
+description = "The JSON wire format for commands and events (docs/protocol.md)"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+brier-engine = { path = "../engine" }
+brier-types = { path = "../types" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[lints]
+workspace = true
