@@ -6,7 +6,7 @@ CARGO ?= cargo
 UV_RUN := uv run --project services --locked
 PIP_AUDIT_VERSION := 2.10.1
 
-.PHONY: help setup env up down db-url check rust-check py-check private-check test-all audit differential-full bench crash gateway-bench dependency-age
+.PHONY: help setup env up down db-url check rust-check py-check private-check test-all audit differential-full bench crash gateway-bench dependency-age fuzz-campaign
 
 SEED ?= 1
 
@@ -60,6 +60,9 @@ bench: ## The registered P1/P2 engine benchmark (docs/notes/performance.md); plu
 	-sw_vers -productVersion  # macOS only; ignored elsewhere
 	-pmset -g batt | head -1  # macOS power source; ignored elsewhere
 	./target/release/brier-bench
+
+fuzz-campaign: ## Every fuzz target for 1 hour, 3 at a time (needs nightly-2026-10-20 and cargo-fuzz); plug in first
+	sh scripts/fuzz_campaign.sh
 
 dependency-age: ## Every locked dependency was published at least 14 days ago (network: crates.io, PyPI)
 	python3 scripts/dependency_age.py

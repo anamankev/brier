@@ -1,6 +1,6 @@
 # Gateway latency and fan-out (P3, P3b, P4)
 
-Status: REGISTERED (hypotheses committed before any gateway code exists)
+Status: COMPLETE. Registered before any gateway code (`49aed1a`); measured at `0f9504f` plus the power and swap checks.
 
 ## 1. Questions
 1. How long does an order take from leaving the client to the client receiving its acknowledgment, through the real gateway, core, journal, and a full device flush per batch?
@@ -43,7 +43,41 @@ Code `62da8ff`, macOS 26.6, rustc 1.99.1, about 10 GB of swap already in use by 
 - Each run sent 600,000 orders in the measured window (10,000 per second, as scheduled). About 22% were rejected for insufficient collateral: P1's mix rests orders faster than it cancels them, so accounts run out of free credits. Rejections are sequenced and acknowledged like any command, so they are part of the latency sample.
 - Run 2 was disturbed by something outside the benchmark (its p99 tripled while the schedule lag stayed normal). With swap that heavy, paging is the first suspect; the registered run will record swap before and after.
 
+### Attempt 2: the registered run
+Command: `make gateway-bench`. macOS 26.6, rustc 1.99.1, release build, AC power at the start and end of every run (checked by the harness), PostgreSQL 16.15 in Docker with the follower running. Other applications held about 9.2 GB of swap throughout (9.36 GB before run 1, 9.19 GB after run 3), which was not ideal but steady.
+
+| Run | Order to ack p50 | p90 | p99 | p99.9 | max | Schedule lag p99 | Fan-out p50 | p99 | p99.9 |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 4.75 ms | 6.06 ms | 7.18 ms | 21.0 ms | 36.0 ms | 1.89 ms | 5.67 ms | 13.1 ms | 25.4 ms |
+| 2 | 4.73 ms | 5.79 ms | 17.4 ms | 297 ms | 353 ms | 1.99 ms | 7.38 ms | 20.1 ms | 51.2 ms |
+| 3 | 4.74 ms | 6.08 ms | 8.18 ms | 122 ms | 176 ms | 1.92 ms | 8.01 ms | 36.9 ms | 87.1 ms |
+| **Pooled** | 4.74 ms | 6.06 ms | **9.14 ms** | 179 ms | 353 ms | | 6.88 ms | **22.9 ms** | 68.2 ms |
+
+- Orders: 600,000 per run in the measured window, exactly the scheduled 10,000 per second. Outcomes per run: about 241,500 resting, 195,500 cancelled, 17,600 filled by IOC, 130,000 rejected for insufficient collateral (P1's mix rests faster than it cancels, so accounts run out of free credits), and 15,000 cancels of orders that had already filled (`unknown_order`). Every outcome is a sequenced, durable command and is in the sample.
+- Fan-out: about 33.4 million deltas received per run across 1,000 subscribers (about 557,000 per second).
+- The schedule lag stayed under 2 ms at p99 in every run, so the client kept to the open-loop schedule.
+
 ## 5. Verdicts
+- **P3 (p99 ≤ 5 ms): refuted.** Pooled p99 9.14 ms. As predicted at registration: the median alone (4.74 ms) is above one durable sync (3.95 ms), because an order waits for the batch in progress before its own.
+- **P3b (p99 ≤ 9.9 ms): supported**, narrowly (9.14 ms). The per-run p99s were 7.2, 17.4, and 8.2 ms; run 2's tail (p99.9 297 ms) is a stall outside the order path, discussed below.
+- **P4 (p99 ≤ 10 ms): refuted.** Pooled p99 22.9 ms, and even the median (6.9 ms) is far above what the publisher's own work takes.
+
+### Diagnosis of the P4 miss (after the verdicts; not registered)
+`brier-gateway-bench --diagnose N`: one run, 5 s warm-up, 20 s measured, the same order load.
+
+| Subscribers | Fan-out p50 | p99 | p99.9 | Deltas received |
+|---|---|---|---|---|
+| 1 | 0.07 ms | 0.14 ms | 0.15 ms | 7,879 |
+| 100 | 0.45 ms | 0.88 ms | 1.01 ms | 776,600 |
+| 300 | 1.29 ms | 2.89 ms | 4.80 ms | 2,354,700 |
+| 1,000 (registered run, pooled) | 6.88 ms | 22.9 ms | 68.2 ms | 100,339,134 |
+
+- The median grows linearly with the number of subscribers, about 4.3 µs per subscriber, so each update reaches its last subscriber about 1,000 × 4.3 µs after its first. Below 300 subscribers P4's bound holds easily.
+- A 5 s `sample` of the process at 1,000 subscribers (which itself disturbed that run, so its latencies are not used) puts the busy time in system calls: `sendto` 7,306 samples, `recvfrom` 2,356, buffer zeroing 2,844, against a few hundred for the gateway's own code (JSON, routing, the book). The gateway writes every message to every subscriber with its own `send`, which is one system call each: about 557,000 a second here, and the clients, on the same machine, make as many reads.
+- Two other findings from the same data: order latency rises while fan-out runs (p99 7.2 ms alone, 23.8 to 66.2 ms during fan-out in the registered runs), because orders and fan-out share the gateway's 4 worker threads; and the registered runs had stalls of 100-350 ms in the order path (run 2's p99.9) that the fan-out load makes worse.
+
+### Follow-up hypothesis (registered here before the change is made)
+- **P4-coalesced**: if each connection writes all its queued messages and then flushes once, instead of one system call per message, then P4's pooled p99 over 3 registered-length runs is ≤ 10 ms. Refuted if it exceeds 10 ms. Order latency during fan-out is reported beside it.
 
 ## 6. Interpretation
 

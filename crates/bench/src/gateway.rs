@@ -528,8 +528,24 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
     let (mut p3, mut p4) = (histogram(), histogram());
-    let dry_run = std::env::args().any(|a| a == "--dry-run");
-    let plan = if dry_run { DRY_RUN } else { REGISTERED };
+    let args: Vec<String> = std::env::args().collect();
+    // `--diagnose N`: one shorter run with N subscribers, for explaining a result; not a result.
+    let diagnose = args
+        .iter()
+        .position(|a| a == "--diagnose")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|n| n.parse::<usize>().ok());
+    let dry_run = args.iter().any(|a| a == "--dry-run") || diagnose.is_some();
+    let plan = match diagnose {
+        Some(subscribers) => Plan {
+            runs: 1,
+            subscribers,
+            warmup: Duration::from_secs(5),
+            measured: Duration::from_secs(20),
+        },
+        None if dry_run => DRY_RUN,
+        None => REGISTERED,
+    };
     if dry_run {
         eprintln!("dry run: checks the harness only; the output below is not a result");
     } else if on_battery() {
