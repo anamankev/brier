@@ -21,6 +21,7 @@ use axum::http::{HeaderMap, HeaderValue, Method};
 use axum::response::Response;
 use brier_engine::Command;
 use brier_types::{AccountId, OrderId};
+use futures_util::SinkExt;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value, json};
@@ -55,6 +56,9 @@ pub const SERVER_MESSAGES: &[&str] = &[
     "order",
     "fill",
 ];
+
+/// Most queued messages written with one flush. Bounds how long the first waits for the rest.
+const MAX_COALESCED: usize = 64;
 
 /// Largest client message. The largest legitimate one (a `place`) is under 300 bytes.
 pub const MAX_MESSAGE_BYTES: usize = 8 * 1_024;
@@ -133,7 +137,7 @@ async fn connection(s: Arc<AppState>, mut socket: WebSocket, ip: IpAddr) {
                 Some(Ok(_)) => {} // ping and pong: answered by the library
             },
             Some(message) = outbox.recv() => {
-                if socket.send(Message::Text(message)).await.is_err() {
+                if write_queued(&mut socket, message, &mut outbox).await.is_err() {
                     break;
                 }
             }
@@ -154,6 +158,21 @@ async fn connection(s: Arc<AppState>, mut socket: WebSocket, ip: IpAddr) {
             })))
             .await;
     }
+}
+
+/// Write `first` and whatever else is already queued, then flush once: one system call for
+/// the lot instead of one per message (docs/notes/gateway.md, P4-coalesced).
+async fn write_queued(
+    socket: &mut WebSocket,
+    first: Utf8Bytes,
+    outbox: &mut mpsc::Receiver<Utf8Bytes>,
+) -> Result<(), axum::Error> {
+    socket.feed(Message::Text(first)).await?;
+    for _ in 1..MAX_COALESCED {
+        let Ok(next) = outbox.try_recv() else { break };
+        socket.feed(Message::Text(next)).await?;
+    }
+    socket.flush().await
 }
 
 fn parse<T: DeserializeOwned>(body: Map<String, Value>) -> Result<T, ApiError> {
