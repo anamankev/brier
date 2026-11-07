@@ -65,9 +65,9 @@ fn command(max_id: u64) -> impl Strategy<Value = Command> {
         25 => (account.clone(), order.clone()).prop_map(|(account, order)| Command::Cancel { account, order }),
         8 => (account, order, qty()).prop_map(|(account, order, qty)| Command::Amend { account, order, qty }),
         3 => (market.clone(), state()).prop_map(|(market, state)| Command::SetState { market, state }),
-        1 => (1u32..=4).prop_map(|m| Command::CreateMarket { market: MarketId::new(m) }),
+        1 => (1u32..=4).prop_map(|m| Command::CreateMarket { market: MarketId::new(m), rules_hash: None }),
         2 => (market.clone(), prop_oneof![Just(Outcome::Yes), Just(Outcome::No), Just(Outcome::Void)])
-            .prop_map(|(market, outcome)| Command::Settle { market, outcome }),
+            .prop_map(|(market, outcome)| Command::Settle { market, outcome, evidence_hash: None }),
         1 => (prop::option::of((1u64..=5).prop_map(AccountId::new)), prop::option::of(market))
             .prop_map(|(account, market)| Command::CancelAll { account, market }),
         1 => Just(Command::HaltAll),
@@ -88,6 +88,7 @@ fn stream() -> impl Strategy<Value = Vec<Command>> {
             for m in 1..=3 {
                 all.push(Command::CreateMarket {
                     market: MarketId::new(m),
+                    rules_hash: None,
                 });
                 all.push(Command::SetState {
                     market: MarketId::new(m),

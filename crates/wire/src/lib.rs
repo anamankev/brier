@@ -8,7 +8,7 @@ use brier_engine::{
     CancelReason, Command, Engine, EngineError, EntryKind, Event, LedgerAccount, MarketState,
     NewOrder, RejectReason, TimeInForce,
 };
-use brier_types::{AccountId, Credits, MarketId, OrderId, Outcome, Side};
+use brier_types::{AccountId, Credits, Digest, MarketId, OrderId, Outcome, Side};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -32,7 +32,7 @@ impl std::error::Error for WireError {}
 /// wire type (docs/protocol.md §1).
 pub fn parse_command(line: &str) -> Result<(Option<u64>, Command), WireError> {
     let parsed: Line = serde_json::from_str(line).map_err(|e| WireError(e.to_string()))?;
-    Ok((parsed.seq, to_command(parsed.command)))
+    Ok((parsed.seq, to_command(parsed.command)?))
 }
 
 #[derive(Debug, Deserialize)]
@@ -42,11 +42,13 @@ struct Line {
     command: WireCommand,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 enum WireCommand {
     CreateMarket {
         market: u32,
+        #[serde(default)]
+        rules_hash: Option<String>,
     },
     SetState {
         market: u32,
@@ -78,6 +80,8 @@ enum WireCommand {
     Settle {
         market: u32,
         outcome: WireOutcome,
+        #[serde(default)]
+        evidence_hash: Option<String>,
     },
     CancelAll {
         #[serde(default)]
@@ -129,10 +133,21 @@ const fn side(s: WireSide) -> Side {
     }
 }
 
-fn to_command(w: WireCommand) -> Command {
-    match w {
-        WireCommand::CreateMarket { market } => Command::CreateMarket {
+/// An optional digest field: 64 lowercase hex digits (docs/protocol.md §1).
+fn digest(field: &str, value: Option<String>) -> Result<Option<Digest>, WireError> {
+    value
+        .map(|s| {
+            Digest::from_hex(&s)
+                .ok_or_else(|| WireError(format!("{field} is not 64 lowercase hex digits")))
+        })
+        .transpose()
+}
+
+fn to_command(w: WireCommand) -> Result<Command, WireError> {
+    Ok(match w {
+        WireCommand::CreateMarket { market, rules_hash } => Command::CreateMarket {
             market: MarketId::new(market),
+            rules_hash: digest("rules_hash", rules_hash)?,
         },
         WireCommand::SetState { market, state } => Command::SetState {
             market: MarketId::new(market),
@@ -184,20 +199,33 @@ fn to_command(w: WireCommand) -> Command {
         WireCommand::OpenAccount { account } => Command::OpenAccount {
             account: AccountId::new(account),
         },
-        WireCommand::Settle { market, outcome } => Command::Settle {
+        WireCommand::Settle {
+            market,
+            outcome,
+            evidence_hash,
+        } => Command::Settle {
             market: MarketId::new(market),
             outcome: match outcome {
                 WireOutcome::Yes => Outcome::Yes,
                 WireOutcome::No => Outcome::No,
                 WireOutcome::Void => Outcome::Void,
             },
+            evidence_hash: digest("evidence_hash", evidence_hash)?,
         },
         WireCommand::CancelAll { account, market } => Command::CancelAll {
             account: account.map(AccountId::new),
             market: market.map(MarketId::new),
         },
         WireCommand::HaltAll => Command::HaltAll,
+    })
+}
+
+/// Add `key: hex` to an event object when the digest is present (docs/protocol.md §6).
+fn with_digest(mut v: Value, key: &str, d: Option<Digest>) -> Value {
+    if let (Some(d), Some(map)) = (d, v.as_object_mut()) {
+        map.insert(key.to_owned(), Value::String(d.to_hex()));
     }
+    v
 }
 
 /// Wire name of an outcome.
@@ -286,9 +314,11 @@ pub const fn reject_name(r: RejectReason) -> &'static str {
 #[must_use]
 pub fn event_json(seq: u64, e: &Event) -> Value {
     match *e {
-        Event::MarketCreated { market } => {
-            json!({"seq": seq, "ev": "market_created", "market": market.get()})
-        }
+        Event::MarketCreated { market, rules_hash } => with_digest(
+            json!({"seq": seq, "ev": "market_created", "market": market.get()}),
+            "rules_hash",
+            rules_hash,
+        ),
         Event::MarketStateChanged { market, state } => {
             json!({"seq": seq, "ev": "market_state", "market": market.get(), "state": state_name(state)})
         }
@@ -333,9 +363,15 @@ pub fn event_json(seq: u64, e: &Event) -> Value {
         } => json!({
             "seq": seq, "ev": "reserved", "account": account.get(), "market": market.get(), "amount": amount.cents(),
         }),
-        Event::Settled { market, outcome } => {
-            json!({"seq": seq, "ev": "settled", "market": market.get(), "outcome": outcome_name(outcome)})
-        }
+        Event::Settled {
+            market,
+            outcome,
+            evidence_hash,
+        } => with_digest(
+            json!({"seq": seq, "ev": "settled", "market": market.get(), "outcome": outcome_name(outcome)}),
+            "evidence_hash",
+            evidence_hash,
+        ),
     }
 }
 
@@ -420,5 +456,57 @@ pub fn tif_from_name(name: &str) -> Option<TimeInForce> {
         "ioc" => Some(TimeInForce::Ioc),
         "fok" => Some(TimeInForce::Fok),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const HEX: &str = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+
+    #[test]
+    fn hashes_are_optional_lowercase_hex() {
+        let (_, plain) = parse_command(r#"{"cmd":"create_market","market":3}"#).unwrap();
+        assert_eq!(
+            plain,
+            Command::CreateMarket {
+                market: MarketId::new(3),
+                rules_hash: None
+            }
+        );
+        let line =
+            format!(r#"{{"cmd":"settle","market":3,"outcome":"no","evidence_hash":"{HEX}"}}"#);
+        let (_, settle) = parse_command(&line).unwrap();
+        let Command::Settle { evidence_hash, .. } = settle else {
+            unreachable!()
+        };
+        assert_eq!(evidence_hash.map(|d| d.to_hex()), Some(HEX.to_owned()));
+        for bad in [HEX.to_uppercase(), HEX[1..].to_owned(), format!("{HEX}0")] {
+            let line = format!(r#"{{"cmd":"create_market","market":3,"rules_hash":"{bad}"}}"#);
+            assert!(parse_command(&line).is_err(), "{bad}");
+        }
+        assert!(parse_command(r#"{"cmd":"create_market","market":3,"rules_hash":7}"#).is_err());
+    }
+
+    #[test]
+    fn events_carry_a_hash_only_when_the_command_had_one() {
+        let rules_hash = Digest::from_hex(HEX);
+        let market = MarketId::new(3);
+        assert_eq!(
+            event_json(1, &Event::MarketCreated { market, rules_hash }),
+            json!({"seq": 1, "ev": "market_created", "market": 3, "rules_hash": HEX})
+        );
+        assert_eq!(
+            event_json(
+                2,
+                &Event::Settled {
+                    market,
+                    outcome: Outcome::Void,
+                    evidence_hash: None
+                }
+            ),
+            json!({"seq": 2, "ev": "settled", "market": 3, "outcome": "void"})
+        );
     }
 }

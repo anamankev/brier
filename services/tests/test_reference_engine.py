@@ -248,3 +248,28 @@ def test_collateral_is_checked_against_available_cash() -> None:
     assert s.send(
         "place", account=1, market=1, side="buy", price=1, qty=1, tif="ioc", post_only=False
     ) == [{"ev": "rejected", "reason": "insufficient_collateral"}]
+
+
+HEX = "00112233445566778899aabbccddeeff" * 2
+
+
+def test_rules_and_evidence_hashes_pass_through() -> None:
+    s = Session()
+    assert s.send("create_market", market=1, rules_hash=HEX) == [
+        {"ev": "market_created", "market": 1, "rules_hash": HEX}
+    ]
+    # A rejected listing echoes nothing.
+    assert s.send("create_market", market=1, rules_hash=HEX) == [
+        {"ev": "rejected", "reason": "market_exists"}
+    ]
+    s.send("set_state", market=1, state="closed")
+    assert s.send("settle", market=1, outcome="no", evidence_hash=HEX) == [
+        {"ev": "settled", "market": 1, "outcome": "no", "evidence_hash": HEX}
+    ]
+
+
+@pytest.mark.parametrize("bad", [HEX.upper(), HEX[1:], HEX + "0", 7, "g" * 64, ""])
+def test_hashes_must_be_64_lowercase_hex_digits(bad: object) -> None:
+    engine = ReferenceEngine()
+    with pytest.raises(MalformedCommandError):
+        engine.apply({"seq": 1, "cmd": "create_market", "market": 1, "rules_hash": bad})

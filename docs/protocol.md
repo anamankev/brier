@@ -11,6 +11,7 @@ This document is current. The gate plans in `docs/gates/` record how each part w
 - **Sequence:** every command carries `seq`. The first is 1, and each next one is exactly one more.
 - **Order ID:** an accepted order's ID is the `seq` of the command that placed it.
 - **Client order ID:** optional on `place`, a u64 chosen by the client (see §3).
+- **Digest:** a SHA-256 hash, written as exactly 64 lowercase hex digits; any other spelling is malformed. Optional on `create_market` (`rules_hash`, of the market's canonical rulebook, `docs/rulebook.md`) and on `settle` (`evidence_hash`, of the evidence record that decided the outcome). The engine never computes, checks, or stores a digest: it copies it into the command's success event, and the journal keeps it with the command. Snapshots and the state hash do not include digests.
 - **Wire values outside their wire type** (a price of 300, a missing field, an unknown command) are malformed input. They stop the replay tool (exit 2) and are not rejections.
 
 ## 2. Halting
@@ -23,12 +24,12 @@ The first failing check names the rejection. A rejected command changes nothing.
 | Command | Fields | Checks, in order | Effect |
 |---|---|---|---|
 | `open_account` | account | `account_exists` | Grants `SIGNUP_GRANT` = 1,000,000 from issuance |
-| `create_market` | market | `market_exists` | Lists the market in `pre_open` with escrow 0 |
+| `create_market` | market, rules_hash? | `market_exists` | Lists the market in `pre_open` with escrow 0 |
 | `set_state` | market, state | `unknown_market`, `invalid_transition` | Changes state; entering `closed` cancels every resting order in the market |
 | `place` | account, market, side, price, qty, tif, post_only, client_order_id? | `unknown_market`, `unknown_account`, then `duplicate` (not a rejection; below), `market_not_open`, `invalid_price`, `invalid_quantity`, `invalid_order`, `post_only_would_cross`, `fok_unfillable`, `too_many_orders`, `insufficient_collateral` | Matches, then rests (GTC) or cancels the remainder (IOC) |
 | `cancel` | account, order | `unknown_order` | Cancels the order |
 | `amend` | account, order, qty | `unknown_order`, `market_not_open`, `invalid_quantity`, `invalid_amend` | Reduces the remaining quantity; keeps time priority |
-| `settle` | market, outcome (`yes`, `no`, `void`) | `unknown_market`, `invalid_transition` (the market must be `closed`) | Pays out every position; the market becomes `resolved` or `voided` |
+| `settle` | market, outcome (`yes`, `no`, `void`), evidence_hash? | `unknown_market`, `invalid_transition` (the market must be `closed`) | Pays out every position; the market becomes `resolved` or `voided` |
 | `cancel_all` | account?, market? | `unknown_account`, `unknown_market` | Cancels every matching resting order; with neither field, all of them |
 | `halt_all` | none | none | Every `open` market becomes `halted` |
 
@@ -79,7 +80,7 @@ Every event carries the `seq` of its command and an `ev` field.
 | `ev` | Fields |
 |---|---|
 | `account_opened` | account, cash |
-| `market_created` | market |
+| `market_created` | market, rules_hash (only if the command had one) |
 | `market_state` | market, state |
 | `accepted` | order |
 | `trade` | market, maker, taker, maker_account, taker_account, taker_side, price, qty |
@@ -89,7 +90,7 @@ Every event carries the `seq` of its command and an `ev` field.
 | `cancelled` | order, remaining, reason (`user`, `ioc_remainder`, `self_trade`, `market_closed`, `kill_switch`) |
 | `rejected` | reason |
 | `duplicate` | order (the original order with that client order ID) |
-| `settled` | market, outcome |
+| `settled` | market, outcome, evidence_hash (only if the command had one) |
 | `reserved` | account, market, amount (the new reserve) |
 
 - **Ledger entries:** `legs` is a list of `[ledger_account, amount]`, with ledger accounts `cash:<id>`, `escrow:<id>`, and `issuance`. Zero legs are left out and the legs sum to zero. Leg order: grant `[issuance, cash]`; trade `[buyer cash, seller cash, escrow]`; settle `[escrow, cash]`. These are the only three entry kinds.

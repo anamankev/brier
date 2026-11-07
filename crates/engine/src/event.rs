@@ -1,4 +1,4 @@
-use brier_types::{AccountId, Credits, MarketId, OrderId, Outcome, Price, Quantity, Side};
+use brier_types::{AccountId, Credits, Digest, MarketId, OrderId, Outcome, Price, Quantity, Side};
 
 use crate::{EngineError, MarketState};
 
@@ -199,6 +199,8 @@ pub enum Event {
     MarketCreated {
         /// The market.
         market: MarketId,
+        /// The command's rules hash.
+        rules_hash: Option<Digest>,
     },
     /// A market changed state.
     MarketStateChanged {
@@ -272,6 +274,8 @@ pub enum Event {
         market: MarketId,
         /// How it settled.
         outcome: Outcome,
+        /// The command's evidence hash.
+        evidence_hash: Option<Digest>,
     },
 }
 

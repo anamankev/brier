@@ -20,6 +20,7 @@ Run: ``python -m brier_services.differential --binary target/release/brier-repla
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import queue
 import random
@@ -35,6 +36,7 @@ from typing import IO, Any
 
 from brier_services.reference_engine import MAX_RESTING_ORDERS, ReferenceEngine
 
+HASH_FIELDS = {"create_market": "rules_hash", "settle": "evidence_hash"}
 BUSY_ACCOUNTS = 4  # few busy accounts, so the same account often meets itself (self-trade)
 BURST_EVERY = 1_000_000  # a resting-order-limit burst every million commands
 BURST_AT = 2_500  # the first burst starts after this many commands
@@ -161,6 +163,12 @@ class StreamGenerator:
     def _emit(self, cmd: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         self.seq += 1
         cmd = {"seq": self.seq, **cmd}
+        # Three in four listings and settlements carry a hash (G5: rules and evidence pinned in
+        # the journal). It is derived from the command, not drawn from the generator's random
+        # stream, so adding it left every other command of every seed unchanged.
+        field = HASH_FIELDS.get(cmd["cmd"])
+        if field is not None and self.seq % 4 != 0:
+            cmd[field] = hashlib.sha256(json.dumps(cmd, sort_keys=True).encode()).hexdigest()
         events = self.engine.apply(cmd)
         self._observe(cmd, events)
         return cmd, events

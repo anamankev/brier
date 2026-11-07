@@ -82,6 +82,17 @@ def test_generated_streams_exercise_every_outcome() -> None:
     assert kinds == {"grant", "trade", "settle"}
 
 
+def test_listings_and_settlements_carry_hashes_mostly() -> None:
+    hashed = {"create_market": [0, 0], "settle": [0, 0]}
+    for cmd in generate(FAST_SEEDS[0], FAST_COMMANDS):
+        if cmd["cmd"] in hashed:
+            has = "rules_hash" in cmd or "evidence_hash" in cmd
+            hashed[cmd["cmd"]][has] += 1
+    for kind, (without, with_hash) in hashed.items():
+        assert without > 0, kind
+        assert with_hash > without, kind
+
+
 def test_generation_is_deterministic_in_the_seed() -> None:
     assert list(generate(7, 2_000)) == list(generate(7, 2_000))
     assert list(generate(7, 2_000)) != list(generate(8, 2_000))

@@ -7,7 +7,7 @@ use brier_engine::{
     CancelReason, Command, Engine, EngineError, Event, MarketState, NewOrder, RejectReason,
     Sequenced, TimeInForce, Trade,
 };
-use brier_types::{AccountId, MarketId, OrderId, Outcome, Price, Quantity, Seq, Side};
+use brier_types::{AccountId, Digest, MarketId, OrderId, Outcome, Price, Quantity, Seq, Side};
 
 const M: MarketId = MarketId::new(1);
 const ALICE: AccountId = AccountId::new(1);
@@ -35,7 +35,10 @@ impl Harness {
         for account in [ALICE, BOB, CAROL] {
             h.cmd(Command::OpenAccount { account });
         }
-        h.cmd(Command::CreateMarket { market: M });
+        h.cmd(Command::CreateMarket {
+            market: M,
+            rules_hash: None,
+        });
         h.cmd(Command::SetState {
             market: M,
             state: MarketState::Open,
@@ -140,7 +143,10 @@ fn a_sequence_gap_halts_the_engine_for_good() {
     let mut out = Vec::new();
     let gap = Sequenced {
         seq: Seq::from_raw(2),
-        command: Command::CreateMarket { market: M },
+        command: Command::CreateMarket {
+            market: M,
+            rules_hash: None,
+        },
     };
     let err = engine.apply(&gap, &mut out).unwrap_err();
     assert_eq!(
@@ -154,7 +160,10 @@ fn a_sequence_gap_halts_the_engine_for_good() {
     // SPEC §4.3: once halted, even a correctly sequenced command is refused.
     let next = Sequenced {
         seq: Seq::FIRST,
-        command: Command::CreateMarket { market: M },
+        command: Command::CreateMarket {
+            market: M,
+            rules_hash: None,
+        },
     };
     assert_eq!(
         engine.apply(&next, &mut out),
@@ -177,11 +186,20 @@ fn a_sequence_gap_halts_the_engine_for_good() {
 fn markets_are_created_once_and_must_exist() {
     let mut h = Harness::new();
     assert_eq!(
-        h.cmd(Command::CreateMarket { market: M }),
-        vec![Event::MarketCreated { market: M }]
+        h.cmd(Command::CreateMarket {
+            market: M,
+            rules_hash: None
+        }),
+        vec![Event::MarketCreated {
+            market: M,
+            rules_hash: None
+        }]
     );
     assert_eq!(
-        h.cmd(Command::CreateMarket { market: M }),
+        h.cmd(Command::CreateMarket {
+            market: M,
+            rules_hash: None
+        }),
         rejected(RejectReason::MarketExists)
     );
     let other = MarketId::new(9);
@@ -209,7 +227,10 @@ fn markets_are_created_once_and_must_exist() {
 fn orders_need_an_open_market_and_that_check_comes_first() {
     let mut h = Harness::new();
     h.cmd(Command::OpenAccount { account: ALICE });
-    h.cmd(Command::CreateMarket { market: M });
+    h.cmd(Command::CreateMarket {
+        market: M,
+        rules_hash: None,
+    });
     // PreOpen, with an invalid price too: market_not_open is checked first.
     assert_eq!(
         h.order(ALICE, Side::Buy, 0, 1, TimeInForce::Gtc),
@@ -579,11 +600,13 @@ fn closing_cancels_every_resting_order_in_ascending_id_after_the_state_event() {
     assert_eq!(
         h.cmd(Command::Settle {
             market: M,
-            outcome: Outcome::Yes
+            outcome: Outcome::Yes,
+            evidence_hash: None
         }),
         vec![Event::Settled {
             market: M,
-            outcome: Outcome::Yes
+            outcome: Outcome::Yes,
+            evidence_hash: None
         }]
     );
     assert_eq!(h.engine.market_state(M), Some(MarketState::Resolved));
@@ -607,4 +630,63 @@ fn the_state_hash_tracks_the_book_exactly() {
         build(false).engine.state_hash().unwrap(),
         build(true).engine.state_hash().unwrap()
     );
+}
+
+#[test]
+fn rules_and_evidence_hashes_pass_through_and_change_no_state() {
+    // G5 plan: the engine carries both hashes into its events and stores neither, so the
+    // snapshot and the state hash are the same with or without them.
+    let rules = Digest::new([0x11; 32]);
+    let evidence = Digest::new([0x22; 32]);
+    let run = |hashed: bool| {
+        let mut engine = Engine::new();
+        let mut events = Vec::new();
+        let commands = [
+            Command::CreateMarket {
+                market: M,
+                rules_hash: hashed.then_some(rules),
+            },
+            Command::SetState {
+                market: M,
+                state: MarketState::Closed,
+            },
+            Command::Settle {
+                market: M,
+                outcome: Outcome::No,
+                evidence_hash: hashed.then_some(evidence),
+            },
+        ];
+        for (i, command) in commands.into_iter().enumerate() {
+            let cmd = Sequenced {
+                seq: Seq::from_raw(u64::try_from(i).unwrap() + 1),
+                command,
+            };
+            engine.apply(&cmd, &mut events).unwrap();
+        }
+        (
+            events,
+            engine.state_hash().unwrap(),
+            engine.snapshot().unwrap(),
+        )
+    };
+    let (with, with_hash, with_snapshot) = run(true);
+    let (without, without_hash, without_snapshot) = run(false);
+    assert_eq!(
+        with.first(),
+        Some(&Event::MarketCreated {
+            market: M,
+            rules_hash: Some(rules)
+        })
+    );
+    assert_eq!(
+        with.last(),
+        Some(&Event::Settled {
+            market: M,
+            outcome: Outcome::No,
+            evidence_hash: Some(evidence)
+        })
+    );
+    assert_eq!(with.len(), without.len());
+    assert_eq!(with_hash, without_hash);
+    assert_eq!(with_snapshot, without_snapshot);
 }

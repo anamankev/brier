@@ -79,6 +79,20 @@ def _optional_int_field(cmd: Mapping[str, Any], name: str, maximum: int) -> int 
     return None if cmd.get(name) is None else _int_field(cmd, name, maximum)
 
 
+HEX_DIGITS: Final = frozenset("0123456789abcdef")
+
+
+def _optional_hash_field(cmd: Mapping[str, Any], name: str) -> str | None:
+    """An optional SHA-256 digest: exactly 64 lowercase hex digits (docs/protocol.md §1)."""
+    value = cmd.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, str) or len(value) != 64 or not set(value) <= HEX_DIGITS:
+        msg = f"field {name!r} must be 64 lowercase hex digits, got {value!r}"
+        raise MalformedCommandError(msg)
+    return value
+
+
 def _choice_field(cmd: Mapping[str, Any], name: str, allowed: set[str]) -> str:
     value = cmd.get(name)
     if not isinstance(value, str) or value not in allowed:
@@ -134,7 +148,9 @@ class ReferenceEngine:
             raise EngineHaltedError(msg)
         self.touched = set()
         if kind == "create_market":
-            events = self._create(_int_field(cmd, "market", U32_MAX))
+            events = self._create(
+                _int_field(cmd, "market", U32_MAX), _optional_hash_field(cmd, "rules_hash")
+            )
         elif kind == "set_state":
             events = self._set_state(
                 _int_field(cmd, "market", U32_MAX), _choice_field(cmd, "state", STATES)
@@ -157,6 +173,7 @@ class ReferenceEngine:
             events = self._settle(
                 _int_field(cmd, "market", U32_MAX),
                 _choice_field(cmd, "outcome", {"yes", "no", "void"}),
+                _optional_hash_field(cmd, "evidence_hash"),
             )
         elif kind == "cancel_all":
             events = self._cancel_all(
@@ -228,13 +245,16 @@ class ReferenceEngine:
 
     # ----- commands -----
 
-    def _create(self, market: int) -> list[Event]:
+    def _create(self, market: int, rules_hash: str | None) -> list[Event]:
         if market in self.states:
             return [{"ev": "rejected", "reason": "market_exists"}]
         self.states[market] = "pre_open"
         self.books[market] = []
         self.escrow[market] = 0
-        return [{"ev": "market_created", "market": market}]
+        created: Event = {"ev": "market_created", "market": market}
+        if rules_hash is not None:
+            created["rules_hash"] = rules_hash
+        return [created]
 
     def _open_account(self, account: int) -> list[Event]:
         if account in self.cash:
@@ -266,13 +286,16 @@ class ReferenceEngine:
                 )
         return events
 
-    def _settle(self, market: int, outcome: str) -> list[Event]:
+    def _settle(self, market: int, outcome: str, evidence_hash: str | None) -> list[Event]:
         if market not in self.states:
             return [{"ev": "rejected", "reason": "unknown_market"}]
         if self.states[market] != "closed":
             return [{"ev": "rejected", "reason": "invalid_transition"}]
         self.states[market] = "voided" if outcome == "void" else "resolved"
-        events: list[Event] = [{"ev": "settled", "market": market, "outcome": outcome}]
+        settled: Event = {"ev": "settled", "market": market, "outcome": outcome}
+        if evidence_hash is not None:
+            settled["evidence_hash"] = evidence_hash
+        events: list[Event] = [settled]
         held = self.positions.get(market, {})
         for account in sorted(held):
             x = held[account]

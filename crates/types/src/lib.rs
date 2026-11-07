@@ -5,11 +5,13 @@
 //! are whole contracts, and money is a signed integer count of credit-cents with checked
 //! arithmetic. There is no floating point anywhere in this crate.
 
+mod digest;
 mod error;
 mod ids;
 mod money;
 mod order;
 
+pub use digest::Digest;
 pub use error::UnitError;
 pub use ids::{AccountId, MarketId, OrderId, Seq};
 pub use money::{

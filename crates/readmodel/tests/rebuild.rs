@@ -44,6 +44,7 @@ fn workload() -> Vec<Command> {
         },
         Command::CreateMarket {
             market: MarketId::new(1),
+            rules_hash: None,
         },
         Command::SetState {
             market: MarketId::new(1),
@@ -93,6 +94,7 @@ fn workload() -> Vec<Command> {
     out.push(Command::Settle {
         market: MarketId::new(1),
         outcome: Outcome::Yes,
+        evidence_hash: None,
     });
     out
 }

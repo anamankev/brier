@@ -740,8 +740,10 @@ struct CreateMarketBody {
 /// `POST /v1/admin/markets`: list a market (in `pre_open`).
 pub async fn create_market(State(s): Shared, req: Req) -> ApiResult {
     let b: CreateMarketBody = req.json()?;
+    // G5 unit 4 replaces this endpoint with listing from a validated rulebook.
     let command = Command::CreateMarket {
         market: MarketId::new(b.market),
+        rules_hash: None,
     };
     admin(
         &s,
@@ -795,9 +797,11 @@ pub async fn settle(State(s): Shared, Path(raw): Path<String>, req: Req) -> ApiR
     let b: SettleBody = req.json()?;
     let outcome = outcome_from_name(&b.outcome)
         .ok_or_else(|| ApiError::bad_request("outcome must be yes, no, or void"))?;
+    // G5 unit 4 removes this one-step settle in favour of propose, confirm, and dispute.
     let command = Command::Settle {
         market: MarketId::new(market),
         outcome,
+        evidence_hash: None,
     };
     admin(
         &s,

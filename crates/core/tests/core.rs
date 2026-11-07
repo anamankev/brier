@@ -13,7 +13,10 @@ fn setup() -> Vec<Command> {
     vec![
         Command::OpenAccount { account: A },
         Command::OpenAccount { account: B },
-        Command::CreateMarket { market: M },
+        Command::CreateMarket {
+            market: M,
+            rules_hash: None,
+        },
         Command::SetState {
             market: M,
             state: MarketState::Open,

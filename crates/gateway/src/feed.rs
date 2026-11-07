@@ -452,7 +452,7 @@ impl Feed {
         let accounts = &mut self.accounts;
         for e in &c.events {
             match *e {
-                Event::MarketCreated { market } => {
+                Event::MarketCreated { market, .. } => {
                     self.markets
                         .entry(market)
                         .or_insert_with(|| Market::new(MarketState::PreOpen));

@@ -8,11 +8,12 @@
 use std::fmt;
 
 use brier_engine::{Command, MarketState, NewOrder, TimeInForce};
-use brier_types::{AccountId, MarketId, OrderId, Outcome, Side};
+use brier_types::{AccountId, Digest, MarketId, OrderId, Outcome, Side};
 
 /// The journal format version this code writes (ADR-0006). Version 2 added client order IDs
-/// to `place`; version 1 is still read.
-pub const FORMAT_VERSION: u16 = 2;
+/// to `place`; version 3 added the rules hash to `create_market` and the evidence hash to
+/// `settle`. Versions 1 and 2 are still read.
+pub const FORMAT_VERSION: u16 = 3;
 
 const TAG_CREATE_MARKET: u8 = 1;
 const TAG_SET_STATE: u8 = 2;
@@ -53,9 +54,10 @@ impl std::error::Error for CodecError {}
 /// Append the canonical encoding of `command` to `out`, in the current journal format.
 pub fn encode(command: &Command, out: &mut Vec<u8>) {
     match *command {
-        Command::CreateMarket { market } => {
+        Command::CreateMarket { market, rules_hash } => {
             out.push(TAG_CREATE_MARKET);
             out.extend_from_slice(&market.get().to_le_bytes());
+            digest(rules_hash, out);
         }
         Command::SetState { market, state } => {
             out.push(TAG_SET_STATE);
@@ -105,7 +107,11 @@ pub fn encode(command: &Command, out: &mut Vec<u8>) {
             out.push(TAG_OPEN_ACCOUNT);
             out.extend_from_slice(&account.get().to_le_bytes());
         }
-        Command::Settle { market, outcome } => {
+        Command::Settle {
+            market,
+            outcome,
+            evidence_hash,
+        } => {
             out.push(TAG_SETTLE);
             out.extend_from_slice(&market.get().to_le_bytes());
             out.push(match outcome {
@@ -113,6 +119,7 @@ pub fn encode(command: &Command, out: &mut Vec<u8>) {
                 Outcome::No => 1,
                 Outcome::Void => 2,
             });
+            digest(evidence_hash, out);
         }
         Command::CancelAll { account, market } => {
             out.push(TAG_CANCEL_ALL);
@@ -132,6 +139,17 @@ pub fn encode(command: &Command, out: &mut Vec<u8>) {
             }
         }
         Command::HaltAll => out.push(TAG_HALT_ALL),
+    }
+}
+
+/// An optional digest: a presence byte, then the 32 bytes if present.
+fn digest(d: Option<Digest>, out: &mut Vec<u8>) {
+    match d {
+        Some(d) => {
+            out.push(1);
+            out.extend_from_slice(d.bytes());
+        }
+        None => out.push(0),
     }
 }
 
@@ -167,6 +185,15 @@ impl Reader<'_> {
         }
     }
 
+    /// An optional digest, present only from format version 3.
+    fn digest(&mut self, version: u16, field: &'static str) -> Result<Option<Digest>, CodecError> {
+        if version >= 3 && self.flag(field)? {
+            Ok(Some(Digest::new(self.take::<32>()?)))
+        } else {
+            Ok(None)
+        }
+    }
+
     fn finish(self) -> Result<(), CodecError> {
         if self.rest.is_empty() {
             Ok(())
@@ -189,16 +216,21 @@ fn state_from(code: u8) -> Result<MarketState, CodecError> {
 }
 
 /// Decode exactly one command from `payload`, written in journal format `version`.
-/// Version 1 has no client order ID; version 2 adds it to `place` (ADR-0006).
+/// Version 1 has no client order ID; version 2 adds it to `place`; version 3 adds the rules
+/// and evidence hashes (ADR-0006).
 ///
 /// # Errors
 /// A [`CodecError`] if the payload is not the canonical encoding of a command.
 pub fn decode(payload: &[u8], version: u16) -> Result<Command, CodecError> {
     let mut r = Reader { rest: payload };
     let command = match r.u8()? {
-        TAG_CREATE_MARKET => Command::CreateMarket {
-            market: MarketId::new(r.u32()?),
-        },
+        TAG_CREATE_MARKET => {
+            let market = MarketId::new(r.u32()?);
+            Command::CreateMarket {
+                market,
+                rules_hash: r.digest(version, "rules hash presence")?,
+            }
+        }
         TAG_SET_STATE => {
             let market = MarketId::new(r.u32()?);
             Command::SetState {
@@ -266,7 +298,11 @@ pub fn decode(payload: &[u8], version: u16) -> Result<Command, CodecError> {
                 2 => Outcome::Void,
                 _ => return Err(CodecError::BadCode("outcome")),
             };
-            Command::Settle { market, outcome }
+            Command::Settle {
+                market,
+                outcome,
+                evidence_hash: r.digest(version, "evidence hash presence")?,
+            }
         }
         TAG_CANCEL_ALL => {
             let account = if r.flag("account presence")? {
@@ -304,10 +340,10 @@ mod tests {
             Just(TimeInForce::Fok)
         ];
         let outcome = prop_oneof![Just(Outcome::Yes), Just(Outcome::No), Just(Outcome::Void)];
+        let digest = || prop::option::of(any::<[u8; 32]>().prop_map(Digest::new));
         prop_oneof![
-            market
-                .clone()
-                .prop_map(|market| Command::CreateMarket { market }),
+            (market.clone(), digest())
+                .prop_map(|(market, rules_hash)| Command::CreateMarket { market, rules_hash }),
             (market.clone(), state).prop_map(|(market, state)| Command::SetState { market, state }),
             (
                 account.clone(),
@@ -347,8 +383,13 @@ mod tests {
             account
                 .clone()
                 .prop_map(|account| Command::OpenAccount { account }),
-            (market.clone(), outcome)
-                .prop_map(|(market, outcome)| Command::Settle { market, outcome }),
+            (market.clone(), outcome, digest()).prop_map(|(market, outcome, evidence_hash)| {
+                Command::Settle {
+                    market,
+                    outcome,
+                    evidence_hash,
+                }
+            }),
             (prop::option::of(account), prop::option::of(market))
                 .prop_map(|(account, market)| Command::CancelAll { account, market }),
             Just(Command::HaltAll),
@@ -442,5 +483,43 @@ mod tests {
         // Version 1 records still decode, as orders without a client order ID.
         assert_eq!(decode(&v1, 1), Ok(place));
         assert_eq!(decode(&v2, 1), Err(CodecError::TrailingBytes));
+    }
+
+    #[test]
+    fn version_3_adds_the_rules_and_evidence_hashes() {
+        let hash = Digest::new([0xab; 32]);
+        let create = Command::CreateMarket {
+            market: MarketId::new(0x0102),
+            rules_hash: Some(hash),
+        };
+        let mut v3 = vec![1, 2, 1, 0, 0, 1];
+        v3.extend_from_slice(&[0xab; 32]);
+        assert_eq!(bytes(&create), v3);
+        let settle = Command::Settle {
+            market: MarketId::new(5),
+            outcome: Outcome::Void,
+            evidence_hash: None,
+        };
+        assert_eq!(bytes(&settle), [7, 5, 0, 0, 0, 2, 0]);
+        // Versions 1 and 2 have no hash field: their records decode without one, and a
+        // presence byte is a trailing byte.
+        let old_create = [1, 2, 1, 0, 0];
+        for version in [1, 2] {
+            assert_eq!(
+                decode(&old_create, version),
+                Ok(Command::CreateMarket {
+                    market: MarketId::new(0x0102),
+                    rules_hash: None,
+                })
+            );
+            assert_eq!(decode(&[7, 5, 0, 0, 0, 2], version), Ok(settle));
+            assert_eq!(decode(&v3, version), Err(CodecError::TrailingBytes));
+        }
+        let mut bad = v3.clone();
+        *bad.get_mut(5).unwrap() = 2;
+        assert_eq!(
+            decode(&bad, FORMAT_VERSION),
+            Err(CodecError::BadCode("rules hash presence"))
+        );
     }
 }

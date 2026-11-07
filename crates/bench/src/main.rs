@@ -239,7 +239,10 @@ fn generate(seed: u64, total: usize, mix: &mut Mix) -> Result<Vec<Sequenced>, En
     }
     for m in 1..=MARKETS {
         let market = MarketId::new(m);
-        setup.push(Command::CreateMarket { market });
+        setup.push(Command::CreateMarket {
+            market,
+            rules_hash: None,
+        });
         setup.push(Command::SetState {
             market,
             state: MarketState::Open,

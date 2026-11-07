@@ -27,7 +27,7 @@ proposal ──> an admin confirms (four eyes: never the proposer) ──> dispu
 ```
 
 ### Rules and evidence pinned in the journal
-- `CreateMarket` gains `rules_hash` and `Settle` gains `evidence_hash` (32 bytes each), in journal format version 3. Readers still decode versions 1 and 2, which carry no hashes.
+- `CreateMarket` gains `rules_hash` and `Settle` gains `evidence_hash` (32 bytes each), in journal format version 3. Readers still decode versions 1 and 2, which carry no hashes. Both are optional in the format (a presence byte, as for client order IDs), so a command read from an old journal means the same when rewritten. From unit 4 the gateway always sets them; the engine accepts either.
 - The engine carries both hashes through to its events but does not store them, so snapshots and the state hash are unchanged.
 - As a result, the journal alone proves which rules a market was listed under and which evidence settled it. Anyone with the rules file and the evidence record can recompute both hashes.
 - The wire format, `docs/protocol.md`, the reference engine, the differential generator, and the fuzz targets change together.

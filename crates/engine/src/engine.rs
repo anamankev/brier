@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 
 use brier_types::{
-    AccountId, Credits, MarketId, OrderId, Outcome, Price, Quantity, Seq, Side, UnitError,
+    AccountId, Credits, Digest, MarketId, OrderId, Outcome, Price, Quantity, Seq, Side, UnitError,
 };
 
 use crate::book::{Book, Handle};
@@ -159,7 +159,9 @@ impl Engine {
         }
         self.next_seq = cmd.seq.next()?;
         match cmd.command {
-            Command::CreateMarket { market } => self.create_market(market, out),
+            Command::CreateMarket { market, rules_hash } => {
+                self.create_market(market, rules_hash, out);
+            }
             Command::SetState { market, state } => self.set_state(market, state, out)?,
             Command::Place(order) => self.place(cmd.seq, order, out)?,
             Command::Cancel { account, order } => self.cancel(account, order, out)?,
@@ -169,14 +171,23 @@ impl Engine {
                 qty,
             } => self.amend(account, order, qty, out)?,
             Command::OpenAccount { account } => self.open_account(account, out)?,
-            Command::Settle { market, outcome } => self.settle(market, outcome, out)?,
+            Command::Settle {
+                market,
+                outcome,
+                evidence_hash,
+            } => self.settle(market, outcome, evidence_hash, out)?,
             Command::CancelAll { account, market } => self.cancel_all(account, market, out)?,
             Command::HaltAll => self.halt_all(out),
         }
         self.ledger.finish_command(out)
     }
 
-    fn create_market(&mut self, market: MarketId, out: &mut Vec<Event>) {
+    fn create_market(
+        &mut self,
+        market: MarketId,
+        rules_hash: Option<Digest>,
+        out: &mut Vec<Event>,
+    ) {
         match self.markets.entry(market) {
             MapEntry::Occupied(_) => out.push(Event::Rejected {
                 reason: RejectReason::MarketExists,
@@ -184,7 +195,7 @@ impl Engine {
             MapEntry::Vacant(slot) => {
                 slot.insert(Book::new());
                 self.ledger.add_market(market);
-                out.push(Event::MarketCreated { market });
+                out.push(Event::MarketCreated { market, rules_hash });
             }
         }
     }
@@ -274,6 +285,7 @@ impl Engine {
         &mut self,
         market: MarketId,
         outcome: Outcome,
+        evidence_hash: Option<Digest>,
         out: &mut Vec<Event>,
     ) -> Result<(), EngineError> {
         let Some(book) = self.markets.get_mut(&market) else {
@@ -292,7 +304,11 @@ impl Engine {
             Outcome::Yes | Outcome::No => MarketState::Resolved,
             Outcome::Void => MarketState::Voided,
         };
-        out.push(Event::Settled { market, outcome });
+        out.push(Event::Settled {
+            market,
+            outcome,
+            evidence_hash,
+        });
         self.ledger.settle(market, outcome, out)
     }
 

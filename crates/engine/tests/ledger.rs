@@ -31,7 +31,10 @@ impl Harness {
             h.cmd(Command::OpenAccount { account });
         }
         for market in [M, M2] {
-            h.cmd(Command::CreateMarket { market });
+            h.cmd(Command::CreateMarket {
+                market,
+                rules_hash: None,
+            });
             h.cmd(Command::SetState {
                 market,
                 state: MarketState::Open,
@@ -385,7 +388,8 @@ fn settlement_needs_a_closed_market_and_pays_the_winning_side() {
     assert_eq!(
         h.cmd(Command::Settle {
             market: M,
-            outcome: Outcome::Yes
+            outcome: Outcome::Yes,
+            evidence_hash: None
         }),
         vec![Event::Rejected {
             reason: RejectReason::InvalidTransition
@@ -399,12 +403,14 @@ fn settlement_needs_a_closed_market_and_pays_the_winning_side() {
     let events = h.cmd(Command::Settle {
         market: M,
         outcome: Outcome::Yes,
+        evidence_hash: None,
     });
     assert_eq!(
         events.first(),
         Some(&Event::Settled {
             market: M,
-            outcome: Outcome::Yes
+            outcome: Outcome::Yes,
+            evidence_hash: None
         })
     );
     assert_eq!(
@@ -440,6 +446,7 @@ fn a_void_pays_50_per_contract_on_both_sides() {
     let events = h.cmd(Command::Settle {
         market: M,
         outcome: Outcome::Void,
+        evidence_hash: None,
     });
     // ADR-0002: 50 × 4 to each side, in ascending account order.
     assert_eq!(

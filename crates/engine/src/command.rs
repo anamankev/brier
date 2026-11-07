@@ -1,4 +1,4 @@
-use brier_types::{AccountId, MarketId, OrderId, Outcome, Seq, Side};
+use brier_types::{AccountId, Digest, MarketId, OrderId, Outcome, Seq, Side};
 
 /// How long an order may rest (SPEC §3.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -84,6 +84,9 @@ pub enum Command {
     CreateMarket {
         /// The new market's ID.
         market: MarketId,
+        /// SHA-256 of the market's canonical rulebook (docs/rulebook.md). Passed through to
+        /// `MarketCreated`, never stored. `None` only in journals before format version 3.
+        rules_hash: Option<Digest>,
     },
     /// Move a market through its lifecycle.
     SetState {
@@ -112,6 +115,9 @@ pub enum Command {
         market: MarketId,
         /// YES, NO, or void.
         outcome: Outcome,
+        /// SHA-256 of the evidence record that decided the outcome. Passed through to
+        /// `Settled`, never stored. `None` only in journals before format version 3.
+        evidence_hash: Option<Digest>,
     },
     /// Kill switch: cancel every resting order matching the filters; neither means all.
     CancelAll {

@@ -15,6 +15,7 @@ Option 3.
 - **Segment file** `journal-<first seq, 20 digits>.log`. Header: 8-byte magic `BRIERJNL`, format version `u16`, first sequence `u64`. Segments rotate at 64 MiB.
 - **Record:** `len: u32` (payload bytes), `crc32c: u32` (over `seq` and `payload`), `seq: u64`, then `payload`, all little-endian. CRC-32C (Castagnoli) is checked against the standard check value: "123456789" gives `0xE3069283`.
 - **Payload:** one tag byte per command kind, then that command's fields at fixed widths. Optional fields carry a presence byte. Unknown tags or trailing bytes are errors.
+- **Format versions:** 1, the G3 format. 2 (G4) adds an optional client order ID to `place`. 3 (G5) adds an optional 32-byte rules hash to `create_market` and an optional 32-byte evidence hash to `settle`, each after the command's other fields. A segment is written in one version; the writer never appends to an older segment and starts a new one instead.
 - **Snapshot file** `snapshot-<seq, 20 digits>.bin`. Header: magic `BRIERSNP`, version `u16`, `seq: u64`, state hash (32 bytes), body length `u64`, body `crc32c: u32`. The body is a canonical encoding of the engine state (markets, books in time priority, accounts, holdings, escrow, issuance).
 - **Reading rules:**
   - A torn tail can only be the batch that was being written when the process died. Nothing in it was acknowledged, because acknowledgment waits for the sync (ADR-0004).

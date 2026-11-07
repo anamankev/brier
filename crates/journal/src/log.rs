@@ -628,6 +628,7 @@ mod tests {
             },
             1 => Command::CreateMarket {
                 market: MarketId::new(u32::try_from(i % 1000).unwrap()),
+                rules_hash: None,
             },
             _ => Command::Cancel {
                 account: AccountId::new(i),
@@ -781,6 +782,32 @@ mod tests {
         );
         let (got, _) = read(dir.path());
         assert_eq!(got, vec![(1, order), (2, cmd(2))]);
+    }
+
+    #[test]
+    fn a_version_2_segment_is_read_and_never_appended_to() {
+        let dir = tempfile::tempdir().unwrap();
+        // Hand-build a version 2 segment holding one market listing (no rules hash field).
+        let v2 = [1u8, 9, 0, 0, 0];
+        let mut seg = Vec::new();
+        seg.extend_from_slice(MAGIC);
+        seg.extend_from_slice(&2u16.to_le_bytes());
+        seg.extend_from_slice(&1u64.to_le_bytes());
+        seg.extend_from_slice(&u32::try_from(v2.len()).unwrap().to_le_bytes());
+        seg.extend_from_slice(&record_checksum(1, &v2).to_le_bytes());
+        seg.extend_from_slice(&1u64.to_le_bytes());
+        seg.extend_from_slice(&v2);
+        fs::write(segment_path(dir.path(), Seq::FIRST), seg).unwrap();
+        let mut w = JournalWriter::open(dir.path(), Seq::from_raw(2)).unwrap();
+        w.append(Seq::from_raw(2), &cmd(2)).unwrap();
+        w.commit().unwrap();
+        assert_eq!(segments(dir.path()).unwrap().len(), 2);
+        let (got, _) = read(dir.path());
+        let listed = Command::CreateMarket {
+            market: MarketId::new(9),
+            rules_hash: None,
+        };
+        assert_eq!(got, vec![(1, listed), (2, cmd(2))]);
     }
 
     #[test]
