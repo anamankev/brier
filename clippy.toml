@@ -1,0 +1,5 @@
+# Tests may unwrap and panic: a failed expectation is supposed to stop the test.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true

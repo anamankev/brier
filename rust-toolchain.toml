@@ -1,0 +1,6 @@
+# Every machine and CI build with the same compiler (SPEC §12). rustup reads this file and
+# installs the pinned toolchain on first use.
+[toolchain]
+channel = "1.99.1"
+components = ["clippy", "rustfmt"]
+profile = "minimal"
