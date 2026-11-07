@@ -1,0 +1,24 @@
+# Local services for development and integration tests (SPEC §12, docs/gates/G4-plan.md).
+# `make up` starts them and `make down` stops them; data persists in a named volume.
+# The image is pinned by digest, so a moved tag can never change what runs.
+name: brier
+
+services:
+  db:
+    image: postgres:16.15-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
+    environment:
+      POSTGRES_USER: brier
+      POSTGRES_PASSWORD: ${BRIER_DB_PASSWORD:?run make env to generate .env}
+      POSTGRES_DB: brier
+    ports:
+      - "127.0.0.1:55442:5432" # localhost only; 55432 is used by another local project
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U brier -d brier"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  db-data:

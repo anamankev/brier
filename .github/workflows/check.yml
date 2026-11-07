@@ -26,6 +26,29 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
 
+  integration:
+    # Tests that need PostgreSQL: the read models must equal a rebuild from the journal.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16.15-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
+        env:
+          POSTGRES_USER: brier
+          POSTGRES_PASSWORD: ci-only-not-secret
+          POSTGRES_DB: brier
+        ports:
+          - 55442:5432
+        options: >-
+          --health-cmd "pg_isready -U brier -d brier" --health-interval 2s --health-timeout 3s
+          --health-retries 30
+    env:
+      BRIER_TEST_DATABASE_URL: postgres://brier:ci-only-not-secret@127.0.0.1:55442/brier
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup show active-toolchain || rustup toolchain install
+      - run: cargo test --workspace --locked -- --ignored
+
   python:
     runs-on: ubuntu-24.04
     timeout-minutes: 10

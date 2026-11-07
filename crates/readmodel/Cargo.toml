@@ -1,0 +1,21 @@
+[package]
+name = "brier-readmodel"
+description = "PostgreSQL read models projected from the journal (docs/gates/G4-plan.md)"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+brier-engine = { path = "../engine" }
+brier-journal = { path = "../journal" }
+brier-types = { path = "../types" }
+tokio-postgres = "0.7.18"
+
+[dev-dependencies]
+brier-core = { path = "../core" }
+tempfile = "3.27"
+tokio = { version = "1.54", default-features = false, features = ["sync", "rt", "rt-multi-thread", "macros", "time"] }
+
+[lints]
+workspace = true

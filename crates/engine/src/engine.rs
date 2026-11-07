@@ -657,6 +657,12 @@ impl Engine {
             .collect()
     }
 
+    /// Whether `order` is resting in a book.
+    #[must_use]
+    pub fn order_is_live(&self, order: OrderId) -> bool {
+        self.orders.contains_key(&order)
+    }
+
     /// One account's resting orders across all markets, in ascending order ID, with the
     /// market and side of each. Costs O(live orders), not O(markets).
     ///

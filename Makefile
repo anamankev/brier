@@ -6,16 +6,28 @@ CARGO ?= cargo
 UV_RUN := uv run --project services --locked
 PIP_AUDIT_VERSION := 2.10.1
 
-.PHONY: help setup check rust-check py-check private-check test-all audit differential-full bench crash
+.PHONY: help setup env up down db-url check rust-check py-check private-check test-all audit differential-full bench crash
 
 SEED ?= 1
 
 help: ## List every command
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
 
-setup: ## Locked Python dependencies and git hooks (Rust installs from rust-toolchain.toml on first use)
+setup: env ## Locked Python dependencies, git hooks, and a local .env (Rust installs from rust-toolchain.toml)
 	uv sync --project services --locked
 	pre-commit install
+
+env: ## Create .env with a generated database password, once (git-ignored)
+	@test -f .env || (umask 077 && printf 'BRIER_DB_PASSWORD=%s\n' "$$(openssl rand -hex 24)" > .env && echo "created .env")
+
+up: env ## Start PostgreSQL in Docker and wait until it is healthy
+	docker compose up -d --wait db
+
+down: ## Stop the Docker services (data is kept in the volume)
+	docker compose down
+
+db-url: env ## Print the local database URL (for BRIER_DATABASE_URL)
+	@. ./.env && echo "postgres://brier:$${BRIER_DB_PASSWORD}@127.0.0.1:55442/brier"
 
 check: rust-check py-check private-check ## Lint, types and fast tests for everything (CI runs the same)
 
@@ -49,8 +61,8 @@ bench: ## The registered P1/P2 engine benchmark (docs/notes/performance.md); plu
 	-pmset -g batt | head -1  # macOS power source; ignored elsewhere
 	./target/release/brier-bench
 
-test-all: check ## Every test, including slow ones
-	$(CARGO) test --workspace --locked -- --include-ignored
+test-all: check up ## Every test, including slow ones and the database tests (starts PostgreSQL)
+	BRIER_TEST_DATABASE_URL="$$($(MAKE) -s db-url)" $(CARGO) test --workspace --locked -- --include-ignored
 	cd services && uv run --locked pytest -q
 
 audit: ## Known-vulnerability audit of locked Rust and Python dependencies
