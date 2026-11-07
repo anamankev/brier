@@ -16,7 +16,11 @@ Option 3.
 - **Record:** `len: u32` (payload bytes), `crc32c: u32` (over `seq` and `payload`), `seq: u64`, then `payload`, all little-endian. CRC-32C (Castagnoli) is checked against the standard check value: "123456789" gives `0xE3069283`.
 - **Payload:** one tag byte per command kind, then that command's fields at fixed widths. Optional fields carry a presence byte. Unknown tags or trailing bytes are errors.
 - **Snapshot file** `snapshot-<seq, 20 digits>.bin`. Header: magic `BRIERSNP`, version `u16`, `seq: u64`, state hash (32 bytes), body length `u64`, body `crc32c: u32`. The body is a canonical encoding of the engine state (markets, books in time priority, accounts, holdings, escrow, issuance).
-- **Reading rules:** at the end of the last segment, a short record or a CRC mismatch is a torn tail, truncated and logged. Anywhere else it is corruption, and recovery stops with an error. Records must have strictly consecutive sequence numbers across segments.
+- **Reading rules:**
+  - A torn tail can only be the batch that was being written when the process died. Nothing in it was acknowledged, because acknowledgment waits for the sync (ADR-0004).
+  - The writer caps a batch at `MAX_BATCH_BYTES` (1 MiB). So a bad record (short, oversized length, CRC mismatch, or undecodable payload) in the **last** segment, with at most `MAX_BATCH_BYTES` of file after its start, is a torn tail. Recovery truncates the segment there and logs the offset and the number of bytes dropped.
+  - Any other bad record is corruption of data that may already have been acknowledged, and recovery stops with an error. That covers a bad record in an earlier segment, or one followed by more than a batch of bytes.
+  - A record with a valid CRC but a sequence number other than the next expected one is corruption, wherever it is. Sequence numbers must be strictly consecutive across segments.
 
 ## Consequences
 - Old journals stay readable: a format change bumps the version, and readers keep decoding every version they have ever written.
