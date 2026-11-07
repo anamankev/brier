@@ -167,13 +167,13 @@ Threat model per component (`docs/threat-model.md`): order forgery (signature ve
 
 | Gate | Read | Deliverables | Exit criteria |
 |---|---|---|---|
-| G0 Foundations | §12, §13, §14 | Rust toolchain (needs your OK to install); Cargo workspace; Python and web scaffolds; Docker Compose with PostgreSQL; Makefile; CI (fmt, clippy, tests, audits, gitleaks); ADR-0001; threat-model skeleton | `make check` green from a fresh clone; CI green; the private-tooling check finds no assistant references in tracked files |
+| G0 Foundations | §12, §13, §14 | Rust toolchain; Cargo workspace with the §2.1 domain types; Python project with tooling; Makefile; CI (fmt, clippy, tests, audits, gitleaks); ADR-0001; threat model. (PostgreSQL arrives in G4 and the web scaffold in G6, when something real uses them.) | `make check` green from a fresh clone; CI green; the private-tooling check finds no assistant references in tracked files |
 | G1 Matching engine | §2, §3 | Book, order types, STP, market states, state hash; reference engine; differential and property tests; criterion benchmarks | 10 million random commands with no divergence from the reference engine; P1 and P2 measured |
 | G2 Ledger and risk | §2.3-§2.4, §4 | Double-entry ledger, reservations, netting, settlement, void at 50, kill switches | I1-I5 hold over 10 million random commands; settlement zeroes escrow; the §1.2 test passes |
 | G3 Journal and recovery | §5 | Journal, group commit, snapshots, replay, crash harness | 1,000 SIGKILLs with zero lost acknowledged orders and matching state hashes; P5 measured |
-| G4 Gateway and APIs | §6 | REST, WebSocket order entry and market data, auth, idempotency, rate limits, OpenAPI and AsyncAPI, reference client, fuzzing | Fuzzers run 1 hour each with no crash; gap recovery tested; P3 and P4 measured |
+| G4 Gateway and APIs | §6, §12 | Docker Compose with PostgreSQL 16 and the first read models; REST, WebSocket order entry and market data, auth, idempotency, rate limits, OpenAPI and AsyncAPI, reference client, fuzzing | Fuzzers run 1 hour each with no crash; gap recovery tested; P3 and P4 measured |
 | G5 Markets and resolution | §7 | Rulebook, admin console API, FRED/BLS/NOAA resolvers with evidence, two-step settlement | Every launch-catalogue market resolves end to end from a recorded source response |
-| G6 Web app | §0 item 8 | Trading UI, portfolio, rules and evidence pages, admin console | Playwright flows and axe checks pass |
+| G6 Web app | §0 item 8 | Next.js scaffold; trading UI, portfolio, rules and evidence pages, admin console | Playwright flows and axe checks pass |
 | G7 Market maker and simulation | §8, §10 | Reference market maker; agent-based harness | Market maker quotes through the public API in simulation and on live markets; metrics reported |
 | G8 Surveillance | §9 | Detectors, case management, pre-registered evaluation | Hypotheses commit predates results; precision and recall reported per typology |
 | G9 Release | §0, §16 | README, benchmark report, threat model, runbooks, demo | Every item in §0 met with evidence |
