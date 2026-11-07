@@ -46,3 +46,25 @@ The first G2 1-million-command sample (at `443cc4b`) found no divergence but mad
 - Large resting orders locked most of the busy accounts' cash.
 
 The generator now aims 85% of market-directed commands at the three newest markets, prefers the busiest and newest accounts, and sends 0.5% instead of 2% oversized orders (`496af0f`). The same sample then made 26,122 trades. In the same change, the reference engine's full check went from scanning every account × market pair to only the pairs holding something, cutting the sample from 134 s to 8.8 s.
+
+
+## Post-G2 audit: the streams were too weak, and are now state-aware
+
+The audit before G3 measured what the long streams actually exercised. On the G2 stream at 1 million commands:
+- 86% of commands were rejected;
+- 236,676 of 237,143 cancels named no live order;
+- 329,270 orders went to markets that were not open;
+- the four busy accounts had a few credits left by command 500,000.
+
+The engines still agreed on every event, and rejection paths are behavior worth checking. But the trading, collateral, and settlement paths were exercised far less than the event counts suggested.
+
+Two changes fixed it. First, `StreamGenerator` (`abbe7c7`) runs the reference engine as it generates and uses its live state. 90% of cancels and amends name a live order and come from its owner; 90% of orders go to open markets; 90% of settlements go to closed markets; and state changes follow allowed transitions. The remaining 10% is aimed at random, so rejections stay covered. Second, a cap of 6 live markets (`f93040d`): above it the oldest is closed and then settles. Without it, positions piled up in markets that never settled, and their escrow locked the busy accounts' cash. Trading still faded from 28,330 trades in the first million commands to 5,648 in the third.
+
+The fast differential test now asserts liveness floors (trades and accepted orders per command), set at about half the lowest measured rate.
+
+| Stream | Commands | Events compared | Trades | Accepted orders | Rejected | Divergences | Wall time | Peak memory |
+|---|---|---|---|---|---|---|---|---|
+| G2 stream (`496af0f`) | 10,000,000 | 11,950,054 | 162,052 | not counted | about 85% | 0 | 384 s | 1.49 GB |
+| State-aware, live-market cap (`f93040d`) | 10,000,000 | **19,596,192** | **696,614** | **3,292,189** | 38% | **0** | 222 s | 0.71 GB |
+
+Both runs ran the full I1-I5 check in both engines every 100,000 commands. The state-aware run is the one the G2 gate rests on. It trades at G1's rate (about 70,000 trades per million commands) while exercising collateral, settlement (about 11,800 settlements per million commands), and kill switches throughout.

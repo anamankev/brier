@@ -66,11 +66,13 @@ Timer overhead (1,000,000 empty timing pairs): p50 below one tick, p99 42 ns, ma
 
 The same `make bench` workload at `496af0f`, with the ledger in the order path: every place is checked for collateral, every fill moves cash, and every touched (account, market) has its reserve recomputed. The workload now opens its 100 accounts first. Apple M5, macOS 26.6, AC power.
 
-| Measure | G1 (matching only) | G2 (with ledger) |
-|---|---|---|
-| Throughput, median of 5 | 12.27 M commands/s | 2.51 M commands/s |
-| p99 latency | 334 ns | 1,417 ns |
-| p99.9 latency | 500 ns | 2,543 ns |
+| Measure | G1 (matching only) | G2 (with ledger, `496af0f`) | After the audit (`1ae7c7c`) |
+|---|---|---|---|
+| Throughput, median of 5 | 12.27 M commands/s | 2.51 M commands/s | 2.69 M commands/s |
+| p99 latency | 334 ns | 1,417 ns | 1,375 ns |
+| p99.9 latency | 500 ns | 2,543 ns | 2,417 ns |
+
+Measured mix after the audit, over the 50 million timed commands (the bench now reports it): 32.5 M places and 17.5 M cancels. 20.1 M orders were accepted, 12.4 M rejected (38% of places, almost all `insufficient_collateral` as 100 accounts' cash fills up with resting orders), and 2.58 M trades executed. Rejections are cheap, so throughput over accepted work alone would be lower. The fair comparison with G1 is therefore the latency of accepted orders, the first next question below.
 
 P1 (≥ 1 M/s) and P2 (p99 ≤ 5 µs, p99.9 ≤ 20 µs) still hold with the ledger included. The ledger costs about 4.9× in throughput.
 
@@ -79,4 +81,4 @@ Likely sources, to profile before optimizing anything:
 - Each touched pair's reserve walks 2 × 99 levels.
 - Holdings sit in a `BTreeMap` keyed by (market, account).
 
-Limitation: with collateral enforced, part of this workload is rejected (cash locked by accumulated passive orders), so it is not the same mix of work as the G1 run. Measuring the rejection share is the first next question.
+Limitation: with collateral enforced, part of this workload is rejected (cash locked by accumulated passive orders), so it is not the same mix of work as the G1 run. The rejection share is now measured (above); separating accepted-order latency is next.

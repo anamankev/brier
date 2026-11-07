@@ -12,7 +12,7 @@ Traders buy and sell yes/no contracts on public events, such as "Will October CP
 - **Reference market maker.** Trades only through the public API, quoting around options-implied fair values.
 - **Market surveillance.** Detects wash trading, spoofing, marking the close, and insider-like trading. Precision and recall are measured on simulated manipulation.
 
-The full standard is [docs/SPEC.md](docs/SPEC.md). Design decisions are in [docs/adr/](docs/adr/).
+The full standard is [docs/SPEC.md](docs/SPEC.md). The exact engine behavior is in [docs/protocol.md](docs/protocol.md). Design decisions are in [docs/adr/](docs/adr/).
 
 ## Play money, by design
 
@@ -42,8 +42,8 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 | Matching throughput, one core | 12.3 million commands per second (median of 5 runs) | [performance note](docs/notes/performance.md) |
 | Matching latency per command | p99 334 ns, p99.9 500 ns (timer resolution 42 ns) | [performance note](docs/notes/performance.md) |
 | Agreement with an independent reference engine | 10 million random commands, 12.4 million events, 0 divergences (matching only) | [differential note](docs/notes/differential.md) |
-| The same, with the ledger | 10 million commands with accounts, collateral, and settlement: 11.95 million events, 0 divergences, full invariant checks every 100,000 commands | [differential note](docs/notes/differential.md) |
-| Throughput with the ledger in the order path | 2.51 million commands per second; p99 1.4 µs | [performance note](docs/notes/performance.md) |
+| The same, with the ledger | 10 million state-aware commands with accounts, collateral, settlement, and kill switches: 19.6 million events, 696,614 trades, 0 divergences, full invariant checks every 100,000 commands | [differential note](docs/notes/differential.md) |
+| Throughput with the ledger in the order path | 2.69 million commands per second; p99 1.4 µs (65% places, 35% cancels; 38% of places rejected for collateral) | [performance note](docs/notes/performance.md) |
 | Book and ledger invariants (I1-I5) | Checked after every command in 2,560 random streams per CI run | `crates/engine/tests/properties.rs` |
 
 Measured on a 16 GB Apple M5 MacBook Air on AC power. Both performance hypotheses were registered before the engine existed.
