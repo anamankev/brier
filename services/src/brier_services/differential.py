@@ -102,6 +102,9 @@ class StreamGenerator:
             s: _Pool() for s in ("pre_open", "open", "halted", "closed")
         }
         self.state_of: dict[int, str] = {}
+        # Client order IDs each account has used, for idempotency tests (protocol §3).
+        self.next_client_id: dict[int, int] = {}
+        self.used_client_ids: dict[int, list[int]] = {}
 
     # ----- bookkeeping from the reference engine's events -----
 
@@ -202,6 +205,20 @@ class StreamGenerator:
             return self.rng.randint(1_000, 25_000)  # large enough to hit insufficient_collateral
         return self.rng.choice([0, 25_001])
 
+    def _client_id(self, account: int) -> int | None:
+        """Half of orders carry a client order ID; a tenth of those reuse one already used."""
+        if self.rng.random() < 0.5:
+            return None
+        used = self.used_client_ids.setdefault(account, [])
+        if used and self.rng.random() < 0.1:
+            return self.rng.choice(used)
+        client_id = self.next_client_id.get(account, 1)
+        self.next_client_id[account] = client_id + 1
+        used.append(client_id)
+        if len(used) > 50:
+            used.pop(0)
+        return client_id
+
     def _target_order(self) -> tuple[int, int]:
         """(account, order): usually a live order sent by its owner."""
         if self.live_ids and self.rng.random() < AIMED:
@@ -218,18 +235,21 @@ class StreamGenerator:
         rng = self.rng
         roll = rng.random()
         if roll < 0.55:
-            return [
-                {
-                    "cmd": "place",
-                    "account": self._account(),
-                    "market": self._market(("open",)),
-                    "side": rng.choice(["buy", "sell"]),
-                    "price": self._price(),
-                    "qty": self._qty(),
-                    "tif": rng.choices(["gtc", "ioc", "fok"], weights=[6, 2, 2])[0],
-                    "post_only": rng.random() < 0.1,
-                }
-            ]
+            account = self._account()
+            client_id = self._client_id(account)
+            place: dict[str, Any] = {
+                "cmd": "place",
+                "account": account,
+                "market": self._market(("open",)),
+                "side": rng.choice(["buy", "sell"]),
+                "price": self._price(),
+                "qty": self._qty(),
+                "tif": rng.choices(["gtc", "ioc", "fok"], weights=[6, 2, 2])[0],
+                "post_only": rng.random() < 0.1,
+            }
+            if client_id is not None:
+                place["client_order_id"] = client_id
+            return [place]
         if roll < 0.77:
             account, order = self._target_order()
             return [{"cmd": "cancel", "account": account, "order": order}]

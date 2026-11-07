@@ -10,6 +10,7 @@ This document is current. The gate plans in `docs/gates/` record how each part w
 - **Money:** integer credit-cents (i64). A winning contract pays 100.
 - **Sequence:** every command carries `seq`. The first is 1, and each next one is exactly one more.
 - **Order ID:** an accepted order's ID is the `seq` of the command that placed it.
+- **Client order ID:** optional on `place`, a u64 chosen by the client (see §3).
 - **Wire values outside their wire type** (a price of 300, a missing field, an unknown command) are malformed input. They stop the replay tool (exit 2) and are not rejections.
 
 ## 2. Halting
@@ -24,7 +25,7 @@ The first failing check names the rejection. A rejected command changes nothing.
 | `open_account` | account | `account_exists` | Grants `SIGNUP_GRANT` = 1,000,000 from issuance |
 | `create_market` | market | `market_exists` | Lists the market in `pre_open` with escrow 0 |
 | `set_state` | market, state | `unknown_market`, `invalid_transition` | Changes state; entering `closed` cancels every resting order in the market |
-| `place` | account, market, side, price, qty, tif, post_only | `unknown_market`, `unknown_account`, `market_not_open`, `invalid_price`, `invalid_quantity`, `invalid_order`, `post_only_would_cross`, `fok_unfillable`, `too_many_orders`, `insufficient_collateral` | Matches, then rests (GTC) or cancels the remainder (IOC) |
+| `place` | account, market, side, price, qty, tif, post_only, client_order_id? | `unknown_market`, `unknown_account`, then `duplicate` (not a rejection; below), `market_not_open`, `invalid_price`, `invalid_quantity`, `invalid_order`, `post_only_would_cross`, `fok_unfillable`, `too_many_orders`, `insufficient_collateral` | Matches, then rests (GTC) or cancels the remainder (IOC) |
 | `cancel` | account, order | `unknown_order` | Cancels the order |
 | `amend` | account, order, qty | `unknown_order`, `market_not_open`, `invalid_quantity`, `invalid_amend` | Reduces the remaining quantity; keeps time priority |
 | `settle` | market, outcome (`yes`, `no`, `void`) | `unknown_market`, `invalid_transition` (the market must be `closed`) | Pays out every position; the market becomes `resolved` or `voided` |
@@ -37,6 +38,7 @@ Notes on the checks:
 - `invalid_amend`: the new quantity is not below the remaining quantity.
 - `too_many_orders`: GTC only, when the account already has 1,000 (`MAX_RESTING_ORDERS`) resting orders across all markets.
 - `insufficient_collateral`: see §5.
+- **Client order IDs (idempotency):** if the account already has an accepted order with this `client_order_id` among its last 10,000 accepted IDs (`CLIENT_ID_WINDOW`, oldest evicted first), the command emits a single `duplicate` event naming the original order and changes nothing else. An ID is recorded only when its order is accepted, so a rejected order can be retried with the same ID. The windows are engine state: in snapshots, and rebuilt by replay.
 
 ### Market states
 `pre_open` → `open` or `closed`; `open` → `halted` or `closed`; `halted` → `open` or `closed`. Any other `set_state`, including one to the current state, is `invalid_transition`. `resolved` and `voided` are reached only through `settle`. Place and amend need `open`; cancel works in `pre_open`, `open`, and `halted`.
@@ -86,6 +88,7 @@ Every event carries the `seq` of its command and an `ev` field.
 | `amended` | order, remaining |
 | `cancelled` | order, remaining, reason (`user`, `ioc_remainder`, `self_trade`, `market_closed`, `kill_switch`) |
 | `rejected` | reason |
+| `duplicate` | order (the original order with that client order ID) |
 | `settled` | market, outcome |
 | `reserved` | account, market, amount (the new reserve) |
 

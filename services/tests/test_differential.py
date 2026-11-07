@@ -76,6 +76,7 @@ def test_generated_streams_exercise_every_outcome() -> None:
         ("rejected", "account_exists"),
         ("rejected", "too_many_orders"),
         ("rejected", "insufficient_collateral"),
+        ("duplicate", ""),  # G4: idempotent order entry
     }
     assert expected - seen == set()
     assert kinds == {"grant", "trade", "settle"}

@@ -11,6 +11,7 @@ Input and output use the shared wire format: one dict per command, one dict per 
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Final
@@ -22,6 +23,7 @@ U32_MAX: Final = 2**32 - 1
 U64_MAX: Final = 2**64 - 1
 SIGNUP_GRANT: Final = 1_000_000  # credit-cents (G2 plan)
 MAX_RESTING_ORDERS: Final = 1_000  # GTC orders per account (G2 plan)
+CLIENT_ID_WINDOW: Final = 10_000  # accepted client order IDs remembered per account
 
 # set_state transitions; Resolved and Voided are reached only by `settle` (G2 plan).
 TRANSITIONS: Final = {
@@ -117,6 +119,9 @@ class ReferenceEngine:
         self.reserved_by_account: dict[int, int] = {}  # sum of `reserve` per account
         self.resting_count: dict[int, int] = {}
         self.touched: set[tuple[int, int]] = set()  # (account, market) this command
+        # Per account: client order ID -> order ID, and the IDs oldest first (for eviction).
+        self.client_ids: dict[int, dict[int, int]] = {}
+        self.client_id_order: dict[int, deque[int]] = {}
 
     # ----- dispatch -----
 
@@ -365,6 +370,7 @@ class ReferenceEngine:
         if not isinstance(post_only, bool):
             msg = f"field 'post_only' must be a boolean, got {post_only!r}"
             raise MalformedCommandError(msg)
+        client_id = _optional_int_field(cmd, "client_order_id", U64_MAX)
 
         def reject(reason: str) -> list[Event]:
             return [{"ev": "rejected", "reason": reason}]
@@ -373,6 +379,8 @@ class ReferenceEngine:
             return reject("unknown_market")
         if account not in self.cash:
             return reject("unknown_account")
+        if client_id is not None and client_id in self.client_ids.get(account, {}):
+            return [{"ev": "duplicate", "order": self.client_ids[account][client_id]}]
         if self.states[market] != "open":
             return reject("market_not_open")
         if not MIN_PRICE_TICKS <= price <= MAX_PRICE_TICKS:
@@ -412,6 +420,13 @@ class ReferenceEngine:
 
         order_id = seq
         events: list[Event] = [{"ev": "accepted", "order": order_id}]
+        if client_id is not None:
+            ids = self.client_ids.setdefault(account, {})
+            order = self.client_id_order.setdefault(account, deque())
+            ids[client_id] = order_id
+            order.append(client_id)
+            if len(order) > CLIENT_ID_WINDOW:
+                del ids[order.popleft()]
         remaining = qty
         while remaining > 0:
             makers = crossing_makers()
