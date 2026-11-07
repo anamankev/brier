@@ -16,7 +16,7 @@ Build a prediction-market exchange whose core would pass review at a regulated v
 5. **Markets that resolve correctly:** every market has a written rulebook entry (§7). Automated resolvers fetch public sources (FRED, BLS, NOAA), record evidence, and settle after a two-step confirmation.
 6. **Liquidity:** a reference market maker trading through the public API only, quoting around a model fair value (twofold's options-implied probabilities for index markets) with inventory control (§8).
 7. **Surveillance:** detection of wash trading, spoofing and layering, marking the close, and insider-like trading. Evaluated by a pre-registered study on simulated markets with injected manipulators, reporting precision and recall per typology (§9).
-8. **Web app:** market list, order-book ladder, price chart, trade ticket, positions and P&L, market rules with resolution evidence, admin console, surveillance case view. Accessible (WCAG 2.2 AA).
+8. **Web app:** market list, order-book ladder, price chart, trade ticket, positions and P&L, market rules with resolution evidence, forecaster scorecard and leaderboards (§7), admin console, surveillance case view. Accessible (WCAG 2.2 AA).
 9. **Operations:** one-command local stack (Docker Compose), structured logs, Prometheus metrics, OpenTelemetry traces, runbooks for halt, recovery, and resolution disputes; threat model.
 10. **Release:** public repo, README with architecture, invariants, benchmark results, and an honest comparison with industry leaders (§16).
 
@@ -122,6 +122,12 @@ Cancel-all per account, per market, or everywhere, and a global halt of every op
 - Each market has a rulebook entry before listing: question; exact YES condition; resolution source (dataset, series ID, URL); release or observation time and timezone; revision policy (first release counts, later revisions ignored, unless stated); void conditions; close time.
 - Sources must be free, public, and authoritative: FRED (St. Louis Fed; free API key), BLS public API, NOAA climate data. Terms for each source are recorded in `docs/data-licenses.md` before use (O3).
 - Resolution: a resolver job fetches the source after the release time and stores evidence (request, raw response hash, parsed value, retrieval time). It proposes an outcome, and an admin confirms it in a second step; settlement then runs as a sequenced command. A disputed resolution can be re-run within `DISPUTE_WINDOW` before settlement.
+- **Forecaster scores** (added 7 November 2026; shown in G6). Play money cannot make trading matter; being measurably right can. Any user may record a probability (1 to 99 percent) on any open market and change it until close; trading is not required.
+  - When the market resolves YES or NO, each forecast is scored with the Brier score, (forecast − outcome)², and so is the market's own price (the last trade, or the midpoint before the first trade).
+  - Skill is the market's score minus the user's, averaged over the market's whole open period. Time before a user's first forecast counts as zero skill, so forecasting late, with more information, earns nothing extra; forecasting early and right earns the most.
+  - Voided markets are not scored. Integer arithmetic, in units of 1/10,000.
+  - Leaderboards rank by average skill over at least `MIN_SCORED_MARKETS` (10) resolved markets, and separately by settled trading profit.
+  - Forecasts are timestamped by the server, cannot be backdated, and are frozen at close.
 - Launch catalogue examples: monthly CPI year-on-year above a threshold; the FOMC target upper bound after a meeting; the unemployment rate; S&P 500 close above a level on a date; the daily maximum temperature at a named station.
 
 ## 8. Reference market maker
@@ -179,7 +185,7 @@ Threat model per component (`docs/threat-model.md`): order forgery (signature ve
 | G3 Journal and recovery | §5 | Journal, group commit, snapshots, replay, crash harness | 1,000 SIGKILLs with zero lost acknowledged orders and matching state hashes; P5 measured |
 | G4 Gateway and APIs | §6, §12 | Docker Compose with PostgreSQL 16 and the first read models; REST, WebSocket order entry and market data, auth, idempotency, rate limits, OpenAPI and AsyncAPI, reference client, fuzzing | Fuzzers run 1 hour each with no crash; gap recovery tested; P3 and P4 measured |
 | G5 Markets and resolution | §7 | Rulebook, admin console API, FRED/BLS/NOAA resolvers with evidence, two-step settlement | Every launch-catalogue market resolves end to end from a recorded source response |
-| G6 Web app | §0 item 8 | Next.js scaffold; trading UI, portfolio, rules and evidence pages, admin console | Playwright flows and axe checks pass |
+| G6 Web app | §0 item 8, §7 | Next.js scaffold; trading UI, portfolio, rules and evidence pages, forecaster scorecard and leaderboards, admin console | Playwright flows and axe checks pass |
 | G7 Market maker and simulation | §8, §10 | Reference market maker; agent-based harness | Market maker quotes through the public API in simulation and on live markets; metrics reported |
 | G8 Surveillance | §9 | Detectors, case management, pre-registered evaluation | Hypotheses commit predates results; precision and recall reported per typology |
 | G9 Release | §0, §16 | README, benchmark report, threat model, runbooks, demo | Every item in §0 met with evidence |
@@ -195,7 +201,7 @@ Threat model per component (`docs/threat-model.md`): order forgery (signature ve
 | Surveillance | Required of a regulated venue | Not publicly documented for the international venue | Detectors with published precision and recall |
 | Order-entry protocols | REST, WebSocket; FIX unverified (O1) | REST, WebSocket | REST, WebSocket; no FIX |
 
-Where this project can be better than the leaders: open, verifiable engineering (published invariants, replay hashes, crash tests, surveillance metrics). Where it cannot compete: license, real money, users, liquidity. Figures in this table come from press and analyst reports gathered on 6 November 2026; sources disagree, so they are context, not claims the product depends on.
+Where this project can be better than the leaders: open, verifiable engineering (published invariants, replay hashes, crash tests, surveillance metrics); every market's rules and settlement evidence pinned by hash in the journal; and a scored record of each user's forecasting skill against the market (§7). Where it cannot compete: license, real money, users, liquidity. Figures in this table come from press and analyst reports gathered on 6 November 2026; sources disagree, so they are context, not claims the product depends on.
 
 ## 17. Non-claims
 - Play money changes trader behavior; prices here are not forecasts of the quality of real-money markets.
