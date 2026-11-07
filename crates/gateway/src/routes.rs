@@ -300,16 +300,67 @@ pub async fn health(State(s): Shared) -> Json<Value> {
     Json(json!({ "durable_seq": durable, "projected_seq": s.projected.load(Ordering::Acquire) }))
 }
 
-/// `GET /v1/markets`: every market and its state.
+/// A market's listing details for the market list: title, category, close time, and (from the
+/// read models) the last trade price and the contracts traded.
+async fn listing_details(s: &AppState) -> Result<std::collections::HashMap<i64, Value>, ApiError> {
+    let rows = s
+        .db
+        .query(
+            "SELECT b.market, b.canonical::jsonb ->> 'title', b.canonical::jsonb -> 'source' ->> 'provider', \
+                    b.canonical::jsonb -> 'source' ->> 'series', extract(epoch FROM b.close_at)::bigint, \
+                    (SELECT f.price FROM fills f WHERE f.market = b.market ORDER BY f.seq DESC, f.ordinal DESC LIMIT 1), \
+                    (SELECT coalesce(sum(f.qty), 0)::bigint FROM fills f WHERE f.market = b.market) \
+             FROM rulebooks b",
+            &[],
+        )
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|r| {
+            let provider: Option<brier_rules::Provider> = r
+                .get::<_, Option<&str>>(2)
+                .and_then(|p| serde_json::from_value(Value::String(p.to_owned())).ok());
+            let category = provider
+                .zip(r.get::<_, Option<&str>>(3))
+                .and_then(|(p, id)| brier_rules::series(p, id))
+                .map(|series| series.category);
+            let close: i64 = r.get(4);
+            (
+                r.get::<_, i64>(0),
+                json!({
+                    "title": r.get::<_, Option<&str>>(1), "category": category,
+                    "close": crate::markets::iso(close),
+                    "last_price": r.get::<_, Option<i16>>(5), "volume": r.get::<_, i64>(6),
+                }),
+            )
+        })
+        .collect())
+}
+
+/// `GET /v1/markets`: every market and its state, with its listing details.
 pub async fn markets(State(s): Shared) -> ApiResult {
     let Answer::Markets { as_of, markets } = s.core.query(Query::Markets).await? else {
         return Err(ApiError::internal(&"markets query answered another shape"));
     };
+    let details = listing_details(&s).await?;
     let items: Vec<Value> = markets
         .iter()
-        .map(|&(m, st)| json!({ "market": m.get(), "state": state_name(st) }))
+        .map(|&(m, st)| {
+            let mut item = json!({ "market": m.get(), "state": state_name(st) });
+            if let (Some(extra), Some(obj)) = (
+                details.get(&i64::from(m.get())).and_then(Value::as_object),
+                item.as_object_mut(),
+            ) {
+                obj.extend(extra.clone());
+            }
+            item
+        })
         .collect();
-    Ok(Json(json!({ "as_of": as_of, "markets": items })).into_response())
+    let projected = s.projected.load(Ordering::Acquire);
+    Ok(
+        Json(json!({ "as_of": as_of, "projected_seq": projected, "markets": items }))
+            .into_response(),
+    )
 }
 
 /// `GET /v1/markets/{id}/book`: aggregated price levels, best first.

@@ -357,5 +357,10 @@ def test_every_launch_market_resolves_end_to_end(exchange: Exchange, tmp_path: P
     assert [f["market"] for e, f in said if e == "proposed"] == [101, 102, 103, 105]
 
     # The read models carry the trades.
+    listed = {m["market"]: m for m in public.request("GET", "/v1/markets")["markets"]}
+    for m, r in rules.items():
+        assert listed[m]["title"] == r.raw["title"]
+        assert listed[m]["category"] == r.series.category
+        assert (listed[m]["last_price"], listed[m]["volume"]) == (50, 10)
     fills = tom.request("GET", "/v1/fills")
     assert sorted(f["market"] for f in fills["fills"]) == [101, 102, 103, 104, 105], fills

@@ -198,17 +198,24 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [as_of, markets]
+                required: [as_of, projected_seq, markets]
                 properties:
-                  as_of: { type: integer }
+                  as_of: { type: integer, description: 'Market states reflect every command up to here' }
+                  projected_seq: { type: integer, description: 'last_price and volume reflect the read models up to here' }
                   markets:
                     type: array
                     items:
                       type: object
                       required: [market, state]
+                      description: 'A market listed from a rulebook also has title, category, close, last_price, and volume'
                       properties:
                         market: { type: integer }
                         state: { $ref: '#/components/schemas/MarketState' }
+                        title: { type: string }
+                        category: { enum: [economics, rates, weather] }
+                        close: { $ref: '#/components/schemas/Instant' }
+                        last_price: { type: [integer, 'null'], description: 'The last trade price; null before the first trade' }
+                        volume: { type: integer, description: 'Contracts traded, all time' }
   /v1/markets/{id}/book:
     get:
       tags: [market data]
