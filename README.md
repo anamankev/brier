@@ -28,8 +28,8 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 | G1 | Matching engine and independent reference engine | Done |
 | G2 | Ledger, collateral, settlement | Done |
 | G3 | Journal, snapshots, crash recovery | Done |
-| G4 | Gateway, APIs, PostgreSQL read models | Next |
-| G5 | Markets, rulebook, resolution | |
+| G4 | Gateway, APIs, PostgreSQL read models | Done |
+| G5 | Markets, rulebook, resolution | Next |
 | G6 | Web app | |
 | G7 | Market maker, simulation harness | |
 | G8 | Surveillance and its evaluation | |
@@ -47,6 +47,9 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 | Crash safety | 1,000 SIGKILLs under load with simulated torn writes: 0 of 6,058,014 acknowledged commands lost; every recovered state equal to a clean replay | [durability note](docs/notes/durability.md) |
 | Durable sync cost | 3.95 ms median per batch (full device flush, `F_FULLFSYNC`); group commit spreads it across every order in the batch | [durability note](docs/notes/durability.md) |
 | Recovery replay | 10 million commands from disk in 7.7 s (median of 3) | [durability note](docs/notes/durability.md) |
+| Order to acknowledgment through the gateway | p50 4.74 ms, p99 9.14 ms at 10,000 orders/s (one to two durable syncs); the 5 ms p99 target was refuted, the registered 9.9 ms bound held | [gateway note](docs/notes/gateway.md) |
+| Market data to 1,000 WebSocket subscribers | p50 3.69 ms, p99 16.4 ms after batching writes (was 22.9 ms); the 10 ms p99 target was refuted, remaining tail is intermittent machine-wide stalls | [gateway note](docs/notes/gateway.md) |
+| Fuzzing | 6 targets (wire, journal decode and recovery, snapshot restore, gateway requests, signatures), 1 hour each, about 2.2 billion executions; one finding (non-canonical snapshot bytes), fixed | [G4 review](docs/gates/G4-review.md) |
 | Book and ledger invariants (I1-I5) | Checked after every command in 2,560 random streams per CI run | `crates/engine/tests/properties.rs` |
 
 Measured on a 16 GB Apple M5 MacBook Air on AC power. Both performance hypotheses were registered before the engine existed.
