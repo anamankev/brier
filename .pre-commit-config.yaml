@@ -1,0 +1,35 @@
+# Hooks run on every commit (install once with `make setup`). Python tools run through uv so
+# their versions come from services/uv.lock, the same versions CI and `make check` use.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-yaml
+      - id: check-toml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: scan staged changes for secrets (gitleaks)
+        entry: gitleaks git --pre-commit --staged --redact --no-banner
+        language: system
+        pass_filenames: false
+      - id: private-tooling
+        name: no tracked mention of the private development tooling
+        entry: sh scripts/private_tooling_check.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: make-check
+        name: make check (lint, types, fast tests; a failing check refuses the commit)
+        entry: make check
+        language: system
+        pass_filenames: false
+        always_run: true

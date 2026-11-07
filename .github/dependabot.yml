@@ -1,0 +1,15 @@
+# Weekly update proposals for every locked ecosystem. Nothing merges without CI passing.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: uv
+    directory: /services
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
