@@ -114,7 +114,7 @@ fn segment_path(dir: &Path, first: Seq) -> PathBuf {
 }
 
 /// Segment files in `dir`, sorted by their first sequence number.
-fn segments(dir: &Path) -> Result<Vec<(u64, PathBuf)>, JournalError> {
+pub(crate) fn segments(dir: &Path) -> Result<Vec<(u64, PathBuf)>, JournalError> {
     let mut found = Vec::new();
     for entry in fs::read_dir(dir)? {
         let path = entry?.path();
@@ -276,6 +276,47 @@ where
     E: From<JournalError>,
 {
     scan(dir, None, apply, false)
+}
+
+/// One complete, checksummed, decodable record at the start of `bytes`: its total length,
+/// sequence number, and command. `None` if the bytes do not (yet) hold one. Used by the
+/// follower, which only reads up to the durable bound and so never needs torn-tail rules.
+pub(crate) fn parse_record(bytes: &[u8], version: u16) -> Option<(usize, u64, Command)> {
+    let (head, rest) = bytes.split_at_checked(RECORD_HEADER_LEN)?;
+    let len = usize::try_from(u32::from_le_bytes(head.get(0..4)?.try_into().ok()?)).ok()?;
+    let crc = u32::from_le_bytes(head.get(4..8)?.try_into().ok()?);
+    let seq = u64::from_le_bytes(head.get(8..16)?.try_into().ok()?);
+    if len == 0 || len > MAX_PAYLOAD {
+        return None;
+    }
+    let payload = rest.get(..len)?;
+    if record_checksum(seq, payload) != crc {
+        return None;
+    }
+    let command = decode(payload, version).ok()?;
+    Some((RECORD_HEADER_LEN.checked_add(len)?, seq, command))
+}
+
+/// A readable segment's format version and header length.
+pub(crate) fn segment_header(path: &Path) -> Result<(u16, u64), JournalError> {
+    let bytes = fs::read(path)?;
+    let corrupt = |reason| JournalError::Corrupt {
+        segment: path.to_path_buf(),
+        offset: 0,
+        reason,
+    };
+    if bytes.get(..8) != Some(MAGIC.as_slice()) {
+        return Err(corrupt("bad segment magic"));
+    }
+    let version = bytes
+        .get(8..10)
+        .and_then(|b| b.try_into().ok())
+        .map(u16::from_le_bytes)
+        .ok_or_else(|| corrupt("short segment header"))?;
+    if !READABLE.contains(&version) {
+        return Err(corrupt("unsupported segment version"));
+    }
+    Ok((version, HEADER_LEN as u64))
 }
 
 /// What a segment's header says about the segment.

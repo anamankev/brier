@@ -4,11 +4,13 @@
 
 mod codec;
 mod crc;
+mod follow;
 mod log;
 mod snapshot;
 
 pub use codec::{CodecError, FORMAT_VERSION, decode, encode};
 pub use crc::{Crc32c, crc32c};
+pub use follow::Follower;
 pub use log::{
     JournalError, JournalWriter, MAX_BATCH_BYTES, MAX_PAYLOAD, Recovered, SEGMENT_BYTES,
     Truncation, read_journal, recover, recover_after,
