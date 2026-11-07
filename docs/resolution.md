@@ -52,6 +52,21 @@ A JSON object, at most 4 KiB in canonical form (RFC 8785, integers only). The ga
 
 The evidence hash is the SHA-256 of the canonical record. The same record can back a later proposal.
 
+## Resolvers (`services/src/brier_services/resolution/`)
+One module per source; each builds the request for a rulebook and parses the response strictly. A response the parser cannot read, or an HTTP error, proposes nothing.
+
+| Source | Request | Value |
+|---|---|---|
+| BLS API v1 (no key) | the observation's year and the year before | The index or rate as published. The 12-month change is (index_t / index_{t−12} − 1) × 100. A month published as `-` (October 2025, during the lapse in appropriations) or not yet published is missing |
+| FRED (`FRED_API_KEY`) | the observation date, initial release only (`output_type=4`, real time from that date on) | The value as first released, even when fetched after a revision; `.` is missing |
+| NOAA NCEI Access Data Service (no token) | the station and date, metric units | °C converted exactly to °F (× 9/5 + 32); an empty answer is missing |
+
+- **Arithmetic** is exact (`Fraction`). The value is rounded half away from zero to the series' precision, then compared with the threshold.
+- **Missing values** wait until the deadline, then propose void (`no_value_by_deadline`). `source_discontinued` is never proposed automatically.
+- **Fetching:** HTTPS only, to `api.bls.gov`, `api.stlouisfed.org`, and `www.ncei.noaa.gov`; no redirects; at most 4 MiB; 30 s timeout. Credentials in the URL are replaced by `REDACTED` in the evidence.
+- **Evidence:** the record adds to the four checked fields the provider, series, observation, transform, operator, threshold, the rounded value (or why it is missing), the redacted request URL, the HTTP status, the SHA-256 and length of the raw body, and the resolver version. The raw body is stored under `var/evidence/<sha256>`. `recompute` decides again from the record and the stored body alone, offline (R2).
+- **Service:** `python -m brier_services.resolve keygen --key-file var/resolver.key` creates the signing key (mode 0600) and prints its public key. A user with the resolver role registers it (`POST /v1/keys`). Then `python -m brier_services.resolve run --gateway URL --key-id N --key-file var/resolver.key` proposes, every 5 minutes, for each closed market without a live resolution. It first checks that the rulebook's hash matches the gateway's rules hash and the journal.
+
 ## Races and crashes
 - Each step is one conditional SQL statement, so two requests racing on one resolution cannot both succeed; the second gets `conflict`.
 - A dispute needs `confirmed` and an open window; the settler claims only after the window and only without an open dispute. Both are judged by the same clock, so a dispute and a claim cannot both succeed.
