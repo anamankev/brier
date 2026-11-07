@@ -1,0 +1,45 @@
+# Fuzz targets (docs/gates/G4-plan.md). Built with the pinned nightly toolchain:
+#   cargo +nightly-2026-10-20 fuzz run <target> -- -max_total_time=3600
+# A separate workspace, so the main build never needs nightly or libFuzzer.
+[package]
+name = "brier-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "=0.4.13"
+brier-engine = { path = "../crates/engine" }
+brier-journal = { path = "../crates/journal" }
+brier-wire = { path = "../crates/wire" }
+tempfile = "3.27"
+
+[[bin]]
+name = "wire_parse"
+path = "fuzz_targets/wire_parse.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "journal_decode"
+path = "fuzz_targets/journal_decode.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "journal_recover"
+path = "fuzz_targets/journal_recover.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "snapshot_restore"
+path = "fuzz_targets/snapshot_restore.rs"
+test = false
+doc = false

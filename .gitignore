@@ -27,6 +27,8 @@ node_modules/
 # Fuzzing and benchmark scratch
 fuzz/artifacts/
 fuzz/corpus/
+fuzz/target/
+fuzz/coverage/
 criterion-scratch/
 
 # OS clutter
