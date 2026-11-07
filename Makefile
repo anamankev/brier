@@ -6,7 +6,7 @@ CARGO ?= cargo
 UV_RUN := uv run --project services --locked
 PIP_AUDIT_VERSION := 2.10.1
 
-.PHONY: help setup check rust-check py-check private-check test-all audit differential-full
+.PHONY: help setup check rust-check py-check private-check test-all audit differential-full bench
 
 SEED ?= 1
 
@@ -33,9 +33,16 @@ py-check: ## ruff, mypy --strict, fast Python tests
 private-check: ## No tracked file mentions the private development tooling
 	sh scripts/private_tooling_check.sh
 
-differential-full: ## The G1 gate study: 10 million random commands through both engines (about an hour)
+differential-full: ## The G1 gate study: 10 million random commands through both engines (a few minutes)
 	$(CARGO) build --release --locked -p brier-replay
 	cd services && uv run --locked python -m brier_services.differential --binary ../target/release/brier-replay --seed $(SEED) --commands 10000000
+
+bench: ## The registered P1/P2 engine benchmark (docs/notes/performance.md); plug in and close heavy apps first
+	$(CARGO) build --release --locked -p brier-bench
+	rustc --version
+	sw_vers -productVersion
+	pmset -g batt | head -1
+	./target/release/brier-bench
 
 test-all: check ## Every test, including slow ones
 	$(CARGO) test --workspace --locked -- --include-ignored
