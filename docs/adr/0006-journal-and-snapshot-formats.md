@@ -21,6 +21,7 @@ Option 3.
   - The writer caps a batch at `MAX_BATCH_BYTES` (1 MiB). So a bad record (short, oversized length, CRC mismatch, or undecodable payload) in the **last** segment, with at most `MAX_BATCH_BYTES` of file after its start, is a torn tail. Recovery truncates the segment there and logs the offset and the number of bytes dropped.
   - Any other bad record is corruption of data that may already have been acknowledged, and recovery stops with an error. That covers a bad record in an earlier segment, or one followed by more than a batch of bytes.
   - A record with a valid CRC but a sequence number other than the next expected one is corruption, wherever it is. Sequence numbers must be strictly consecutive across segments.
+  - A segment's header is synced before any record is appended to it. So if the **newest** segment's header is missing or unreadable (short, or wrong magic or version) and the file holds no more than one batch of bytes, the segment was interrupted while being created, and nothing in it was acknowledged. Recovery removes it. The same damage in an older segment is corruption. (Found by the crash study: a kill during rotation followed by a simulated torn write.)
 
 ## Consequences
 - Old journals stay readable: a format change bumps the version, and readers keep decoding every version they have ever written.

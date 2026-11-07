@@ -257,6 +257,50 @@ where
     scan(dir, None, apply, false)
 }
 
+/// What a segment's header says about the segment.
+enum Header {
+    /// Readable, the right version, and starting at the expected sequence number.
+    Valid,
+    /// The newest segment, interrupted while being created (see [`check_header`]).
+    TornCreation,
+}
+
+/// Check a segment's header. The header is synced before any record is appended to a
+/// segment, so a newest segment whose header is missing or unreadable was interrupted while
+/// being created, and nothing in it was ever acknowledged, provided it holds no more than one
+/// batch of bytes (the torn-tail bound, ADR-0006). Anything else wrong is corruption, reported
+/// as `(offset, reason)`.
+fn check_header(
+    bytes: &[u8],
+    is_last: bool,
+    first: u64,
+    expected: u64,
+) -> Result<Header, (usize, &'static str)> {
+    let unreadable = bytes.len() < HEADER_LEN
+        || bytes.get(..8) != Some(MAGIC.as_slice())
+        || bytes.get(8..10) != Some(VERSION.to_le_bytes().as_slice());
+    if unreadable && is_last && bytes.len() <= HEADER_LEN.saturating_add(MAX_BATCH_BYTES) {
+        return Ok(Header::TornCreation);
+    }
+    if bytes.len() < HEADER_LEN {
+        return Err((0, "short segment header"));
+    }
+    if bytes.get(..8) != Some(MAGIC.as_slice()) {
+        return Err((0, "bad segment magic"));
+    }
+    if bytes.get(8..10) != Some(VERSION.to_le_bytes().as_slice()) {
+        return Err((8, "unsupported segment version"));
+    }
+    let header_first = bytes
+        .get(10..18)
+        .and_then(|b| b.try_into().ok())
+        .map(u64::from_le_bytes);
+    if header_first != Some(first) || first != expected {
+        return Err((10, "segment does not start at the next sequence number"));
+    }
+    Ok(Header::Valid)
+}
+
 fn scan<E>(
     dir: &Path,
     after: Option<Seq>,
@@ -295,37 +339,25 @@ where
             reason,
         };
         let bytes = fs::read(path).map_err(JournalError::from)?;
-        if bytes.len() < HEADER_LEN {
-            if is_last {
-                // A crash while creating the segment: nothing in it was ever acknowledged.
+        match check_header(&bytes, is_last, *first, expected) {
+            Ok(Header::Valid) => {}
+            Ok(Header::TornCreation) => {
                 if repair {
                     fs::remove_file(path).map_err(JournalError::from)?;
                     sync_dir(dir)?;
                 }
+                let dropped = bytes.len() as u64;
                 let truncation = Truncation {
                     segment: path.clone(),
                     offset: 0,
-                    dropped: bytes.len() as u64,
+                    dropped,
                 };
                 return Ok(Recovered {
                     last_seq,
                     truncation: Some(truncation),
                 });
             }
-            return Err(corrupt(0, "short segment header").into());
-        }
-        if bytes.get(..8) != Some(MAGIC.as_slice()) {
-            return Err(corrupt(0, "bad segment magic").into());
-        }
-        if bytes.get(8..10) != Some(VERSION.to_le_bytes().as_slice()) {
-            return Err(corrupt(8, "unsupported segment version").into());
-        }
-        let header_first = bytes
-            .get(10..18)
-            .and_then(|b| b.try_into().ok())
-            .map(u64::from_le_bytes);
-        if header_first != Some(*first) || *first != expected {
-            return Err(corrupt(10, "segment does not start at the next sequence number").into());
+            Err((offset, reason)) => return Err(corrupt(offset, reason).into()),
         }
         let mut offset = HEADER_LEN;
         while let Some(rest) = bytes.get(offset..).filter(|r| !r.is_empty()) {
@@ -695,6 +727,44 @@ mod tests {
         assert_eq!(got.len(), 100);
         assert_eq!(r.truncation.map(|t| t.offset), Some(0));
         assert!(!torn.exists());
+    }
+
+    #[test]
+    fn a_newest_segment_with_a_garbage_header_is_an_interrupted_creation() {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), 100, 10, SEGMENT_BYTES);
+        // Created at rotation, killed before its header was written, then a power cut left
+        // garbage in it (crash study, cycle 183).
+        let torn = segment_path(dir.path(), Seq::from_raw(101));
+        fs::write(&torn, vec![0x5A; 3_000]).unwrap();
+        let (got, r) = read(dir.path());
+        assert_eq!(got.len(), 100);
+        assert_eq!(
+            r.truncation.map(|t| (t.offset, t.dropped)),
+            Some((0, 3_000))
+        );
+        assert!(!torn.exists());
+    }
+
+    #[test]
+    fn a_garbage_header_before_the_newest_segment_is_corruption() {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), 2_000, 50, 4_096);
+        let first = segments(dir.path()).unwrap().first().unwrap().1.clone();
+        let mut bytes = fs::read(&first).unwrap();
+        bytes[0] ^= 0xFF;
+        fs::write(&first, bytes).unwrap();
+        let err = recover::<JournalError>(dir.path(), |_, _| Ok(())).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                JournalError::Corrupt {
+                    reason: "bad segment magic",
+                    ..
+                }
+            ),
+            "{err}"
+        );
     }
 
     #[test]
