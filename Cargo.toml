@@ -31,3 +31,11 @@ indexing_slicing = "deny"
 debug = 1          # line tables for profiling the engine (SPEC §11)
 codegen-units = 1
 lto = "thin"
+
+# Property tests run hundreds of random streams with full invariant checks after every
+# command. Optimize test builds so `make check` stays fast; overflow checks and debug
+# assertions stay on, as in any test build.
+[profile.test]
+opt-level = 2
+overflow-checks = true
+debug-assertions = true

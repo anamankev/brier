@@ -30,12 +30,16 @@ def replay_binary() -> Path:
 def test_generated_streams_exercise_every_outcome() -> None:
     # A differential test is only as good as its inputs: these streams must reach every event
     # and every rejection and cancel reason, or agreement between the engines proves little.
+    # Entries are also checked by kind below.
     seen: set[tuple[str, str]] = set()
+    kinds: set[str] = set()
     for seed in FAST_SEEDS:
         engine = ReferenceEngine()
         for cmd in generate(seed, FAST_COMMANDS):
             for e in engine.apply(cmd):
                 seen.add((e["ev"], e.get("reason", "")))
+                if e["ev"] == "entry":
+                    kinds.add(e["kind"])
     expected = {
         ("market_created", ""),
         ("market_state", ""),
@@ -58,8 +62,19 @@ def test_generated_streams_exercise_every_outcome() -> None:
         ("rejected", "fok_unfillable"),
         ("rejected", "unknown_order"),
         ("rejected", "invalid_amend"),
+        # G2: accounts, money, settlement, kill switches
+        ("account_opened", ""),
+        ("entry", ""),
+        ("reserved", ""),
+        ("settled", ""),
+        ("cancelled", "kill_switch"),
+        ("rejected", "unknown_account"),
+        ("rejected", "account_exists"),
+        ("rejected", "too_many_orders"),
+        ("rejected", "insufficient_collateral"),
     }
     assert expected - seen == set()
+    assert kinds == {"grant", "trade", "settle"}
 
 
 def test_generation_is_deterministic_in_the_seed() -> None:

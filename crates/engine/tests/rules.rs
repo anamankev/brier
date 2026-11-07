@@ -7,7 +7,7 @@ use brier_engine::{
     CancelReason, Command, Engine, EngineError, Event, MarketState, NewOrder, RejectReason,
     Sequenced, TimeInForce, Trade,
 };
-use brier_types::{AccountId, MarketId, OrderId, Price, Quantity, Seq, Side};
+use brier_types::{AccountId, MarketId, OrderId, Outcome, Price, Quantity, Seq, Side};
 
 const M: MarketId = MarketId::new(1);
 const ALICE: AccountId = AccountId::new(1);
@@ -32,6 +32,9 @@ impl Harness {
     /// A harness with market M listed and open.
     fn open() -> Self {
         let mut h = Self::new();
+        for account in [ALICE, BOB, CAROL] {
+            h.cmd(Command::OpenAccount { account });
+        }
         h.cmd(Command::CreateMarket { market: M });
         h.cmd(Command::SetState {
             market: M,
@@ -40,6 +43,8 @@ impl Harness {
         h
     }
 
+    /// Apply a command and return its matching events, leaving out the ledger's `Entry` and
+    /// `Reserved` events (covered by tests/ledger.rs), so these tests read as the G1 rules.
     fn cmd(&mut self, command: Command) -> Vec<Event> {
         self.seq += 1;
         let mut out = Vec::new();
@@ -53,6 +58,7 @@ impl Harness {
             )
             .unwrap();
         self.engine.check_invariants().unwrap();
+        out.retain(|e| !matches!(e, Event::Entry(_) | Event::Reserved { .. }));
         out
     }
 
@@ -184,6 +190,7 @@ fn markets_are_created_once_and_must_exist() {
 #[test]
 fn orders_need_an_open_market_and_that_check_comes_first() {
     let mut h = Harness::new();
+    h.cmd(Command::OpenAccount { account: ALICE });
     h.cmd(Command::CreateMarket { market: M });
     // PreOpen, with an invalid price too: market_not_open is checked first.
     assert_eq!(
@@ -548,11 +555,19 @@ fn closing_cancels_every_resting_order_in_ascending_id_after_the_state_event() {
             market: M,
             state: MarketState::Resolved
         }),
-        vec![Event::MarketStateChanged {
+        rejected(RejectReason::InvalidTransition)
+    );
+    assert_eq!(
+        h.cmd(Command::Settle {
             market: M,
-            state: MarketState::Resolved
+            outcome: Outcome::Yes
+        }),
+        vec![Event::Settled {
+            market: M,
+            outcome: Outcome::Yes
         }]
     );
+    assert_eq!(h.engine.market_state(M), Some(MarketState::Resolved));
 }
 
 #[test]

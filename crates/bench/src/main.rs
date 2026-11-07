@@ -180,7 +180,8 @@ impl Workload {
     }
 }
 
-/// The setup commands (list and open every market) followed by random workload commands,
+/// The setup commands (open every account, list and open every market) followed by random
+/// workload commands,
 /// `total` in all.
 fn generate(seed: u64, total: usize) -> Result<Vec<Sequenced>, EngineError> {
     let mut workload = Workload {
@@ -193,6 +194,11 @@ fn generate(seed: u64, total: usize) -> Result<Vec<Sequenced>, EngineError> {
     let mut commands = Vec::with_capacity(total);
     let mut seq = Seq::FIRST;
     let mut setup = Vec::new();
+    for a in 1..=ACCOUNTS {
+        setup.push(Command::OpenAccount {
+            account: AccountId::new(a),
+        });
+    }
     for m in 1..=MARKETS {
         let market = MarketId::new(m);
         setup.push(Command::CreateMarket { market });

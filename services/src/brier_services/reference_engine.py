@@ -1,8 +1,9 @@
-"""Reference matching engine (SPEC §3.4), written from docs/gates/G1-plan.md and SPEC §2-§3.
+"""Reference engine (SPEC §3.4), written from docs/gates/G1-plan.md, G2-plan.md, and SPEC §2-§4.
 
 This engine exists to be obviously correct, not fast. Every resting order sits in one plain
-list per market; every decision re-scans and re-sorts that list. Nothing here is derived from
-the Rust engine's code. Differential tests feed both engines the same wire commands and
+list per market, and every decision re-scans and re-sorts that list. Collateral is recomputed
+from the account's resting orders each time, not from running totals. Nothing here is derived
+from the Rust engine's code. Differential tests feed both engines the same wire commands and
 require identical events (``brier_services.differential``).
 
 Input and output use the shared wire format: one dict per command, one dict per event.
@@ -14,12 +15,15 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Final
 
-from brier_services.units import MAX_ORDER_QTY, MAX_PRICE_TICKS, MIN_PRICE_TICKS
+from brier_services.units import MAX_ORDER_QTY, MAX_PRICE_TICKS, MIN_PRICE_TICKS, PAYOUT_TICKS
 
 U8_MAX: Final = 2**8 - 1
 U32_MAX: Final = 2**32 - 1
 U64_MAX: Final = 2**64 - 1
+SIGNUP_GRANT: Final = 1_000_000  # credit-cents (G2 plan)
+MAX_RESTING_ORDERS: Final = 1_000  # GTC orders per account (G2 plan)
 
+# set_state transitions; Resolved and Voided are reached only by `settle` (G2 plan).
 TRANSITIONS: Final = {
     ("pre_open", "open"),
     ("pre_open", "closed"),
@@ -27,10 +31,19 @@ TRANSITIONS: Final = {
     ("open", "closed"),
     ("halted", "open"),
     ("halted", "closed"),
-    ("closed", "resolved"),
-    ("closed", "voided"),
 }
 STATES: Final = {"pre_open", "open", "halted", "closed", "resolved", "voided"}
+COMMANDS: Final = {
+    "create_market",
+    "set_state",
+    "place",
+    "cancel",
+    "amend",
+    "open_account",
+    "settle",
+    "cancel_all",
+    "halt_all",
+}
 
 Event = dict[str, Any]
 
@@ -60,6 +73,10 @@ def _int_field(cmd: Mapping[str, Any], name: str, maximum: int) -> int:
     return value
 
 
+def _optional_int_field(cmd: Mapping[str, Any], name: str, maximum: int) -> int | None:
+    return None if cmd.get(name) is None else _int_field(cmd, name, maximum)
+
+
 def _choice_field(cmd: Mapping[str, Any], name: str, allowed: set[str]) -> str:
     value = cmd.get(name)
     if not isinstance(value, str) or value not in allowed:
@@ -75,8 +92,15 @@ def _priority(taker_side: str) -> Any:  # noqa: ANN401 - a sort key function
     return lambda o: (-o.price, o.id)  # bids: highest price first
 
 
+def _entry(kind: str, legs: list[tuple[str, int]]) -> Event:
+    if sum(amount for _, amount in legs) != 0:
+        msg = f"unbalanced {kind} entry: {legs}"
+        raise EngineHaltedError(msg)
+    return {"ev": "entry", "kind": kind, "legs": [[name, x] for name, x in legs if x != 0]}
+
+
 class ReferenceEngine:
-    """Plain-list matching engine with the exact semantics of the G1 plan."""
+    """Plain-list engine with the exact semantics of the G1 and G2 plans."""
 
     def __init__(self) -> None:
         self.next_seq = 1
@@ -85,16 +109,25 @@ class ReferenceEngine:
         # Which market each resting order is in, so a cancel or amend searches one market's
         # list instead of every market's. Kept in step with the books at every add and removal.
         self.market_of: dict[int, int] = {}
+        self.cash: dict[int, int] = {}
+        self.issuance = 0
+        self.escrow: dict[int, int] = {}
+        self.positions: dict[tuple[int, int], int] = {}  # (market, account) -> contracts
+        self.reserve: dict[tuple[int, int], int] = {}  # (account, market) -> last charged
+        self.reserved_by_account: dict[int, int] = {}  # sum of `reserve` per account
+        self.resting_count: dict[int, int] = {}
+        self.touched: set[tuple[int, int]] = set()  # (account, market) this command
 
     # ----- dispatch -----
 
     def apply(self, cmd: Mapping[str, Any]) -> list[Event]:
         """Apply one wire command and return its events (each tagged with the command's seq)."""
         seq = _int_field(cmd, "seq", U64_MAX)
-        kind = _choice_field(cmd, "cmd", {"create_market", "set_state", "place", "cancel", "amend"})
+        kind = _choice_field(cmd, "cmd", COMMANDS)
         if seq != self.next_seq:
             msg = f"sequence gap: expected {self.next_seq}, got {seq}"
             raise EngineHaltedError(msg)
+        self.touched = set()
         if kind == "create_market":
             events = self._create(_int_field(cmd, "market", U32_MAX))
         elif kind == "set_state":
@@ -107,16 +140,86 @@ class ReferenceEngine:
             events = self._cancel(
                 _int_field(cmd, "account", U64_MAX), _int_field(cmd, "order", U64_MAX)
             )
-        else:
+        elif kind == "amend":
             events = self._amend(
                 _int_field(cmd, "account", U64_MAX),
                 _int_field(cmd, "order", U64_MAX),
                 _int_field(cmd, "qty", U32_MAX),
             )
+        elif kind == "open_account":
+            events = self._open_account(_int_field(cmd, "account", U64_MAX))
+        elif kind == "settle":
+            events = self._settle(
+                _int_field(cmd, "market", U32_MAX),
+                _choice_field(cmd, "outcome", {"yes", "no", "void"}),
+            )
+        elif kind == "cancel_all":
+            events = self._cancel_all(
+                _optional_int_field(cmd, "account", U64_MAX),
+                _optional_int_field(cmd, "market", U32_MAX),
+            )
+        else:
+            events = self._halt_all()
+        events.extend(self._finish_command())
         self.next_seq = seq + 1
         for event in events:
             event["seq"] = seq
         return events
+
+    # ----- collateral (G2 plan, "Collateral"; ADR-0005) -----
+
+    def _reserve_of(self, account: int, market: int, extra: _Order | None = None) -> int:
+        """Worst-case cash the account's resting orders in this market could still need."""
+        orders = [o for o in self.books.get(market, []) if o.account == account]
+        if extra is not None:
+            orders.append(extra)
+        x = self.positions.get((market, account), 0)
+        total = 0
+        free = max(0, -x)  # NO contracts held cover the cheapest buy units
+        for o in sorted((o for o in orders if o.side == "buy"), key=lambda o: o.price):
+            covered = min(o.remaining, free)
+            free -= covered
+            total += (o.remaining - covered) * o.price
+        free = max(0, x)  # YES contracts held cover the cheapest sell units (highest prices)
+        for o in sorted((o for o in orders if o.side == "sell"), key=lambda o: -o.price):
+            covered = min(o.remaining, free)
+            free -= covered
+            total += (o.remaining - covered) * (PAYOUT_TICKS - o.price)
+        return total
+
+    def _reserved_total(self, account: int) -> int:
+        return self.reserved_by_account.get(account, 0)
+
+    def _finish_command(self) -> list[Event]:
+        events: list[Event] = []
+        for account, market in sorted(self.touched):
+            new = self._reserve_of(account, market)
+            old = self.reserve.get((account, market), 0)
+            if new != old:
+                self.reserve[(account, market)] = new
+                self.reserved_by_account[account] = self._reserved_total(account) + new - old
+                events.append(
+                    {"ev": "reserved", "account": account, "market": market, "amount": new}
+                )
+        for account, _ in self.touched:
+            if self.cash[account] < self._reserved_total(account):
+                msg = f"account {account} has cash below its reserve"
+                raise EngineHaltedError(msg)
+        return events
+
+    # ----- resting orders -----
+
+    def _rest(self, market: int, order: _Order) -> None:
+        self.books[market].append(order)
+        self.market_of[order.id] = market
+        self.resting_count[order.account] = self.resting_count.get(order.account, 0) + 1
+        self.touched.add((order.account, market))
+
+    def _unrest(self, market: int, order: _Order) -> None:
+        self.books[market].remove(order)
+        del self.market_of[order.id]
+        self.resting_count[order.account] -= 1
+        self.touched.add((order.account, market))
 
     # ----- commands -----
 
@@ -125,7 +228,18 @@ class ReferenceEngine:
             return [{"ev": "rejected", "reason": "market_exists"}]
         self.states[market] = "pre_open"
         self.books[market] = []
+        self.escrow[market] = 0
         return [{"ev": "market_created", "market": market}]
+
+    def _open_account(self, account: int) -> list[Event]:
+        if account in self.cash:
+            return [{"ev": "rejected", "reason": "account_exists"}]
+        self.cash[account] = SIGNUP_GRANT
+        self.issuance -= SIGNUP_GRANT
+        return [
+            {"ev": "account_opened", "account": account, "cash": SIGNUP_GRANT},
+            _entry("grant", [("issuance", -SIGNUP_GRANT), (f"cash:{account}", SIGNUP_GRANT)]),
+        ]
 
     def _set_state(self, market: int, state: str) -> list[Event]:
         if market not in self.states:
@@ -135,19 +249,103 @@ class ReferenceEngine:
         self.states[market] = state
         events: list[Event] = [{"ev": "market_state", "market": market, "state": state}]
         if state == "closed":
-            events.extend(
+            for order in sorted(self.books[market], key=lambda o: o.id):
+                self._unrest(market, order)
+                events.append(
+                    {
+                        "ev": "cancelled",
+                        "order": order.id,
+                        "remaining": order.remaining,
+                        "reason": "market_closed",
+                    }
+                )
+        return events
+
+    def _settle(self, market: int, outcome: str) -> list[Event]:
+        if market not in self.states:
+            return [{"ev": "rejected", "reason": "unknown_market"}]
+        if self.states[market] != "closed":
+            return [{"ev": "rejected", "reason": "invalid_transition"}]
+        self.states[market] = "voided" if outcome == "void" else "resolved"
+        events: list[Event] = [{"ev": "settled", "market": market, "outcome": outcome}]
+        holders = sorted(a for (m, a) in self.positions if m == market)
+        for account in holders:
+            x = self.positions[(market, account)]
+            if outcome == "void":
+                amount = 50 * abs(x)
+            elif (outcome == "yes" and x > 0) or (outcome == "no" and x < 0):
+                amount = PAYOUT_TICKS * abs(x)
+            else:
+                amount = 0
+            self.positions[(market, account)] = 0
+            if amount:
+                self.escrow[market] -= amount
+                self.cash[account] += amount
+                events.append(
+                    _entry("settle", [(f"escrow:{market}", -amount), (f"cash:{account}", amount)])
+                )
+        if self.escrow[market] != 0:
+            msg = f"escrow of market {market} is {self.escrow[market]} after settlement"
+            raise EngineHaltedError(msg)
+        return events
+
+    def _cancel_all(self, account: int | None, market: int | None) -> list[Event]:
+        if account is not None and account not in self.cash:
+            return [{"ev": "rejected", "reason": "unknown_account"}]
+        if market is not None and market not in self.states:
+            return [{"ev": "rejected", "reason": "unknown_market"}]
+        targets = [
+            (o, m)
+            for m, book in self.books.items()
+            if market is None or m == market
+            for o in book
+            if account is None or o.account == account
+        ]
+        events: list[Event] = []
+        for order, m in sorted(targets, key=lambda t: t[0].id):
+            self._unrest(m, order)
+            events.append(
                 {
                     "ev": "cancelled",
                     "order": order.id,
                     "remaining": order.remaining,
-                    "reason": "market_closed",
+                    "reason": "kill_switch",
                 }
-                for order in sorted(self.books[market], key=lambda o: o.id)
             )
-            for order in self.books[market]:
-                del self.market_of[order.id]
-            self.books[market] = []
         return events
+
+    def _halt_all(self) -> list[Event]:
+        events: list[Event] = []
+        for market in sorted(self.states):
+            if self.states[market] == "open":
+                self.states[market] = "halted"
+                events.append({"ev": "market_state", "market": market, "state": "halted"})
+        return events
+
+    def _trade(self, market: int, buyer: int, seller: int, price: int, qty: int) -> Event:
+        """Cash and positions for one trade (G2 plan, "Positions and trade cash")."""
+        xb = self.positions.get((market, buyer), 0)
+        xs = self.positions.get((market, seller), 0)
+        buyer_closing = min(qty, max(0, -xb))
+        seller_opening = qty - min(qty, max(0, xs))
+        buyer_cash = -price * qty + PAYOUT_TICKS * buyer_closing
+        seller_cash = price * qty - PAYOUT_TICKS * seller_opening
+        escrow_change = PAYOUT_TICKS * seller_opening - PAYOUT_TICKS * buyer_closing
+        self.cash[buyer] += buyer_cash
+        self.cash[seller] += seller_cash
+        self.escrow[market] += escrow_change
+        self.positions[(market, buyer)] = xb + qty
+        self.positions[(market, seller)] = xs - qty
+        self.touched.add((buyer, market))
+        self.touched.add((seller, market))
+        return _entry(
+            "trade",
+            [
+                (f"cash:{buyer}", buyer_cash),
+                (f"cash:{seller}", seller_cash),
+                (f"escrow:{market}", escrow_change),
+            ],
+        )
 
     def _place(self, seq: int, cmd: Mapping[str, Any]) -> list[Event]:
         account = _int_field(cmd, "account", U64_MAX)
@@ -166,6 +364,8 @@ class ReferenceEngine:
 
         if market not in self.states:
             return reject("unknown_market")
+        if account not in self.cash:
+            return reject("unknown_account")
         if self.states[market] != "open":
             return reject("market_not_open")
         if not MIN_PRICE_TICKS <= price <= MAX_PRICE_TICKS:
@@ -194,6 +394,14 @@ class ReferenceEngine:
                 fillable += maker.remaining
             if fillable < qty:
                 return reject("fok_unfillable")
+        if tif == "gtc" and self.resting_count.get(account, 0) >= MAX_RESTING_ORDERS:
+            return reject("too_many_orders")
+        hypothetical = _Order(seq, account, side, price, qty)
+        increase = self._reserve_of(account, market, hypothetical) - self.reserve.get(
+            (account, market), 0
+        )
+        if increase > self.cash[account] - self._reserved_total(account):
+            return reject("insufficient_collateral")
 
         order_id = seq
         events: list[Event] = [{"ev": "accepted", "order": order_id}]
@@ -227,16 +435,17 @@ class ReferenceEngine:
                     "qty": fill,
                 }
             )
+            buyer, seller = (account, maker.account) if side == "buy" else (maker.account, account)
+            events.append(self._trade(market, buyer, seller, maker.price, fill))
             remaining -= fill
             maker.remaining -= fill
+            self.touched.add((maker.account, market))
             if maker.remaining == 0:
-                book.remove(maker)
-                del self.market_of[maker.id]
+                self._unrest(market, maker)
         if remaining == 0:
             return events
         if tif == "gtc":
-            book.append(_Order(order_id, account, side, price, remaining))
-            self.market_of[order_id] = market
+            self._rest(market, _Order(order_id, account, side, price, remaining))
             events.append({"ev": "rested", "order": order_id, "remaining": remaining})
         elif tif == "ioc":
             events.append(
@@ -267,8 +476,7 @@ class ReferenceEngine:
         if found is None:
             return [{"ev": "rejected", "reason": "unknown_order"}]
         market, order = found
-        self.books[market].remove(order)
-        del self.market_of[order.id]
+        self._unrest(market, order)
         return [
             {"ev": "cancelled", "order": order.id, "remaining": order.remaining, "reason": "user"}
         ]
@@ -285,12 +493,31 @@ class ReferenceEngine:
         if qty >= order.remaining:
             return [{"ev": "rejected", "reason": "invalid_amend"}]
         order.remaining = qty
+        self.touched.add((account, market))
         return [{"ev": "amended", "order": order.id, "remaining": qty}]
 
-    # ----- output -----
+    # ----- checks and output -----
+
+    def check_invariants(self) -> None:
+        """I1-I4 from SPEC §4.3, recomputed from scratch; raise if any fails."""
+        if sum(self.cash.values()) + sum(self.escrow.values()) + self.issuance != 0:
+            msg = "I1: credits are not conserved"
+            raise EngineHaltedError(msg)
+        for market, escrow in self.escrow.items():
+            long = sum(x for (m, _), x in self.positions.items() if m == market and x > 0)
+            short = sum(-x for (m, _), x in self.positions.items() if m == market and x < 0)
+            if long != short or escrow != PAYOUT_TICKS * long:
+                msg = f"I2: escrow of market {market} is not 100 x open interest"
+                raise EngineHaltedError(msg)
+        for account, cash in self.cash.items():
+            reserved = sum(self._reserve_of(account, market) for market in self.books)
+            charged = sum(r for (a, _), r in self.reserve.items() if a == account)
+            if not reserved == charged == self._reserved_total(account) or cash < reserved:
+                msg = f"I3/I4: account {account} reserve is stale or exceeds its cash"
+                raise EngineHaltedError(msg)
 
     def final_book(self) -> Event:
-        """The end-of-input record: every market's state and both sides in time priority."""
+        """The end-of-input record: markets, accounts, and escrow (G1 and G2 plans)."""
         markets = []
         for market in sorted(self.states):
             book = self.books[market]
@@ -304,4 +531,16 @@ class ReferenceEngine:
                     "asks": [[o.id, o.account, o.price, o.remaining] for o in asks],
                 }
             )
-        return {"ev": "final_book", "markets": markets}
+        accounts = [
+            {
+                "account": account,
+                "cash": self.cash[account],
+                "reserved": self._reserved_total(account),
+                "positions": sorted(
+                    [m, x] for (m, a), x in self.positions.items() if a == account and x != 0
+                ),
+            }
+            for account in sorted(self.cash)
+        ]
+        escrow = [[m, self.escrow[m]] for m in sorted(self.escrow)]
+        return {"ev": "final_book", "markets": markets, "accounts": accounts, "escrow": escrow}

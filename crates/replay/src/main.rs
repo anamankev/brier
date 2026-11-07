@@ -9,10 +9,10 @@ use std::io::{self, BufRead, BufWriter, Write};
 use std::process::ExitCode;
 
 use brier_engine::{
-    CancelReason, Command, Engine, Event, MarketState, NewOrder, RejectReason, Sequenced,
-    TimeInForce,
+    CancelReason, Command, Engine, EntryKind, Event, LedgerAccount, MarketState, NewOrder,
+    RejectReason, Sequenced, TimeInForce,
 };
-use brier_types::{AccountId, MarketId, OrderId, Seq, Side};
+use brier_types::{AccountId, Credits, MarketId, OrderId, Outcome, Seq, Side};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -51,6 +51,28 @@ enum WireCommand {
         order: u64,
         qty: u32,
     },
+    OpenAccount {
+        account: u64,
+    },
+    Settle {
+        market: u32,
+        outcome: WireOutcome,
+    },
+    CancelAll {
+        #[serde(default)]
+        account: Option<u64>,
+        #[serde(default)]
+        market: Option<u32>,
+    },
+    HaltAll,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum WireOutcome {
+    Yes,
+    No,
+    Void,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -136,6 +158,46 @@ fn to_command(w: WireCommand) -> Command {
             order: OrderId::new(order),
             qty,
         },
+        WireCommand::OpenAccount { account } => Command::OpenAccount {
+            account: AccountId::new(account),
+        },
+        WireCommand::Settle { market, outcome } => Command::Settle {
+            market: MarketId::new(market),
+            outcome: match outcome {
+                WireOutcome::Yes => Outcome::Yes,
+                WireOutcome::No => Outcome::No,
+                WireOutcome::Void => Outcome::Void,
+            },
+        },
+        WireCommand::CancelAll { account, market } => Command::CancelAll {
+            account: account.map(AccountId::new),
+            market: market.map(MarketId::new),
+        },
+        WireCommand::HaltAll => Command::HaltAll,
+    }
+}
+
+const fn outcome_name(o: Outcome) -> &'static str {
+    match o {
+        Outcome::Yes => "yes",
+        Outcome::No => "no",
+        Outcome::Void => "void",
+    }
+}
+
+const fn entry_kind_name(k: EntryKind) -> &'static str {
+    match k {
+        EntryKind::Grant => "grant",
+        EntryKind::Trade => "trade",
+        EntryKind::Settle => "settle",
+    }
+}
+
+fn ledger_account_name(a: LedgerAccount) -> String {
+    match a {
+        LedgerAccount::Cash(id) => format!("cash:{}", id.get()),
+        LedgerAccount::Escrow(m) => format!("escrow:{}", m.get()),
+        LedgerAccount::Issuance => "issuance".to_owned(),
     }
 }
 
@@ -163,6 +225,7 @@ const fn cancel_name(r: CancelReason) -> &'static str {
         CancelReason::IocRemainder => "ioc_remainder",
         CancelReason::SelfTrade => "self_trade",
         CancelReason::MarketClosed => "market_closed",
+        CancelReason::KillSwitch => "kill_switch",
     }
 }
 
@@ -179,6 +242,10 @@ const fn reject_name(r: RejectReason) -> &'static str {
         RejectReason::FokUnfillable => "fok_unfillable",
         RejectReason::UnknownOrder => "unknown_order",
         RejectReason::InvalidAmend => "invalid_amend",
+        RejectReason::UnknownAccount => "unknown_account",
+        RejectReason::AccountExists => "account_exists",
+        RejectReason::TooManyOrders => "too_many_orders",
+        RejectReason::InsufficientCollateral => "insufficient_collateral",
     }
 }
 
@@ -214,6 +281,23 @@ fn event_json(seq: u64, e: &Event) -> Value {
         Event::Rejected { reason } => {
             json!({"seq": seq, "ev": "rejected", "reason": reject_name(reason)})
         }
+        Event::AccountOpened { account, cash } => {
+            json!({"seq": seq, "ev": "account_opened", "account": account.get(), "cash": cash.cents()})
+        }
+        Event::Entry(entry) => json!({
+            "seq": seq, "ev": "entry", "kind": entry_kind_name(entry.kind()),
+            "legs": entry.legs().iter().map(|&(a, x)| json!([ledger_account_name(a), x.cents()])).collect::<Vec<_>>(),
+        }),
+        Event::Reserved {
+            account,
+            market,
+            amount,
+        } => json!({
+            "seq": seq, "ev": "reserved", "account": account.get(), "market": market.get(), "amount": amount.cents(),
+        }),
+        Event::Settled { market, outcome } => {
+            json!({"seq": seq, "ev": "settled", "market": market.get(), "outcome": outcome_name(outcome)})
+        }
     }
 }
 
@@ -242,7 +326,23 @@ fn final_book(engine: &Engine) -> Result<Value, brier_engine::EngineError> {
             "asks": side_list(Side::Sell)?,
         }));
     }
-    Ok(json!({"ev": "final_book", "markets": markets}))
+    let accounts: Vec<Value> = engine
+        .accounts()
+        .into_iter()
+        .map(|v| {
+            json!({
+                "account": v.account.get(),
+                "cash": v.cash.cents(),
+                "reserved": v.reserved.cents(),
+                "positions": v.positions.iter().map(|&(m, x)| json!([m.get(), x])).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    let escrow: Vec<Value> = engine
+        .markets()
+        .map(|m| json!([m.get(), engine.escrow(m).map(Credits::cents)]))
+        .collect();
+    Ok(json!({"ev": "final_book", "markets": markets, "accounts": accounts, "escrow": escrow}))
 }
 
 enum Failure {
@@ -325,25 +425,41 @@ mod tests {
 
     #[test]
     fn a_short_session_round_trips_through_the_wire_format() {
-        let input = r#"{"seq":1,"cmd":"create_market","market":1}
-{"seq":2,"cmd":"set_state","market":1,"state":"open"}
-{"seq":3,"cmd":"place","account":1,"market":1,"side":"sell","price":60,"qty":5,"tif":"gtc","post_only":false}
-{"seq":4,"cmd":"place","account":2,"market":1,"side":"buy","price":61,"qty":2,"tif":"ioc","post_only":false}
-{"seq":5,"cmd":"place","account":2,"market":1,"side":"buy","price":0,"qty":2,"tif":"gtc","post_only":false}
+        let input = r#"{"seq":1,"cmd":"open_account","account":1}
+{"seq":2,"cmd":"open_account","account":2}
+{"seq":3,"cmd":"create_market","market":1}
+{"seq":4,"cmd":"set_state","market":1,"state":"open"}
+{"seq":5,"cmd":"place","account":1,"market":1,"side":"sell","price":60,"qty":5,"tif":"gtc","post_only":false}
+{"seq":6,"cmd":"place","account":2,"market":1,"side":"buy","price":61,"qty":2,"tif":"ioc","post_only":false}
+{"seq":7,"cmd":"place","account":2,"market":1,"side":"buy","price":0,"qty":2,"tif":"gtc","post_only":false}
 "#;
         let lines = replay(input).ok().unwrap();
+        // Expected values computed by hand from docs/gates/G2-plan.md: account 1 sells YES it
+        // does not hold, so each unit opens NO at 100 − 60 = 40 (reserve 5 × 40 = 200); the
+        // trade of 2 at 60 moves buyer −120, seller +120 − 200 = −80, escrow +200.
         assert_eq!(
             lines,
             vec![
-                json!({"seq":1,"ev":"market_created","market":1}),
-                json!({"seq":2,"ev":"market_state","market":1,"state":"open"}),
-                json!({"seq":3,"ev":"accepted","order":3}),
-                json!({"seq":3,"ev":"rested","order":3,"remaining":5}),
-                json!({"seq":4,"ev":"accepted","order":4}),
-                json!({"seq":4,"ev":"trade","market":1,"maker":3,"taker":4,"maker_account":1,
+                json!({"seq":1,"ev":"account_opened","account":1,"cash":1_000_000}),
+                json!({"seq":1,"ev":"entry","kind":"grant","legs":[["issuance",-1_000_000],["cash:1",1_000_000]]}),
+                json!({"seq":2,"ev":"account_opened","account":2,"cash":1_000_000}),
+                json!({"seq":2,"ev":"entry","kind":"grant","legs":[["issuance",-1_000_000],["cash:2",1_000_000]]}),
+                json!({"seq":3,"ev":"market_created","market":1}),
+                json!({"seq":4,"ev":"market_state","market":1,"state":"open"}),
+                json!({"seq":5,"ev":"accepted","order":5}),
+                json!({"seq":5,"ev":"rested","order":5,"remaining":5}),
+                json!({"seq":5,"ev":"reserved","account":1,"market":1,"amount":200}),
+                json!({"seq":6,"ev":"accepted","order":6}),
+                json!({"seq":6,"ev":"trade","market":1,"maker":5,"taker":6,"maker_account":1,
                        "taker_account":2,"taker_side":"buy","price":60,"qty":2}),
-                json!({"seq":5,"ev":"rejected","reason":"invalid_price"}),
-                json!({"ev":"final_book","markets":[{"market":1,"state":"open","bids":[],"asks":[[3,1,60,3]]}]}),
+                json!({"seq":6,"ev":"entry","kind":"trade","legs":[["cash:2",-120],["cash:1",-80],["escrow:1",200]]}),
+                json!({"seq":6,"ev":"reserved","account":1,"market":1,"amount":120}),
+                json!({"seq":7,"ev":"rejected","reason":"invalid_price"}),
+                json!({"ev":"final_book",
+                       "markets":[{"market":1,"state":"open","bids":[],"asks":[[5,1,60,3]]}],
+                       "accounts":[{"account":1,"cash":999_920,"reserved":120,"positions":[[1,-2]]},
+                                   {"account":2,"cash":999_880,"reserved":0,"positions":[[1,2]]}],
+                       "escrow":[[1,200]]}),
             ]
         );
     }

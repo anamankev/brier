@@ -12,7 +12,9 @@ mod book;
 mod command;
 mod engine;
 mod event;
+mod ledger;
 
 pub use command::{Command, MarketState, NewOrder, Sequenced, TimeInForce};
-pub use engine::{Engine, EngineError, RestingOrder};
-pub use event::{CancelReason, Event, RejectReason, Trade};
+pub use engine::{AccountView, Engine, EngineError, RestingOrder};
+pub use event::{CancelReason, Entry, EntryKind, Event, LedgerAccount, RejectReason, Trade};
+pub use ledger::{MAX_RESTING_ORDERS, SIGNUP_GRANT};

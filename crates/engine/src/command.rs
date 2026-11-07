@@ -1,4 +1,4 @@
-use brier_types::{AccountId, MarketId, OrderId, Seq, Side};
+use brier_types::{AccountId, MarketId, OrderId, Outcome, Seq, Side};
 
 /// How long an order may rest (SPEC §3.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -29,15 +29,15 @@ pub enum MarketState {
 }
 
 impl MarketState {
-    /// Whether the lifecycle allows moving from `self` to `next`. A transition to the
-    /// current state is not allowed.
+    /// Whether `set_state` may move from `self` to `next`. A transition to the current state
+    /// is not allowed, and Resolved and Voided are reached only through settlement.
     #[must_use]
     pub const fn can_transition_to(self, next: Self) -> bool {
         match self {
             Self::PreOpen | Self::Halted => matches!(next, Self::Open | Self::Closed),
             Self::Open => matches!(next, Self::Halted | Self::Closed),
-            Self::Closed => matches!(next, Self::Resolved | Self::Voided),
-            Self::Resolved | Self::Voided => false,
+            // Resolved and Voided are reached only by `Command::Settle` (G2 plan).
+            Self::Closed | Self::Resolved | Self::Voided => false,
         }
     }
 
@@ -99,6 +99,27 @@ pub enum Command {
         /// The order.
         order: OrderId,
     },
+    /// Open an account with the signup grant (SPEC §1.2).
+    OpenAccount {
+        /// The new account's ID.
+        account: AccountId,
+    },
+    /// Settle a closed market (SPEC §2.4).
+    Settle {
+        /// The market.
+        market: MarketId,
+        /// YES, NO, or void.
+        outcome: Outcome,
+    },
+    /// Kill switch: cancel every resting order matching the filters; neither means all.
+    CancelAll {
+        /// Only this account's orders.
+        account: Option<AccountId>,
+        /// Only this market's orders.
+        market: Option<MarketId>,
+    },
+    /// Kill switch: halt every open market.
+    HaltAll,
     /// Reduce a resting order's quantity, keeping its time priority.
     Amend {
         /// The account that owns the order.
@@ -125,7 +146,8 @@ mod tests {
 
     #[test]
     fn lifecycle_allows_exactly_the_listed_transitions() {
-        // docs/gates/G1-plan.md: the eight allowed transitions; everything else is rejected.
+        // docs/gates/G1-plan.md and G2-plan.md: six set_state transitions; settlement reaches
+        // Resolved and Voided.
         let all = [PreOpen, Open, Halted, Closed, Resolved, Voided];
         let allowed = [
             (PreOpen, Open),
@@ -134,8 +156,6 @@ mod tests {
             (Open, Closed),
             (Halted, Open),
             (Halted, Closed),
-            (Closed, Resolved),
-            (Closed, Voided),
         ];
         for from in all {
             for to in all {

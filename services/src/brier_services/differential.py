@@ -31,17 +31,23 @@ from typing import IO, Any
 from brier_services.reference_engine import ReferenceEngine
 
 RECENT_ORDERS = 200  # cancels and amends mostly target recent orders, which are often live
-ACCOUNTS = 4  # few accounts, so the same account often meets itself (self-trade prevention)
+ACCOUNTS = 4  # few busy accounts, so the same account often meets itself (self-trade prevention)
+BURST_EVERY = 1_000_000  # a resting-order-limit burst every million commands
+BURST_AT = 2_500  # offset of the first burst
+BURST_SIZE = 1_001  # one more than MAX_RESTING_ORDERS
 
 
 def generate(seed: int, count: int) -> Iterator[dict[str, Any]]:
     """Yield ``count`` wire commands, deterministic in ``seed``.
 
-    The stream starts by listing and opening markets 1-3, so trading begins at once.
+    The stream opens accounts 1-4, lists and opens markets 1-3, then mixes every command.
+    Every million commands (first after command 2,500) it schedules a burst: a fresh market and
+    1,001 one-contract GTC orders from account 1, so the resting-order limit is reached.
     """
     rng = random.Random(seed)  # noqa: S311 - test data, not cryptography
     seq = 0
     markets = 0
+    accounts = 0
     recent: list[int] = []
 
     def command(cmd: dict[str, Any]) -> dict[str, Any]:
@@ -58,61 +64,117 @@ def generate(seed: int, count: int) -> Iterator[dict[str, Any]]:
         return rng.choice([0, 100, 255])
 
     def qty() -> int:
-        return rng.randint(1, 30) if rng.random() < 0.96 else rng.choice([0, 25_001])
+        roll = rng.random()
+        if roll < 0.96:
+            return rng.randint(1, 30)
+        if roll < 0.98:
+            return rng.randint(1_000, 25_000)  # large enough to hit insufficient_collateral
+        return rng.choice([0, 25_001])
+
+    def account() -> int:
+        # Mostly the four busy accounts; sometimes any account, including one not yet opened.
+        return rng.randint(1, ACCOUNTS) if rng.random() < 0.8 else rng.randint(1, accounts + 1)
 
     def order_id() -> int:
         if recent and rng.random() < 0.9:
             return rng.choice(recent)
         return rng.randint(1, seq + 1)
 
+    def remember(cmd: dict[str, Any]) -> dict[str, Any]:
+        recent.append(cmd["seq"])
+        if len(recent) > RECENT_ORDERS:
+            recent.pop(0)
+        return cmd
+
+    setup: list[dict[str, Any]] = [
+        {"cmd": "open_account", "account": a} for a in range(1, ACCOUNTS + 1)
+    ]
     for market in (1, 2, 3):
+        setup += [
+            {"cmd": "create_market", "market": market},
+            {"cmd": "set_state", "market": market, "state": "open"},
+        ]
+    for cmd in setup:
         if seq >= count:
             return
-        yield command({"cmd": "create_market", "market": market})
-        markets = market
-        if seq >= count:
-            return
-        yield command({"cmd": "set_state", "market": market, "state": "open"})
+        yield command(cmd)
+        if cmd["cmd"] == "open_account":
+            accounts = cmd["account"]
+        elif cmd["cmd"] == "create_market":
+            markets = cmd["market"]
+    next_burst = BURST_AT
     while seq < count:
+        if seq >= next_burst and seq + BURST_SIZE + 2 <= count:
+            next_burst += BURST_EVERY
+            markets += 1
+            yield command({"cmd": "create_market", "market": markets})
+            yield command({"cmd": "set_state", "market": markets, "state": "open"})
+            for _ in range(BURST_SIZE):
+                yield remember(
+                    command(
+                        {
+                            "cmd": "place",
+                            "account": 1,
+                            "market": markets,
+                            "side": "buy",
+                            "price": 1,
+                            "qty": 1,
+                            "tif": "gtc",
+                            "post_only": False,
+                        }
+                    )
+                )
+            continue
         roll = rng.random()
-        if roll < 0.60:
-            cmd = command(
-                {
-                    "cmd": "place",
-                    "account": rng.randint(1, ACCOUNTS),
-                    "market": rng.randint(1, markets),
-                    "side": rng.choice(["buy", "sell"]),
-                    "price": price(),
-                    "qty": qty(),
-                    "tif": rng.choices(["gtc", "ioc", "fok"], weights=[6, 2, 2])[0],
-                    "post_only": rng.random() < 0.1,
-                }
+        if roll < 0.58:
+            yield remember(
+                command(
+                    {
+                        "cmd": "place",
+                        "account": account(),
+                        "market": rng.randint(1, markets),
+                        "side": rng.choice(["buy", "sell"]),
+                        "price": price(),
+                        "qty": qty(),
+                        "tif": rng.choices(["gtc", "ioc", "fok"], weights=[6, 2, 2])[0],
+                        "post_only": rng.random() < 0.1,
+                    }
+                )
             )
-            recent.append(cmd["seq"])
-            if len(recent) > RECENT_ORDERS:
-                recent.pop(0)
-            yield cmd
-        elif roll < 0.85:
-            yield command(
-                {"cmd": "cancel", "account": rng.randint(1, ACCOUNTS), "order": order_id()}
-            )
-        elif roll < 0.93:
-            yield command(
-                {
-                    "cmd": "amend",
-                    "account": rng.randint(1, ACCOUNTS),
-                    "order": order_id(),
-                    "qty": qty(),
-                }
-            )
-        elif roll < 0.99:
+        elif roll < 0.82:
+            yield command({"cmd": "cancel", "account": account(), "order": order_id()})
+        elif roll < 0.90:
+            yield command({"cmd": "amend", "account": account(), "order": order_id(), "qty": qty()})
+        elif roll < 0.95:
             state = rng.choices(
                 ["open", "halted", "closed", "pre_open", "resolved", "voided"],
-                weights=[40, 30, 8, 8, 7, 7],
+                weights=[40, 30, 10, 8, 6, 6],
             )[0]
             yield command(
                 {"cmd": "set_state", "market": rng.randint(1, markets + 1), "state": state}
             )
+        elif roll < 0.965:
+            yield command(
+                {
+                    "cmd": "settle",
+                    "market": rng.randint(1, markets + 1),
+                    "outcome": rng.choice(["yes", "no", "void"]),
+                }
+            )
+        elif roll < 0.975:
+            filters: dict[str, Any] = {}
+            if rng.random() < 0.6:
+                filters["account"] = account()
+            if rng.random() < 0.5:
+                filters["market"] = rng.randint(1, markets + 1)
+            yield command({"cmd": "cancel_all", **filters})
+        elif roll < 0.978:
+            yield command({"cmd": "halt_all"})
+        elif roll < 0.985:
+            # Mostly a new account, sometimes a duplicate.
+            new = accounts + 1 if rng.random() < 0.8 else rng.randint(1, accounts)
+            accounts = max(accounts, new)
+            yield command({"cmd": "open_account", "account": new})
         else:
             # Mostly a new market (then opened), sometimes a duplicate.
             market = markets + 1 if rng.random() < 0.8 else rng.randint(1, markets)
