@@ -1,6 +1,13 @@
-Copyright (c) 2026 Kelvin Anaman. All rights reserved.
+Copyright (c) 2026 Kelvin Godwin Anaman. All rights reserved.
 
-This repository is public so that its code and methods can be read and checked. No license is
-granted to use, copy, modify, merge, publish, distribute, sublicense, or sell any part of it,
-beyond the rights GitHub's Terms of Service give users to view and fork public repositories on
-GitHub. For any other use, ask the copyright holder for written permission.
+This repository is public only so that its code and methods can be read and checked. No license
+is granted. You may not use, run, copy, modify, merge, publish, distribute, sublicense, or sell
+any part of it, in source or compiled form, and you may not use it to train or evaluate
+machine-learning models.
+
+The only rights anyone has are the ones GitHub's Terms of Service give users of public
+repositories: to view this repository and to fork it on GitHub. A fork grants no right to use,
+modify, or redistribute the code beyond that.
+
+Contributions are not accepted. For any other use, ask the copyright holder for written
+permission.
