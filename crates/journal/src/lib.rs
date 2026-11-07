@@ -11,6 +11,6 @@ pub use codec::{CodecError, decode, encode};
 pub use crc::{Crc32c, crc32c};
 pub use log::{
     JournalError, JournalWriter, MAX_BATCH_BYTES, MAX_PAYLOAD, Recovered, SEGMENT_BYTES,
-    Truncation, read_journal, recover,
+    Truncation, read_journal, recover, recover_after,
 };
 pub use snapshot::{KEEP_SNAPSHOTS, LatestSnapshot, SnapshotFile, latest_snapshot, write_snapshot};

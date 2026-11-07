@@ -257,6 +257,11 @@ impl Engine {
                     reason: CancelReason::MarketClosed,
                 });
             }
+            // A closed market can never take orders again: release its order storage.
+            self.markets
+                .get_mut(&market)
+                .ok_or(EngineError::Corrupt("closed market vanished"))?
+                .release_storage()?;
         }
         Ok(())
     }
@@ -305,16 +310,21 @@ impl Engine {
             });
             return Ok(());
         }
+        // Walk the live-order index, not the markets: its size is the number of live orders,
+        // so a kill switch costs the same however many markets have ever been listed. Sorting
+        // by order ID keeps the result deterministic (the index is a hash map).
         let mut targets: Vec<(OrderId, MarketId, Handle)> = Vec::new();
-        for (&m, book) in &self.markets {
+        for (&id, &(m, h)) in &self.orders {
             if market.is_some_and(|only| only != m) {
                 continue;
             }
-            for h in book.handles_by_id() {
-                let slot = book.slot(h)?;
-                if account.is_none_or(|a| a == slot.account) {
-                    targets.push((slot.id, m, h));
-                }
+            let book = self
+                .markets
+                .get(&m)
+                .ok_or(EngineError::Corrupt("order in a missing market"))?;
+            let owner = book.slot(h)?.account;
+            if account.is_none_or(|a| a == owner) {
+                targets.push((id, m, h));
             }
         }
         targets.sort_unstable_by_key(|&(id, _, _)| id);

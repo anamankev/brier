@@ -221,7 +221,25 @@ pub fn recover<E>(
 where
     E: From<JournalError>,
 {
-    scan(dir, apply, true)
+    scan(dir, None, apply, true)
+}
+
+/// As [`recover`], but skips whole segments that hold only commands at or before `after`
+/// (those a snapshot already covers), so a restart reads only the journal's tail. Records in
+/// the segment that contains `after` are still read and checked; `apply` sees every record
+/// from that segment on, and skips the ones it already has.
+///
+/// # Errors
+/// As [`recover`].
+pub fn recover_after<E>(
+    dir: &Path,
+    after: Seq,
+    apply: impl FnMut(Seq, Command) -> Result<(), E>,
+) -> Result<Recovered, E>
+where
+    E: From<JournalError>,
+{
+    scan(dir, Some(after), apply, true)
 }
 
 /// As [`recover`], but never modifies the journal: a torn tail is reported, not removed.
@@ -236,20 +254,38 @@ pub fn read_journal<E>(
 where
     E: From<JournalError>,
 {
-    scan(dir, apply, false)
+    scan(dir, None, apply, false)
 }
 
 fn scan<E>(
     dir: &Path,
+    after: Option<Seq>,
     mut apply: impl FnMut(Seq, Command) -> Result<(), E>,
     repair: bool,
 ) -> Result<Recovered, E>
 where
     E: From<JournalError>,
 {
-    let files = segments(dir)?;
-    let mut expected: u64 = Seq::FIRST.get();
-    let mut last_seq = None;
+    let mut files = segments(dir)?;
+    // Drop leading segments whose every record is at or before `after`: segment i holds
+    // sequence numbers [first_i, first_{i+1}), so it is covered when first_{i+1} <= after + 1.
+    if let Some(after) = after {
+        let skip = files
+            .windows(2)
+            .take_while(|pair| {
+                pair.get(1)
+                    .is_some_and(|(next_first, _)| *next_first <= after.get().saturating_add(1))
+            })
+            .count();
+        files.drain(..skip);
+    }
+    let mut expected: u64 = files.first().map_or(Seq::FIRST.get(), |(first, _)| *first);
+    // Skipped segments still count: the journal reaches at least the record before the first
+    // segment read, even if every remaining segment is empty (a fresh one after rotation).
+    let mut last_seq = expected
+        .checked_sub(1)
+        .filter(|&s| s > 0)
+        .map(Seq::from_raw);
     let last_index = files.len().checked_sub(1);
     for (index, (first, path)) in files.iter().enumerate() {
         let is_last = Some(index) == last_index;
@@ -580,6 +616,33 @@ mod tests {
         let (got, _) = read(dir.path());
         assert_eq!(got.len(), 150);
         assert_eq!(got.last(), Some(&(150, cmd(150))));
+    }
+
+    #[test]
+    fn recovery_after_a_snapshot_reads_only_the_tail_segments() {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), 5_000, 37, 4_096);
+        let mut seen = Vec::new();
+        let r = recover_after::<JournalError>(dir.path(), Seq::from_raw(3_000), |s, _| {
+            seen.push(s.get());
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(r.last_seq, Some(Seq::from_raw(5_000)));
+        // Starts in the segment holding 3,000 or the one after: never later, never from 1.
+        let first = *seen.first().unwrap();
+        assert!(first > 1 && first <= 3_001, "first record read: {first}");
+        assert_eq!(seen, (first..=5_000).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn skipped_segments_still_count_when_the_tail_segment_is_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        // 60-byte segments rotate after every record, leaving a fresh empty segment at the end.
+        write(dir.path(), 20, 1, 60);
+        let r =
+            recover_after::<JournalError>(dir.path(), Seq::from_raw(20), |_, _| Ok(())).unwrap();
+        assert_eq!(r.last_seq, Some(Seq::from_raw(20)));
     }
 
     #[test]

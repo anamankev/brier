@@ -300,6 +300,18 @@ impl Book {
         self.live
     }
 
+    /// Free the order arena of an empty book (a market that closed for good).
+    pub(crate) fn release_storage(&mut self) -> Result<(), EngineError> {
+        if self.live != 0 {
+            return Err(EngineError::Corrupt(
+                "releasing a book that still has orders",
+            ));
+        }
+        self.slots = Vec::new();
+        self.free = Vec::new();
+        Ok(())
+    }
+
     /// Check the book's structural invariants (I5, SPEC §4.3): every level's links are
     /// consistent, every resting order sits at its own side and price with quantity > 0, the
     /// counts agree, the best prices are right, and the book is not crossed.

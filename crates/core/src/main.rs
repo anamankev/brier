@@ -29,7 +29,7 @@ use std::time::Instant;
 
 use brier_engine::{Command, Engine, Event, Sequenced};
 use brier_journal::{
-    JournalError, JournalWriter, SEGMENT_BYTES, latest_snapshot, read_journal, recover,
+    JournalError, JournalWriter, SEGMENT_BYTES, latest_snapshot, read_journal, recover_after,
     write_snapshot,
 };
 use brier_types::{AccountId, Seq};
@@ -92,7 +92,7 @@ fn recover_engine(data: &Path) -> Result<(Engine, Seq, serde_json::Value), Failu
     };
     let mut events = Vec::new();
     let mut replayed: u64 = 0;
-    let recovered = recover::<Failure>(data, |seq, command| {
+    let recovered = recover_after::<Failure>(data, Seq::from_raw(snapshot_seq), |seq, command| {
         if seq.get() <= snapshot_seq {
             return Ok(());
         }
