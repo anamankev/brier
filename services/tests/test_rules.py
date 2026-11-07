@@ -97,3 +97,14 @@ def test_canonical_is_a_fixed_point_and_order_free(v: object) -> None:
     assert rules.canonical(back) == c
     if isinstance(v, dict):
         assert rules.canonical(dict(reversed(list(v.items())))) == c
+
+
+def test_the_launch_catalogue_validates() -> None:
+    from brier_services.rules import load_toml
+
+    paths = sorted((Path(__file__).resolve().parents[2] / "markets").glob("*.toml"))
+    books = [load_toml(p) for p in paths]
+    assert [b.market for b in books] == [101, 102, 103, 104, 105]
+    assert len({b.hash for b in books}) == len(books)
+    for p, b in zip(paths, books, strict=True):
+        assert p.name.startswith(f"{b.market}-"), p.name

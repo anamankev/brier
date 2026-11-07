@@ -1,0 +1,25 @@
+# The Central Park maximum temperature on Christmas Day 2026 (GHCN-Daily, usually published
+# within two days). Late December 2025 ranged 29-58 °F. Trading closes before the day starts.
+schema = 1
+market = 105
+title = "Central Park reaches 40°F or warmer on Christmas Day 2026"
+question = "Will the maximum temperature recorded at Central Park, New York, on 25 December 2026 be 40°F or higher?"
+observation = "2026-12-25"
+revision = "first_release"
+void = ["no_value_by_deadline", "source_discontinued"]
+
+[source]
+provider = "noaa"
+series = "USW00094728/TMAX"
+url = "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+
+[condition]
+transform = "level"
+op = ">="
+threshold = "40"
+
+[schedule]
+open = "2026-11-09T14:30:00Z"
+close = "2026-12-25T00:00:00Z"
+release = "2026-12-27T00:00:00Z"
+deadline = "2027-01-31T00:00:00Z"

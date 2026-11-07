@@ -1,0 +1,25 @@
+# The FOMC meets 8-9 December 2026; the statement is at 14:00 ET on 9 December and a new
+# target range takes effect the next day. The upper limit is 4.00% now.
+schema = 1
+market = 103
+title = "Fed cuts in December 2026: target upper limit below 4.00%"
+question = "Will the federal funds target range upper limit in effect on 10 December 2026 be below 4.00%?"
+observation = "2026-12-10"
+revision = "first_release"
+void = ["no_value_by_deadline", "source_discontinued"]
+
+[source]
+provider = "fred"
+series = "DFEDTARU"
+url = "https://fred.stlouisfed.org/series/DFEDTARU"
+
+[condition]
+transform = "level"
+op = "<"
+threshold = "4.00"
+
+[schedule]
+open = "2026-11-09T14:30:00Z"
+close = "2026-12-09T18:55:00Z"
+release = "2026-12-09T19:00:00Z"
+deadline = "2027-01-10T19:00:00Z"

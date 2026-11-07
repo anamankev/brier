@@ -277,12 +277,19 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [market, resolutions]
+                required: [market, resolutions, journal]
                 properties:
                   market: { type: integer }
                   resolutions:
                     type: array
                     items: { $ref: '#/components/schemas/Resolution' }
+                  journal:
+                    type: [object, 'null']
+                    description: 'The settlement as the journal recorded it; null until settled and projected'
+                    properties:
+                      settled_seq: { type: integer }
+                      outcome: { enum: [yes, no, void] }
+                      evidence_hash: { oneOf: [{ $ref: '#/components/schemas/Hash' }, { type: 'null' }] }
     post:
       tags: [resolution]
       summary: Propose an outcome for a closed market after its release time (resolver or admin)

@@ -110,11 +110,18 @@ async fn serve(url: &str) -> Result<(), String> {
         "recovered",
         &json!({ "next_seq": recovery.next_seq.get(), "replayed": recovery.replayed, "snapshot": recovery.snapshot.map(brier_types::Seq::get) }),
     );
-    let state = Arc::new(
-        AppState::new(core.clone(), db)
-            .map_err(|e| format!("{e:?}"))?
-            .with_dispute_window(dispute_window),
-    );
+    let state = AppState::new(core.clone(), db)
+        .map_err(|e| format!("{e:?}"))?
+        .with_dispute_window(dispute_window);
+    #[cfg(feature = "test-clock")]
+    let state = match std::env::var("BRIER_TEST_CLOCK_FILE") {
+        Ok(path) => {
+            info("test clock", &json!({ "file": path }));
+            state.with_clock(brier_gateway::clock::Clock::from_file(PathBuf::from(path)))
+        }
+        Err(_) => state,
+    };
+    let state = Arc::new(state);
     let schedule = tokio::spawn(scheduler::run(Arc::clone(&state)));
     let projector = tokio::spawn(run_projector(
         projector_db,

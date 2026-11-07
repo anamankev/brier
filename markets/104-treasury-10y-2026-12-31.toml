@@ -1,0 +1,26 @@
+# The 10-year Treasury constant-maturity yield for 31 December 2026, as first published (H.15,
+# the next business day: 4 January 2027). 5 November 2026 was 4.84%. Trading closes before the
+# day starts, because the yield can be watched as it forms.
+schema = 1
+market = 104
+title = "10-year Treasury yield above 4.75% on 31 December 2026"
+question = "Will the 10-year Treasury constant-maturity yield for 31 December 2026 be above 4.75%?"
+observation = "2026-12-31"
+revision = "first_release"
+void = ["no_value_by_deadline", "source_discontinued"]
+
+[source]
+provider = "fred"
+series = "DGS10"
+url = "https://fred.stlouisfed.org/series/DGS10"
+
+[condition]
+transform = "level"
+op = ">"
+threshold = "4.75"
+
+[schedule]
+open = "2026-11-09T14:30:00Z"
+close = "2026-12-31T00:00:00Z"
+release = "2027-01-04T21:00:00Z"
+deadline = "2027-02-04T21:00:00Z"

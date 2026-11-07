@@ -473,5 +473,24 @@ pub async fn get(State(s): Shared, Path(raw): Path<String>) -> ApiResult {
             })
         })
         .collect();
-    Ok(Json(json!({ "market": market.get(), "resolutions": items })).into_response())
+    // What the journal itself recorded (the `market_journal` read model), so anyone can check
+    // that the settled outcome and evidence hash are the resolution's.
+    let journal = s
+        .db
+        .query_opt(
+            "SELECT settled_seq, outcome, evidence_hash FROM market_journal WHERE market = $1 AND settled_seq IS NOT NULL",
+            &[&i64::from(market.get())],
+        )
+        .await?
+        .map(|r| {
+            json!({
+                "settled_seq": r.get::<_, i64>(0),
+                "outcome": r.get::<_, &str>(1),
+                "evidence_hash": r.get::<_, Option<&[u8]>>(2).map(hex),
+            })
+        });
+    Ok(
+        Json(json!({ "market": market.get(), "resolutions": items, "journal": journal }))
+            .into_response(),
+    )
 }
