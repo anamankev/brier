@@ -11,7 +11,7 @@ Contracts are fully collateralized (SPEC §2): an order is accepted only if its 
 3. **One cash balance per account; collateral is a lock.** `reserved(a, m)` is recomputed from the account's resting orders and position by a worst-case rule. `available = cash − reserved`, and trades move cash directly.
 
 ## Decision
-Option 3, with this rule (`docs/gates/G2-plan.md`):
+Option 3, with this rule (now stated in `docs/protocol.md` §5; designed in `docs/gates/G2-plan.md`):
 
 - `reserve_buy`: with C = max(0, −x) NO contracts held and Q resting buy units, the sum of the prices of the Q − C most expensive units.
 - `reserve_sell`: with C = max(0, x) YES contracts held, the sum of (100 − p) over the Q − C most expensive sell units, which are the lowest-priced ones.

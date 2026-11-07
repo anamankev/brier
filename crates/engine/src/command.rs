@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn lifecycle_allows_exactly_the_listed_transitions() {
-        // docs/gates/G1-plan.md and G2-plan.md: six set_state transitions; settlement reaches
+        // docs/protocol.md §3: six set_state transitions; settlement reaches
         // Resolved and Voided.
         let all = [PreOpen, Open, Halted, Closed, Resolved, Voided];
         let allowed = [

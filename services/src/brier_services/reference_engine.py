@@ -1,4 +1,4 @@
-"""Reference engine (SPEC §3.4), written from docs/gates/G1-plan.md, G2-plan.md, and SPEC §2-§4.
+"""Reference engine (SPEC §3.4), written from docs/protocol.md and SPEC §2-§4.
 
 This engine exists to be obviously correct, not fast. Every resting order sits in one plain
 list per market, and every decision re-scans and re-sorts that list. Collateral is recomputed

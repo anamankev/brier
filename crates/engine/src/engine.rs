@@ -774,7 +774,7 @@ impl Engine {
 }
 
 /// The place-order checks after the market and account lookups, in their fixed order
-/// (docs/gates/G2-plan.md): the first failing check names the rejection.
+/// (docs/protocol.md §3): the first failing check names the rejection.
 fn validate_place(
     book: &Book,
     ledger: &Ledger,

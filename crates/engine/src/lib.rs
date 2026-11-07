@@ -6,7 +6,7 @@
 //! same events and the same [`Engine::state_hash`] (SPEC §3.2).
 //!
 //! The exact semantics (event order, rejection order, order types, self-trade prevention) are
-//! fixed in `docs/gates/G1-plan.md`, which the Python reference engine also implements.
+//! fixed in `docs/protocol.md`, which the Python reference engine also implements.
 
 mod book;
 mod command;

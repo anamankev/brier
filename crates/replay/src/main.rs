@@ -1,6 +1,6 @@
 //! `brier-replay`: read wire-format commands as JSON lines on stdin, apply them to a fresh
 //! engine in order, and write one JSON line per event to stdout, then a `final_book` record.
-//! The format is fixed in docs/gates/G1-plan.md and shared with the Python reference engine.
+//! The format is fixed in docs/protocol.md and shared with the Python reference engine.
 //!
 //! Exit codes: 0 success; 2 malformed input (with the line number on stderr); 3 the engine
 //! halted (a sequence gap or a violated invariant).
@@ -461,7 +461,7 @@ mod tests {
 {"seq":7,"cmd":"place","account":2,"market":1,"side":"buy","price":0,"qty":2,"tif":"gtc","post_only":false}
 "#;
         let lines = replay(input).ok().unwrap();
-        // Expected values computed by hand from docs/gates/G2-plan.md: account 1 sells YES it
+        // Expected values computed by hand from docs/protocol.md §5: account 1 sells YES it
         // does not hold, so each unit opens NO at 100 − 60 = 40 (reserve 5 × 40 = 200); the
         // trade of 2 at 60 moves buyer −120, seller +120 − 200 = −80, escrow +200.
         assert_eq!(

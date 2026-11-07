@@ -1,5 +1,7 @@
 # G1 plan: matching engine
 
+> **History.** This plan records how the gate was designed. The current rules are in [docs/protocol.md](../protocol.md); where the two differ, the protocol is right.
+
 Reads: SPEC §2, §3. Exit: 10 million random commands with no divergence from the reference engine; P1 and P2 measured.
 
 Collateral, positions, the resting-order limit, and kill switches are G2 (SPEC §4). The G1 engine matches orders and keeps the book. It does not yet check whether an account can afford an order.

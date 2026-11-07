@@ -1,4 +1,4 @@
-//! One test per matching rule in docs/gates/G1-plan.md (SPEC §3.1). Every command also
+//! One test per matching rule in docs/protocol.md §3-§4 (SPEC §3.1). Every command also
 //! re-checks the engine's invariants.
 #![allow(clippy::arithmetic_side_effects)] // test bookkeeping (sequence counter)
 #![allow(clippy::unwrap_used)] // test helpers: a failure must stop the test

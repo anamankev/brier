@@ -10,7 +10,7 @@ Build a prediction-market exchange whose core would pass review at a regulated v
 
 **Done means all of the following, each with evidence:**
 1. **Matching engine:** price-time priority central limit order book for binary contracts, with the order types in §3. Tested by property tests and by differential testing against an independent reference engine. Throughput and latency measured and published (§11).
-2. **Ledger and risk:** fully collateralized binary contracts, double-entry accounting, pre-trade collateral reservation. The conservation invariant (§4.3) is checked after every event and in property tests over millions of random command streams.
+2. **Ledger and risk:** fully collateralized binary contracts, double-entry accounting, pre-trade collateral reservation. The invariants (§4.3) are checked after every command in the test suites and periodically in long differential runs, over millions of random commands.
 3. **Durability:** an append-only journal with checksums, snapshots, and replay. A crash test (kill -9 under load, repeatedly) loses no acknowledged order and recovers to the exact replayed state hash.
 4. **APIs:** REST and WebSocket order entry with idempotent client order IDs and Ed25519-signed requests; WebSocket market data with per-market sequence numbers, snapshots, and gap recovery. Protocol parsers fuzzed.
 5. **Markets that resolve correctly:** every market has a written rulebook entry (§7). Automated resolvers fetch public sources (FRED, BLS, NOAA), record evidence, and settle after a two-step confirmation.
@@ -20,13 +20,15 @@ Build a prediction-market exchange whose core would pass review at a regulated v
 9. **Operations:** one-command local stack (Docker Compose), structured logs, Prometheus metrics, OpenTelemetry traces, runbooks for halt, recovery, and resolution disputes; threat model.
 10. **Release:** public repo, README with architecture, invariants, benchmark results, and an honest comparison with industry leaders (§16).
 
+The exact engine behavior (commands, check order, events, wire format) lives in `docs/protocol.md`, which the code and both engines' tests are held to.
+
 ## 1. Scope and boundaries
 
 ### 1.1 In scope
 Binary (yes/no) event contracts on economics, weather, and financial-index events; the components in §0; an agent-based simulation harness for load testing and surveillance evaluation (§10).
 
 ### 1.2 Play-money boundary (enforced in code and terms)
-- Each account receives a one-time grant of credits (`SIGNUP_GRANT = 10_000_00` credit-cents, i.e. 10,000 credits). Admins may run documented, equal-for-all re-grants; no individual top-ups.
+- Each account receives a one-time grant of credits (`SIGNUP_GRANT` = 1,000,000 credit-cents, i.e. 10,000 credits). Admins may run documented, equal-for-all re-grants; no individual top-ups.
 - Credits cannot be bought, sold, withdrawn, redeemed, or transferred between users. They have no cash value and there are no prizes. This keeps the product outside gambling, sweepstakes, and money-transmission rules. Real-money operation for US persons would require CFTC designation as a contract market and a clearing arrangement; that is out of scope (§17).
 - The code contains no deposit, withdrawal, payment, or wallet path. A test asserts that no ledger entry type exists that moves credits between two user accounts outside matched trades and settlement.
 
@@ -67,7 +69,7 @@ An account's position in a market is a signed integer x: x > 0 means x YES contr
 - Market states: `PreOpen` (accepts cancels only), `Open`, `Halted` (cancels only), `Closed` (no orders), `Resolved`, `Voided`. Transitions are commands in the log.
 
 ### 3.2 Determinism
-The engine is a pure function: `(state, command) → (state', events)`. A sequencer assigns a global, gap-free sequence number to each command before it reaches the engine. The engine reads no clock (timestamps come in on commands), uses no randomness, and iterates no unordered collections. Every N events it emits a state hash (BLAKE3 over a canonical serialization). Replaying the journal from empty must reproduce every hash exactly (tested).
+The engine is a pure function: `(state, command) → (state', events)`. A sequencer assigns a global, gap-free sequence number to each command before it reaches the engine. The engine reads no clock (the sequencer will stamp commands with time in G3/G4, and the engine only echoes it), uses no randomness, and never lets the iteration order of an unordered collection reach its output. `Engine::state_hash()` is a BLAKE3 hash over a canonical serialization of the whole state. Snapshots (G3) record it, and replaying the journal from empty must reproduce it exactly. Replay determinism over in-memory command streams is property-tested now.
 
 ### 3.3 Data structures (performance design, measured in §11)
 Per market: two price-indexed arrays of 99 levels each (index = tick), each level a FIFO of order handles; best-bid and best-ask indexes; an order arena with free-list reuse; an order-ID map. With only 99 ticks, every price lookup is O(1) and no tree is needed. ADR-0003 records this choice against a BTreeMap book.
@@ -83,16 +85,20 @@ Per user: `cash`, the only user ledger balance. Collateral is a lock on cash, no
 ### 4.2 Double-entry
 Every movement is a journal entry whose legs sum to zero. Entry types: `Grant` (issuance → cash), `Trade` (buyer cash, seller cash, escrow; one entry covers pair creation, transfer, and pair destruction), `Settle` (escrow → cash, for YES, NO, and void payouts alike). No other type exists (§1.2 test). Reservations are lock changes, reported as `reserved` events, not ledger entries.
 
-### 4.3 Invariants (checked after every event in debug and test builds; on every snapshot in release)
+### 4.3 Invariants
+Where they are checked:
+- **Tests:** `Engine::check_invariants` runs all five after every command in the rule and property tests.
+- **The engine itself, after every command:** I3 for every account the command touched, the balance of every ledger entry as it is built, and zero escrow after every settlement.
+- **Full check elsewhere:** at every snapshot (G3), and every N commands in replay runs (`brier-replay --check-every N`).
 - I1 conservation: Σ cash + Σ escrow + issuance = 0 (equivalently Σ available + Σ reserved + Σ escrow + issuance = 0).
 - I2 escrow: escrow(m) = 100 × open interest(m), where open interest = Σ positive positions = Σ |negative positions|.
 - I3 no negative balances: cash ≥ reserved ≥ 0 for every user, so available ≥ 0.
 - I4 reservations: an account's reserved total equals Σ over markets of `reserve(a, m)`, recomputed from its resting orders and position by the worst-case rule in §4.4.
 - I5 book: never crossed; every resting order has quantity > 0; order count matches the ID map.
-A violated invariant halts the engine with `InvariantViolation` and the offending sequence number. Nothing ever adjusts a balance to restore an invariant.
+A violated invariant halts the engine with `EngineError::Corrupt` naming it. `Engine::halted()` reports the sequence number of the failing command, and every later command is refused with `EngineError::Halted`, since the failing command may have changed state part-way. Recovery is a restart from the journal. Nothing ever adjusts a balance to restore an invariant.
 
 ### 4.4 Pre-trade checks (in order; each rejection has a typed reason)
-Market state; price in [1, 99]; quantity in [1, `MAX_ORDER_QTY`]; per-account resting-order limit; per-account message rate limit (enforced at the gateway); collateral: counting the incoming order as if it rests in full, `reserve(a, m)` may grow by at most `available(a)`. `reserve(a, m)` charges the price of each resting buy unit and (100 − price) of each resting sell unit, except that the account's held contracts (NO for buys, YES for sells) cover the cheapest units on that side, since closing needs no cash. The exact rule, its proof of sufficiency, and the order of checks are in `docs/gates/G2-plan.md` and ADR-0005.
+Market state; price in [1, 99]; quantity in [1, `MAX_ORDER_QTY`]; per-account resting-order limit; per-account message rate limit (enforced at the gateway); collateral: counting the incoming order as if it rests in full, `reserve(a, m)` may grow by at most `available(a)`. `reserve(a, m)` charges the price of each resting buy unit and (100 − price) of each resting sell unit, except that the account's held contracts (NO for buys, YES for sells) cover the cheapest units on that side, since closing needs no cash. The exact rule and the order of checks are in `docs/protocol.md` §3 and §5; the proof of sufficiency is in ADR-0005.
 
 ### 4.5 Kill switches
 Cancel-all per account, per market, or everywhere, and a global halt of every open market. Each is a sequenced command; the gateway (G4) audit-logs it with actor and reason.

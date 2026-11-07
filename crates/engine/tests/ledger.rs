@@ -1,4 +1,4 @@
-//! One test per money rule in docs/gates/G2-plan.md (SPEC §2.3-§2.4, §4). Every command also
+//! One test per money rule in docs/protocol.md §3 and §5 (SPEC §2.3-§2.4, §4). Every command also
 //! re-checks every engine and ledger invariant (I1-I5).
 #![allow(clippy::arithmetic_side_effects)] // test bookkeeping (sequence counter)
 #![allow(clippy::unwrap_used)] // test helpers: a failure must stop the test

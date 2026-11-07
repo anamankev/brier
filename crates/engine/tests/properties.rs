@@ -1,4 +1,4 @@
-//! Property tests over random command streams (G1-plan unit 3, G2-plan unit 3).
+//! Property tests over random command streams, against the rules in docs/protocol.md.
 //!
 //! Streams mix every command and order type, a few accounts (so self-trade prevention fires),
 //! prices clustered around 50 (so orders cross), out-of-range values, lifecycle changes, and

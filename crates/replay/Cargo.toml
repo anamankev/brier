@@ -1,6 +1,6 @@
 [package]
 name = "brier-replay"
-description = "Replay wire-format commands (JSON lines) through the engine and print events (docs/gates/G1-plan.md)"
+description = "Replay wire-format commands (JSON lines) through the engine and print events (docs/protocol.md)"
 version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true

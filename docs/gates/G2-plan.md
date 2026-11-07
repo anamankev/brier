@@ -1,5 +1,7 @@
 # G2 plan: ledger and risk
 
+> **History.** This plan records how the gate was designed. The current rules are in [docs/protocol.md](../protocol.md); where the two differ, the protocol is right.
+
 Reads: SPEC §2.3, §2.4, §4. Exit: invariants I1-I5 hold over 10 million random commands; settlement zeroes escrow; the play-money test (§1.2) passes.
 
 ## Money model (ADR-0005)
