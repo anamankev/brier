@@ -8,7 +8,7 @@ Traders buy and sell yes/no contracts on public events, such as "Will October CP
 - **Double-entry ledger.** Fully collateralized contracts and pre-trade collateral checks. A conservation invariant is checked after every event: credits issued = balances + escrow.
 - **Crash-safe journal.** No order is acknowledged before it is on disk (one full flush per batch of orders), and recovery is proven by killing the core 1,000 times under load.
 - **APIs.** REST and WebSocket order entry with signed requests and idempotent retries; sequenced market data with gap recovery.
-- **Evidence-backed resolution.** Every market has a written rulebook entry and resolves from free public sources (FRED, BLS, NOAA), with the evidence stored.
+- **Evidence-backed resolution.** Every market has a rulebook whose hash is in the journal, resolves from free public sources (FRED, BLS, NOAA), and settles only after a second admin confirms and a 24-hour dispute window passes; the settlement names its evidence by hash ([docs/resolution.md](docs/resolution.md)).
 - **Reference market maker.** Trades only through the public API, quoting around options-implied fair values.
 - **Market surveillance.** Detects wash trading, spoofing, marking the close, and insider-like trading. Precision and recall are measured on simulated manipulation.
 
@@ -29,8 +29,8 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 | G2 | Ledger, collateral, settlement | Done |
 | G3 | Journal, snapshots, crash recovery | Done |
 | G4 | Gateway, APIs, PostgreSQL read models | Done |
-| G5 | Markets, rulebook, resolution | In progress |
-| G6 | Web app | |
+| G5 | Markets, rulebook, resolution | Done |
+| G6 | Web app | Next |
 | G7 | Market maker, simulation harness | |
 | G8 | Surveillance and its evaluation | |
 | G9 | Release | |
@@ -50,6 +50,8 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 | Order to acknowledgment through the gateway | p50 4.74 ms, p99 9.14 ms at 10,000 orders/s (one to two durable syncs); the 5 ms p99 target was refuted, the registered 9.9 ms bound held | [gateway note](docs/notes/gateway.md) |
 | Market data to 1,000 WebSocket subscribers | p50 3.69 ms, p99 16.4 ms after batching writes (was 22.9 ms); the 10 ms p99 target was refuted, remaining tail is intermittent machine-wide stalls | [gateway note](docs/notes/gateway.md) |
 | Fuzzing | 6 targets (wire, journal decode and recovery, snapshot restore, gateway requests, signatures), 1 hour each, about 2.2 billion executions; one finding (non-canonical snapshot bytes), fixed | [G4 review](docs/gates/G4-review.md) |
+| Resolver accuracy | 855 values from BLS, FRED, and NOAA equal to independent comparators (FRED, Treasury, FOMC statements, GHCN-Daily), 0 mismatches; every decision recomputed identically from the stored response with networking disabled | [resolution note](docs/notes/resolution.md) |
+| Resolution end to end | All five launch markets listed, traded, closed by schedule, resolved, disputed, and settled through a real gateway | [G5 review](docs/gates/G5-review.md) |
 | Book and ledger invariants (I1-I5) | Checked after every command in 2,560 random streams per CI run | `crates/engine/tests/properties.rs` |
 
 Measured on a 16 GB Apple M5 MacBook Air on AC power. Both performance hypotheses were registered before the engine existed.
