@@ -72,7 +72,7 @@ The same `make bench` workload at `496af0f`, with the ledger in the order path: 
 | p99 latency | 334 ns | 1,417 ns | 1,375 ns |
 | p99.9 latency | 500 ns | 2,543 ns | 2,417 ns |
 
-Measured mix after the audit, over the 50 million timed commands (the bench now reports it): 32.5 M places and 17.5 M cancels. 20.1 M orders were accepted, 12.4 M rejected (38% of places, almost all `insufficient_collateral` as 100 accounts' cash fills up with resting orders), and 2.58 M trades executed. Rejections are cheap, so throughput over accepted work alone would be lower. The fair comparison with G1 is therefore the latency of accepted orders, the first next question below.
+Measured mix after the audit, over the 50 million timed commands (the bench now reports it): 32.5 M places and 17.5 M cancels. 20.1 M orders were accepted, 12.4 M rejected (38% of places; the bench does not yet split rejections by reason, though collateral is the likely main one as 100 accounts' cash fills up with resting orders), and 2.58 M trades executed. Rejections are cheap, so throughput over accepted work alone would be lower. The fair comparison with G1 is therefore the latency of accepted orders, the first next question below.
 
 P1 (≥ 1 M/s) and P2 (p99 ≤ 5 µs, p99.9 ≤ 20 µs) still hold with the ledger included. The ledger costs about 4.9× in throughput.
 

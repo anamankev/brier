@@ -43,7 +43,7 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 | Matching latency per command | p99 334 ns, p99.9 500 ns (timer resolution 42 ns) | [performance note](docs/notes/performance.md) |
 | Agreement with an independent reference engine | 10 million random commands, 12.4 million events, 0 divergences (matching only) | [differential note](docs/notes/differential.md) |
 | The same, with the ledger | 10 million state-aware commands with accounts, collateral, settlement, and kill switches: 19.6 million events, 696,614 trades, 0 divergences, full invariant checks every 100,000 commands | [differential note](docs/notes/differential.md) |
-| Throughput with the ledger in the order path | 2.69 million commands per second; p99 1.4 µs (65% places, 35% cancels; 38% of places rejected for collateral) | [performance note](docs/notes/performance.md) |
+| Throughput with the ledger in the order path | 2.69 million commands per second; p99 1.4 µs (65% places, 35% cancels; 38% of places rejected) | [performance note](docs/notes/performance.md) |
 | Book and ledger invariants (I1-I5) | Checked after every command in 2,560 random streams per CI run | `crates/engine/tests/properties.rs` |
 
 Measured on a 16 GB Apple M5 MacBook Air on AC power. Both performance hypotheses were registered before the engine existed.
