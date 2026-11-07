@@ -216,7 +216,33 @@ fn read_record(bytes: &[u8], expected: u64) -> Result<(usize, u64, Command), Bad
 /// file-system failures, or whatever `apply` returns, converted.
 pub fn recover<E>(
     dir: &Path,
+    apply: impl FnMut(Seq, Command) -> Result<(), E>,
+) -> Result<Recovered, E>
+where
+    E: From<JournalError>,
+{
+    scan(dir, apply, true)
+}
+
+/// As [`recover`], but never modifies the journal: a torn tail is reported, not removed.
+/// Used by verification, which must not change what it checks.
+///
+/// # Errors
+/// As [`recover`].
+pub fn read_journal<E>(
+    dir: &Path,
+    apply: impl FnMut(Seq, Command) -> Result<(), E>,
+) -> Result<Recovered, E>
+where
+    E: From<JournalError>,
+{
+    scan(dir, apply, false)
+}
+
+fn scan<E>(
+    dir: &Path,
     mut apply: impl FnMut(Seq, Command) -> Result<(), E>,
+    repair: bool,
 ) -> Result<Recovered, E>
 where
     E: From<JournalError>,
@@ -236,8 +262,10 @@ where
         if bytes.len() < HEADER_LEN {
             if is_last {
                 // A crash while creating the segment: nothing in it was ever acknowledged.
-                fs::remove_file(path).map_err(JournalError::from)?;
-                sync_dir(dir)?;
+                if repair {
+                    fs::remove_file(path).map_err(JournalError::from)?;
+                    sync_dir(dir)?;
+                }
                 let truncation = Truncation {
                     segment: path.clone(),
                     offset: 0,
@@ -281,12 +309,14 @@ where
                     if !is_last || dropped > MAX_BATCH_BYTES {
                         return Err(corrupt(offset, reason).into());
                     }
-                    let file = OpenOptions::new()
-                        .write(true)
-                        .open(path)
-                        .map_err(JournalError::from)?;
-                    file.set_len(offset as u64).map_err(JournalError::from)?;
-                    file.sync_all().map_err(JournalError::from)?;
+                    if repair {
+                        let file = OpenOptions::new()
+                            .write(true)
+                            .open(path)
+                            .map_err(JournalError::from)?;
+                        file.set_len(offset as u64).map_err(JournalError::from)?;
+                        file.sync_all().map_err(JournalError::from)?;
+                    }
                     let truncation = Truncation {
                         segment: path.clone(),
                         offset: offset as u64,
@@ -550,6 +580,33 @@ mod tests {
         let (got, _) = read(dir.path());
         assert_eq!(got.len(), 150);
         assert_eq!(got.last(), Some(&(150, cmd(150))));
+    }
+
+    #[test]
+    fn read_only_scans_report_a_torn_tail_without_touching_it() {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), 50, 50, SEGMENT_BYTES);
+        let path = last_segment(dir.path());
+        let len = fs::metadata(&path).unwrap().len();
+        OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_len(len - 3)
+            .unwrap();
+        let mut seen = 0;
+        let r = read_journal::<JournalError>(dir.path(), |_, _| {
+            seen += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(seen, 49);
+        assert!(r.truncation.is_some());
+        assert_eq!(
+            fs::metadata(&path).unwrap().len(),
+            len - 3,
+            "the file is unchanged"
+        );
     }
 
     #[test]
