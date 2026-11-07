@@ -45,10 +45,12 @@ pub async fn send(app: &Router, req: Request<Body>) -> (StatusCode, Value) {
     let res = app.clone().oneshot(req).await.unwrap();
     let status = res.status();
     let bytes = to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    // Non-JSON bodies (only axum's own WebSocket-upgrade rejection) come back as a string.
     let value = if bytes.is_empty() {
         Value::Null
     } else {
-        serde_json::from_slice(&bytes).unwrap()
+        serde_json::from_slice(&bytes)
+            .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into_owned()))
     };
     (status, value)
 }

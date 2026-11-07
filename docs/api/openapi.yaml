@@ -1,0 +1,740 @@
+openapi: 3.1.0
+info:
+  title: Brier exchange API
+  version: 1.0.0
+  description: |
+    REST API of the Brier play-money prediction-market exchange (SPEC §6). The WebSocket API at
+    `/v1/ws` is described in `asyncapi.yaml`.
+
+    Units. Prices are integer ticks from 1 to 99: the price of one YES contract in credits
+    (cents) out of a 100-credit payout. Quantities are whole contracts, 1 to 25,000 per order.
+    Money is integer credits. Nothing is ever rounded or clipped: an out-of-range value is
+    rejected.
+
+    Durability. A command (order, cancel, amend, administrative command) is answered only
+    after it is durable in the journal. Every answer carries `seq`, the command's journal
+    sequence number. A rejection by the engine is also sequenced and also carries `seq`.
+
+    Reads. `markets`, `book`, and `portfolio` come from the engine and reflect every
+    acknowledged command (`as_of` is the last durable sequence number). `fills`, `orders`,
+    `orders/history`, and `trades` come from the read models, which follow the journal;
+    `as_of` says how far they reach.
+
+    Idempotency. An order with a `client_order_id` the account already used (among its last
+    10,000 accepted orders) is not placed again: the answer is `status: duplicate` with the
+    original order ID. A request that timed out can be retried with the same ID safely.
+
+    Rate limits. 200 orders per second per account (burst 400); 500 requests per second per
+    client address (burst 1,000); 30 login or registration attempts per minute per address
+    (burst 10). An exceeded limit answers 429 `rate_limited`; nothing is queued. Bodies are at
+    most 8 KiB. A request taking over 10 s answers 504 `timeout`.
+
+    Authentication. People log in for a session token (`Authorization: Bearer <token>`, valid
+    24 h). Bots register an Ed25519 public key with a session, then sign each request (see the
+    `signed` scheme). Managing keys needs a session.
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local development (`make up`, then `brier-gateway`)
+security:
+  - session: []
+  - signed: []
+tags:
+  - name: identity
+  - name: market data
+  - name: trading
+  - name: history
+  - name: administration
+paths:
+  /v1/health:
+    get:
+      tags: [market data]
+      summary: How far the journal and the read models reach
+      security: []
+      responses:
+        '200':
+          description: Sequence numbers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [durable_seq, projected_seq]
+                properties:
+                  durable_seq: { type: integer, minimum: 0 }
+                  projected_seq: { type: integer, minimum: 0 }
+  /v1/register:
+    post:
+      tags: [identity]
+      summary: Create a user and its engine account (with the signup grant)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Credentials' }
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user_id, username]
+                properties:
+                  user_id: { type: integer, description: Also the engine account ID }
+                  username: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /v1/login:
+    post:
+      tags: [identity]
+      summary: Exchange a username and password for a session token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Credentials' }
+      responses:
+        '200':
+          description: A session
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, user_id, expires_in_seconds]
+                properties:
+                  token: { type: string, description: 'Send as `Authorization: Bearer <token>`' }
+                  user_id: { type: integer }
+                  expires_in_seconds: { type: integer, const: 86400 }
+        '401': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /v1/logout:
+    post:
+      tags: [identity]
+      summary: End the session
+      security: [{ session: [] }]
+      responses:
+        '204': { description: Ended }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/keys:
+    post:
+      tags: [identity]
+      summary: Register an Ed25519 public key for signed requests
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [public_key]
+              properties:
+                public_key: { type: string, description: 32-byte Ed25519 public key, standard base64 }
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [key_id]
+                properties:
+                  key_id: { type: integer, description: Send as the `Brier-Key` header }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+    get:
+      tags: [identity]
+      summary: The user's API keys
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: Keys, ascending by ID
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [keys]
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
+                      required: [key_id, created_at, revoked]
+                      properties:
+                        key_id: { type: integer }
+                        created_at: { type: string, format: date-time }
+                        revoked: { type: boolean }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/keys/{id}:
+    delete:
+      tags: [identity]
+      summary: Revoke an API key
+      security: [{ session: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Revoked }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /v1/markets:
+    get:
+      tags: [market data]
+      summary: Every market and its state
+      security: []
+      responses:
+        '200':
+          description: Markets, ascending by ID
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [as_of, markets]
+                properties:
+                  as_of: { type: integer }
+                  markets:
+                    type: array
+                    items:
+                      type: object
+                      required: [market, state]
+                      properties:
+                        market: { type: integer }
+                        state: { $ref: '#/components/schemas/MarketState' }
+  /v1/markets/{id}/book:
+    get:
+      tags: [market data]
+      summary: Aggregated price levels, best first
+      security: []
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: The book
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [as_of, market, state, bids, asks]
+                properties:
+                  as_of: { type: integer }
+                  market: { type: integer }
+                  state: { $ref: '#/components/schemas/MarketState' }
+                  bids: { $ref: '#/components/schemas/Levels' }
+                  asks: { $ref: '#/components/schemas/Levels' }
+        '404': { $ref: '#/components/responses/Error' }
+  /v1/markets/{id}/trades:
+    get:
+      tags: [market data]
+      summary: The market's most recent executions, newest first (no account identities)
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Trades
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [as_of, market, trades]
+                properties:
+                  as_of: { type: integer }
+                  market: { type: integer }
+                  trades:
+                    type: array
+                    items:
+                      type: object
+                      required: [seq, ordinal, price, qty, taker_side]
+                      properties:
+                        seq: { type: integer }
+                        ordinal: { type: integer }
+                        price: { $ref: '#/components/schemas/Price' }
+                        qty: { type: integer }
+                        taker_side: { $ref: '#/components/schemas/Side' }
+        '400': { $ref: '#/components/responses/Error' }
+  /v1/ws:
+    get:
+      tags: [market data, trading]
+      summary: Upgrade to the WebSocket API (asyncapi.yaml)
+      security: []
+      responses:
+        '101': { description: Switching protocols }
+        '400': { description: Not a WebSocket upgrade request }
+  /v1/orders:
+    post:
+      tags: [trading]
+      summary: Place an order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NewOrder' }
+      responses:
+        '200':
+          description: Durable; resting, filled, cancelled remainder, or a duplicate
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlaceResult' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+        '504': { $ref: '#/components/responses/Error' }
+  /v1/orders/history:
+    get:
+      tags: [history]
+      summary: The user's order events, oldest first (read models)
+      parameters:
+        - { $ref: '#/components/parameters/AfterSeq' }
+        - { $ref: '#/components/parameters/AfterOrdinal' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: A page of events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [as_of, events, next]
+                properties:
+                  as_of: { type: integer }
+                  events: { type: array, items: { $ref: '#/components/schemas/OrderEvent' } }
+                  next: { $ref: '#/components/schemas/Next' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/orders/{id}:
+    get:
+      tags: [history]
+      summary: One of the user's orders, as its events (read models)
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: The order's events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [as_of, order, events]
+                properties:
+                  as_of: { type: integer }
+                  order: { type: integer }
+                  events: { type: array, items: { $ref: '#/components/schemas/OrderEvent' } }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [trading]
+      summary: Cancel a resting order
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [seq, order, status, cancelled]
+                properties:
+                  seq: { type: integer }
+                  order: { type: integer }
+                  status: { const: cancelled }
+                  cancelled: { type: integer, description: Contracts that were still resting }
+        '401': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [trading]
+      summary: Reduce a resting order's quantity, keeping its time priority
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [qty]
+              properties:
+                qty: { type: integer, minimum: 1, description: The new remaining quantity; must be lower }
+      responses:
+        '200':
+          description: Amended
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [seq, order, status, remaining]
+                properties:
+                  seq: { type: integer }
+                  order: { type: integer }
+                  status: { const: resting }
+                  remaining: { type: integer }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /v1/portfolio:
+    get:
+      tags: [trading]
+      summary: Cash, collateral, positions, and open orders (engine state)
+      responses:
+        '200':
+          description: The portfolio
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [as_of, cash, reserved, available, positions, open_orders]
+                properties:
+                  as_of: { type: integer }
+                  cash: { type: integer, description: Ledger balance in credits }
+                  reserved: { type: integer, description: Collateral locked by resting orders }
+                  available: { type: integer, description: cash minus reserved }
+                  positions:
+                    type: array
+                    items:
+                      type: object
+                      required: [market, position]
+                      properties:
+                        market: { type: integer }
+                        position: { type: integer, description: '> 0 YES contracts, < 0 NO contracts' }
+                  open_orders:
+                    type: array
+                    items:
+                      type: object
+                      required: [order, market, side, price, remaining]
+                      properties:
+                        order: { type: integer }
+                        market: { type: integer }
+                        side: { $ref: '#/components/schemas/Side' }
+                        price: { $ref: '#/components/schemas/Price' }
+                        remaining: { type: integer }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /v1/fills:
+    get:
+      tags: [history]
+      summary: The user's executions, oldest first (read models)
+      parameters:
+        - { $ref: '#/components/parameters/AfterSeq' }
+        - { $ref: '#/components/parameters/AfterOrdinal' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: A page of fills
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [as_of, fills, next]
+                properties:
+                  as_of: { type: integer }
+                  fills:
+                    type: array
+                    items:
+                      type: object
+                      required: [seq, ordinal, market, order, side, price, qty, liquidity]
+                      properties:
+                        seq: { type: integer }
+                        ordinal: { type: integer }
+                        market: { type: integer }
+                        order: { type: integer, description: The user's order }
+                        side: { $ref: '#/components/schemas/Side' }
+                        price: { $ref: '#/components/schemas/Price' }
+                        qty: { type: integer }
+                        liquidity: { enum: [maker, taker] }
+                  next: { $ref: '#/components/schemas/Next' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/admin/markets:
+    post:
+      tags: [administration]
+      summary: List a market (pre_open)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [market, reason]
+              properties:
+                market: { type: integer, minimum: 0, maximum: 4294967295 }
+                reason: { $ref: '#/components/schemas/Reason' }
+      responses:
+        '200': { $ref: '#/components/responses/Admin' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /v1/admin/markets/{id}/state:
+    post:
+      tags: [administration]
+      summary: Move a market through its lifecycle
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [state, reason]
+              properties:
+                state: { $ref: '#/components/schemas/MarketState' }
+                reason: { $ref: '#/components/schemas/Reason' }
+      responses:
+        '200': { $ref: '#/components/responses/Admin' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /v1/admin/markets/{id}/settle:
+    post:
+      tags: [administration]
+      summary: Settle a closed market YES, NO, or void
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [outcome, reason]
+              properties:
+                outcome: { enum: [yes, no, void] }
+                reason: { $ref: '#/components/schemas/Reason' }
+      responses:
+        '200': { $ref: '#/components/responses/Admin' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /v1/admin/cancel-all:
+    post:
+      tags: [administration]
+      summary: Kill switch; cancel resting orders by account and/or market (neither means all)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                account: { type: integer }
+                market: { type: integer }
+                reason: { $ref: '#/components/schemas/Reason' }
+      responses:
+        '200': { $ref: '#/components/responses/Admin' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+  /v1/admin/halt-all:
+    post:
+      tags: [administration]
+      summary: Kill switch; halt every open market
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { $ref: '#/components/schemas/Reason' }
+      responses:
+        '200': { $ref: '#/components/responses/Admin' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    session:
+      type: http
+      scheme: bearer
+      description: A token from `POST /v1/login`, valid 24 hours.
+    signed:
+      type: apiKey
+      in: header
+      name: Brier-Key
+      description: |
+        The API key ID from `POST /v1/keys`, sent with two more headers:
+        - `Brier-Timestamp`: milliseconds since the Unix epoch, within 5 s of the server clock;
+        - `Brier-Signature`: standard base64 of the Ed25519 signature of the UTF-8 bytes
+          `"{timestamp}\n{METHOD}\n{path with query}\n{lowercase hex SHA-256 of the body}"`.
+        A signature is accepted once; a replay is refused (401). Keys cannot manage keys.
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 0 }
+    AfterSeq:
+      name: after_seq
+      in: query
+      description: Page cursor; take it from `next`
+      schema: { type: integer, default: 0 }
+    AfterOrdinal:
+      name: after_ordinal
+      in: query
+      description: Page cursor; take it from `next`
+      schema: { type: integer, default: -1 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+  responses:
+    Error:
+      description: An error (`code` is stable; `message` is for people)
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { $ref: '#/components/schemas/Error' }
+    Admin:
+      description: Durable; the engine's events for the command, and the audit-log row
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [seq, audit_id, events]
+            properties:
+              seq: { type: integer }
+              audit_id: { type: integer }
+              events:
+                type: array
+                description: Engine events in the wire format (docs/protocol.md §6)
+                items: { type: object }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { $ref: '#/components/schemas/ErrorCode' }
+        message: { type: string }
+        seq: { type: integer, description: Present when the engine sequenced and rejected the command (422) }
+    ErrorCode:
+      description: |
+        Gateway codes: bad_request (400), unauthorized (401), forbidden (403), not_found (404),
+        username_taken (409), too_large (413), rate_limited (429), too_many_in_flight (429,
+        WebSocket only), unavailable (503), timeout (504). Every other code is an engine reject
+        reason (422, docs/protocol.md).
+      enum:
+        - bad_request
+        - unauthorized
+        - forbidden
+        - not_found
+        - username_taken
+        - too_large
+        - rate_limited
+        - too_many_in_flight
+        - unavailable
+        - timeout
+        - unknown_market
+        - market_exists
+        - market_not_open
+        - invalid_transition
+        - invalid_order
+        - invalid_price
+        - invalid_quantity
+        - post_only_would_cross
+        - fok_unfillable
+        - unknown_order
+        - invalid_amend
+        - unknown_account
+        - account_exists
+        - too_many_orders
+        - insufficient_collateral
+    Credentials:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: { type: string, pattern: '^[a-z0-9_]{3,32}$' }
+        password: { type: string, minLength: 12, maxLength: 256 }
+    Reason:
+      type: string
+      minLength: 3
+      maxLength: 500
+      description: Why; recorded in the audit log with the actor and the result
+    Price:
+      type: integer
+      minimum: 1
+      maximum: 99
+    Side:
+      enum: [buy, sell]
+      description: Buy or sell YES contracts
+    MarketState:
+      enum: [pre_open, open, halted, closed, resolved, voided]
+    Levels:
+      type: array
+      description: '[price, total resting quantity] pairs, best price first'
+      items:
+        type: array
+        prefixItems: [{ $ref: '#/components/schemas/Price' }, { type: integer }]
+        minItems: 2
+        maxItems: 2
+    NewOrder:
+      type: object
+      additionalProperties: false
+      required: [market, side, price, qty]
+      properties:
+        market: { type: integer }
+        side: { $ref: '#/components/schemas/Side' }
+        price: { type: integer, description: 1 to 99 ticks; anything else is rejected (invalid_price) }
+        qty: { type: integer, description: '1 to 25,000 contracts; anything else is rejected (invalid_quantity)' }
+        tif: { enum: [gtc, ioc, fok], default: gtc }
+        post_only: { type: boolean, default: false, description: GTC only; rejected if it would cross }
+        client_order_id: { type: integer, minimum: 0, description: The client's ID for idempotent retries }
+    PlaceResult:
+      oneOf:
+        - type: object
+          required: [seq, order, status, filled, remaining, cancel_reason, fills]
+          properties:
+            seq: { type: integer }
+            order: { type: integer }
+            status: { enum: [resting, filled, cancelled] }
+            filled: { type: integer }
+            remaining: { type: integer, description: Resting (status resting) or cancelled (status cancelled) }
+            cancel_reason: { enum: [null, ioc_remainder, self_trade] }
+            fills:
+              type: array
+              description: Executions of this order as taker, in order
+              items:
+                type: object
+                required: [price, qty]
+                properties:
+                  price: { $ref: '#/components/schemas/Price' }
+                  qty: { type: integer }
+        - type: object
+          required: [seq, status, order]
+          properties:
+            seq: { type: integer }
+            status: { const: duplicate }
+            order: { type: integer, description: The original order with this client_order_id }
+    OrderEvent:
+      type: object
+      required: [seq, ordinal, order, market, kind, remaining, reason]
+      properties:
+        seq: { type: integer }
+        ordinal: { type: integer }
+        order: { type: [integer, 'null'], description: Null for a rejected place }
+        market: { type: integer }
+        kind: { enum: [accepted, rested, amended, cancelled, duplicate, rejected] }
+        remaining: { type: [integer, 'null'] }
+        reason: { type: [string, 'null'] }
+    Next:
+      description: The cursor for the next page, or null after the last page
+      oneOf:
+        - type: 'null'
+        - type: object
+          required: [after_seq, after_ordinal]
+          properties:
+            after_seq: { type: integer }
+            after_ordinal: { type: integer }

@@ -34,6 +34,28 @@ use crate::feed::{Channel, FeedHandle, Subscription};
 use crate::routes::{PlaceBody, amend_result, cancel_result, place_result};
 use crate::{AppState, ClientIp};
 
+/// Every client `op`, as `docs/api/asyncapi.yaml` lists them.
+pub const OPS: &[&str] = &[
+    "ping",
+    "auth",
+    "subscribe",
+    "unsubscribe",
+    "place",
+    "cancel",
+    "amend",
+];
+/// Every server message `type`, as `docs/api/asyncapi.yaml` lists them.
+pub const SERVER_MESSAGES: &[&str] = &[
+    "reply",
+    "snapshot",
+    "delta",
+    "trade",
+    "subscribed",
+    "resync",
+    "order",
+    "fill",
+];
+
 /// Largest client message. The largest legitimate one (a `place`) is under 300 bytes.
 pub const MAX_MESSAGE_BYTES: usize = 8 * 1_024;
 /// Channels one connection may subscribe to at once.

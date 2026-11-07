@@ -52,6 +52,50 @@ pub enum RejectReason {
     InsufficientCollateral,
 }
 
+impl RejectReason {
+    /// Every reason, in declaration order (for documentation checks; see [`Self::ordinal`]).
+    pub const ALL: [Self; 15] = [
+        Self::UnknownMarket,
+        Self::MarketExists,
+        Self::MarketNotOpen,
+        Self::InvalidTransition,
+        Self::InvalidOrder,
+        Self::InvalidPrice,
+        Self::InvalidQuantity,
+        Self::PostOnlyWouldCross,
+        Self::FokUnfillable,
+        Self::UnknownOrder,
+        Self::InvalidAmend,
+        Self::UnknownAccount,
+        Self::AccountExists,
+        Self::TooManyOrders,
+        Self::InsufficientCollateral,
+    ];
+
+    /// The reason's position in [`Self::ALL`]. The match is exhaustive, so a new variant
+    /// cannot compile without a position, and a test checks `ALL` against it.
+    #[must_use]
+    pub const fn ordinal(self) -> usize {
+        match self {
+            Self::UnknownMarket => 0,
+            Self::MarketExists => 1,
+            Self::MarketNotOpen => 2,
+            Self::InvalidTransition => 3,
+            Self::InvalidOrder => 4,
+            Self::InvalidPrice => 5,
+            Self::InvalidQuantity => 6,
+            Self::PostOnlyWouldCross => 7,
+            Self::FokUnfillable => 8,
+            Self::UnknownOrder => 9,
+            Self::InvalidAmend => 10,
+            Self::UnknownAccount => 11,
+            Self::AccountExists => 12,
+            Self::TooManyOrders => 13,
+            Self::InsufficientCollateral => 14,
+        }
+    }
+}
+
 /// A balance in the double-entry ledger (SPEC §4.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum LedgerAccount {
@@ -229,4 +273,14 @@ pub enum Event {
         /// How it settled.
         outcome: Outcome,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn every_reject_reason_is_listed_once_in_order() {
+        for (i, r) in super::RejectReason::ALL.iter().enumerate() {
+            assert_eq!(r.ordinal(), i, "{r:?}");
+        }
+    }
 }

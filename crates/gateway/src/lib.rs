@@ -24,7 +24,7 @@ use axum::extract::{DefaultBodyLimit, Request, State};
 use axum::http::StatusCode;
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{MethodFilter, on};
 use brier_core::CoreHandle;
 use brier_readmodel::{Projector, ReadModelError};
 use serde_json::json;
@@ -125,34 +125,50 @@ async fn guard(State(s): State<Arc<AppState>>, mut req: Request, next: Next) -> 
         })
 }
 
-/// The `/v1` REST API.
+/// Declares every endpoint once: the router is built from this table, and [`ENDPOINTS`] lists
+/// the same table so a test can hold `docs/api/openapi.yaml` to exactly what is served.
+macro_rules! endpoints {
+    ($($method:ident $path:literal => $handler:path),* $(,)?) => {
+        /// Every endpoint the gateway serves, as (method, path).
+        pub const ENDPOINTS: &[(&str, &str)] = &[$((stringify!($method), $path)),*];
+
+        fn routes(router: Router<Arc<AppState>>) -> Router<Arc<AppState>> {
+            router $(.route($path, on(MethodFilter::$method, $handler)))*
+        }
+    };
+}
+
+endpoints! {
+    GET "/v1/health" => routes::health,
+    POST "/v1/register" => routes::register,
+    POST "/v1/login" => routes::login,
+    POST "/v1/logout" => routes::logout,
+    POST "/v1/keys" => routes::add_key,
+    GET "/v1/keys" => routes::list_keys,
+    DELETE "/v1/keys/{id}" => routes::revoke_key,
+    GET "/v1/markets" => routes::markets,
+    GET "/v1/markets/{id}/book" => routes::book,
+    GET "/v1/markets/{id}/trades" => routes::trades,
+    GET "/v1/ws" => ws::upgrade,
+    POST "/v1/orders" => routes::place,
+    GET "/v1/orders/history" => routes::history,
+    GET "/v1/orders/{id}" => routes::order,
+    DELETE "/v1/orders/{id}" => routes::cancel,
+    PATCH "/v1/orders/{id}" => routes::amend,
+    GET "/v1/portfolio" => routes::portfolio,
+    GET "/v1/fills" => routes::fills,
+    POST "/v1/admin/markets" => routes::create_market,
+    POST "/v1/admin/markets/{id}/state" => routes::set_state,
+    POST "/v1/admin/markets/{id}/settle" => routes::settle,
+    POST "/v1/admin/cancel-all" => routes::cancel_all,
+    POST "/v1/admin/halt-all" => routes::halt_all,
+}
+
+/// The `/v1` API: every endpoint in [`ENDPOINTS`], a JSON 404 for anything else, the body
+/// limit, and the per-address limit and timeout on every request.
 pub fn router(state: Arc<AppState>) -> Router {
-    use routes as r;
-    Router::new()
-        .route("/v1/health", get(r::health))
-        .route("/v1/register", post(r::register))
-        .route("/v1/login", post(r::login))
-        .route("/v1/logout", post(r::logout))
-        .route("/v1/keys", post(r::add_key).get(r::list_keys))
-        .route("/v1/keys/{id}", delete(r::revoke_key))
-        .route("/v1/markets", get(r::markets))
-        .route("/v1/markets/{id}/book", get(r::book))
-        .route("/v1/markets/{id}/trades", get(r::trades))
-        .route("/v1/ws", get(ws::upgrade))
-        .route("/v1/orders", post(r::place))
-        .route("/v1/orders/history", get(r::history))
-        .route(
-            "/v1/orders/{id}",
-            get(r::order).delete(r::cancel).patch(r::amend),
-        )
-        .route("/v1/portfolio", get(r::portfolio))
-        .route("/v1/fills", get(r::fills))
-        .route("/v1/admin/markets", post(r::create_market))
-        .route("/v1/admin/markets/{id}/state", post(r::set_state))
-        .route("/v1/admin/markets/{id}/settle", post(r::settle))
-        .route("/v1/admin/cancel-all", post(r::cancel_all))
-        .route("/v1/admin/halt-all", post(r::halt_all))
-        .fallback(r::not_found)
+    routes(Router::new())
+        .fallback(routes::not_found)
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .layer(middleware::from_fn_with_state(Arc::clone(&state), guard))
         .with_state(state)

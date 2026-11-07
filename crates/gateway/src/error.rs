@@ -7,6 +7,21 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
 
+/// Every code the gateway itself answers with; every other code is an engine reject reason
+/// (`RejectReason`). `docs/api/openapi.yaml` lists exactly these plus the reject reasons.
+pub const GATEWAY_CODES: &[&str] = &[
+    "bad_request",
+    "unauthorized",
+    "forbidden",
+    "not_found",
+    "username_taken",
+    "too_large",
+    "rate_limited",
+    "too_many_in_flight",
+    "unavailable",
+    "timeout",
+];
+
 /// An error answered to a client.
 #[derive(Debug)]
 pub struct ApiError {
@@ -20,6 +35,10 @@ pub struct ApiError {
 impl ApiError {
     /// An error with a status, a stable code, and a message for the client.
     pub fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
+        debug_assert!(
+            GATEWAY_CODES.contains(&code),
+            "undocumented gateway error code {code}"
+        );
         Self {
             status,
             code,
@@ -84,12 +103,10 @@ impl ApiError {
     #[must_use]
     pub fn rejected(code: &'static str, seq: u64) -> Self {
         Self {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            code,
+            message: "the exchange rejected the command".to_owned(),
             seq: Some(seq),
-            ..Self::new(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                code,
-                "the exchange rejected the command",
-            )
         }
     }
 

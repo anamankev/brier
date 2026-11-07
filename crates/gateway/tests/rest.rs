@@ -424,6 +424,30 @@ async fn the_rest_api_end_to_end() {
         (StatusCode::NOT_FOUND, Some("not_found"))
     );
 
+    // Every endpoint in the table is routed: none falls through to the JSON 404 or answers 405.
+    for (method, path) in brier_gateway::ENDPOINTS {
+        let path = path.replace("{id}", "1");
+        let (status, body) = call(
+            &app,
+            Method::from_bytes(method.as_bytes()).unwrap(),
+            &path,
+            None,
+            None,
+        )
+        .await;
+        assert_ne!(status, StatusCode::METHOD_NOT_ALLOWED, "{method} {path}");
+        assert_ne!(
+            body["error"]["message"], "no such endpoint",
+            "{method} {path}"
+        );
+    }
+    let (status, _) = call(&app, Method::PUT, "/v1/orders", None, None).await;
+    assert_eq!(
+        status,
+        StatusCode::METHOD_NOT_ALLOWED,
+        "an unlisted method on a listed path"
+    );
+
     // Logout ends the session.
     let (status, _) = call(&app, Method::POST, "/v1/logout", Some(&alice), None).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
