@@ -638,6 +638,40 @@ impl Engine {
             .collect()
     }
 
+    /// One account's resting orders across all markets, in ascending order ID, with the
+    /// market and side of each. Costs O(live orders), not O(markets).
+    ///
+    /// # Errors
+    /// [`EngineError::Corrupt`] if the order index points to a missing market or order.
+    pub fn orders_of(
+        &self,
+        account: AccountId,
+    ) -> Result<Vec<(MarketId, Side, RestingOrder)>, EngineError> {
+        let mut out = Vec::new();
+        for (&id, &(market, h)) in &self.orders {
+            let book = self
+                .markets
+                .get(&market)
+                .ok_or(EngineError::Corrupt("order in a missing market"))?;
+            let slot = book.slot(h)?;
+            if slot.account == account {
+                let remaining = Quantity::new(slot.remaining)?;
+                out.push((
+                    market,
+                    slot.side,
+                    RestingOrder {
+                        id,
+                        account,
+                        price: slot.price,
+                        remaining,
+                    },
+                ));
+            }
+        }
+        out.sort_unstable_by_key(|(_, _, o)| o.id);
+        Ok(out)
+    }
+
     /// Check every invariant the engine maintains: each book's structure (I5), the order map,
     /// the ledger (I1-I4), and the agreement of the ledger's resting totals with the books.
     ///
