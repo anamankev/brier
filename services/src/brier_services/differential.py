@@ -433,11 +433,26 @@ def run(binary: Path, seed: int, count: int, check_every: int = 0) -> Report:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--binary", type=Path)
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--commands", type=int, required=True)
     parser.add_argument("--check-every", type=int, default=0)
+    parser.add_argument(
+        "--emit",
+        action="store_true",
+        help="print the stream's commands (without seq) instead of comparing engines",
+    )
     args = parser.parse_args(argv)
+    if args.emit:
+        out = sys.stdout
+        for cmd in generate(args.seed, args.commands):
+            out.write(
+                json.dumps({k: v for k, v in cmd.items() if k != "seq"}, separators=(",", ":"))
+            )
+            out.write("\n")
+        return 0
+    if args.binary is None:
+        parser.error("--binary is required unless --emit is given")
     report = run(args.binary, args.seed, args.commands, args.check_every)
     print(
         json.dumps(

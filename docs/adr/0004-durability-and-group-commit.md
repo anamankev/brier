@@ -13,6 +13,10 @@ SPEC §5 promises that an acknowledged command survives a crash. A command count
 ## Decision
 Option 3. The writer appends a batch of records, syncs once (`sync_data`, which must issue `F_FULLFSYNC` on Apple targets; see G3 plan, "Durability"), then acknowledges every command in the batch. The engine applies commands in sequence order, as each batch is appended. Their events are published only after the batch's sync, so no client can observe the effects of a command that might not survive a crash.
 
+## Verification that `sync_data` is a full flush on macOS
+- **Source:** Rust 1.99.1, `library/std/src/sys/fs/unix.rs`. On `target_vendor = "apple"`, both `File::sync_all` (`os_fsync`) and `File::sync_data` (`os_datasync`) call `libc::fcntl(fd, libc::F_FULLFSYNC)`; other Unix targets use `fsync` or `fdatasync`. Checked 2026-11-07 against the tag matching `rust-toolchain.toml`. A toolchain upgrade must re-check it.
+- **Timing:** the durability note compares `sync_data` latency with plain `fsync(2)` on the same machine.
+
 ## Consequences
 - An acknowledgment means "on the device". The crash harness checks this with SIGKILL. SIGKILL does not cut power, so it proves the ordering (no ack before the sync returns), not the device's honesty about flushing. That limit is stated in the durability note.
 - Latency under load is bounded below by `F_FULLFSYNC`, so P3 (G4) is set against it. The durability note measures its distribution first.
