@@ -9,5 +9,7 @@ Retrieved 7 November 2026 for the resolver tests (G5 unit 5). Terms: `docs/data-
 | `noaa_tmax_not_published.json` | The same request for 2026-11-07, the day of retrieval: no record yet. |
 
 | `nws_cli_den_2026-11-06.json` | Retrieved 8 November 2026. `https://api.weather.gov/products?type=CLI&location=DEN&start=2026-11-06T00:00:00Z&end=...` for two end times (before and after the final report was issued), and every report those searches list (`https://api.weather.gov/products/{id}`). Source: National Weather Service, Boulder office (a U.S. government work). |
+| `usgs_m5_2026-11-05.json`, `usgs_m6_2026-11-05.json` | Retrieved 8 November 2026. `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&eventtype=earthquake&starttime=2026-11-05T00:00:00&endtime=2026-11-05T23:59:59.999&minmagnitude=5` (and `=6`) `&orderby=time-asc&limit=1000`. Source: U.S. Geological Survey, ANSS Comprehensive Catalog (public domain). |
+| `swpc_kp_2026-11-08.json` | Retrieved 8 November 2026. `https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json`: 3-hour estimated Kp from 1 November to the morning of 8 November. Source: NOAA Space Weather Prediction Center (public domain). |
 
 FRED responses are not recorded here (the Bank's terms; `docs/data-licenses.md`). The FRED tests use responses written by hand in FRED's documented format.

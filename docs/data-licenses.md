@@ -56,11 +56,14 @@ Read on 7 November 2026. Every resolution source must be free, public, and autho
 - **Status:** U.S. government work, public domain. USGS asks to be credited.
 - **Access:** `count` and `query` methods, GeoJSON. Time and area limits are not enforced yet, and automated clients are asked to prefer the real-time feeds.
 - **Revisions:** magnitudes and event lists are revised after the fact. Each rulebook fixes when the catalog is read (for example, 48 hours after the period ends), and the evidence records what it said then.
-- **Brier's use:** counts of events at or above a magnitude in a period.
+- **Brier's use:** counts of earthquakes at or above magnitude 5.0 and 6.0 worldwide in a UTC day. `minmagnitude` is inclusive (checked on 8 November 2026).
+- **Raw responses may be committed.**
 
 ### NOAA Space Weather Prediction Center (services.swpc.noaa.gov)
 - **Status:** U.S. government work, public domain.
-- **Brier's use:** the planetary K-index (`products/noaa-planetary-k-index.json`), for whether a geomagnetic storm (Kp of 5 or more) occurs on a day. Estimated values are revised; each rulebook fixes the reading time, as for USGS.
+- **Brier's use:** the day's highest planetary K-index (`products/noaa-planetary-k-index.json`), for whether a geomagnetic storm occurs. The file holds the last 7 days only, so resolution must happen within the week.
+- **Revisions:** these are SWPC's estimates, and GFZ Potsdam later publishes definitive values that can differ. Under the first-release rule, the estimate decides.
+- **Raw responses may be committed.**
 
 ### Open-Meteo (open-meteo.com)
 - **Status:** data under CC BY 4.0. The free API is for non-commercial use: 10,000 calls a day, 5,000 an hour, 600 a minute. Brier is non-commercial (play money, no revenue).

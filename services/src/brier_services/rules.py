@@ -55,6 +55,8 @@ class Provider(StrEnum):
     FRED = "fred"
     NOAA = "noaa"
     NWS = "nws"
+    USGS = "usgs"
+    SWPC = "swpc"
 
 
 class Transform(StrEnum):
@@ -298,6 +300,39 @@ REGISTRY: tuple[Series, ...] = (
         PeriodKind.DAY,
         (Measure(Transform.LEVEL, 0, "°F"),),
         "weather",
+        live=True,
+        released_after_period=True,
+    ),
+    Series(
+        Provider.USGS,
+        "WORLD/M5",
+        "Earthquakes of magnitude 5.0 or more worldwide, by UTC day (USGS ComCat)",
+        "https://earthquake.usgs.gov/earthquakes/map/",
+        PeriodKind.DAY,
+        (Measure(Transform.LEVEL, 0, "earthquakes"),),
+        "science",
+        live=True,
+        released_after_period=True,
+    ),
+    Series(
+        Provider.USGS,
+        "WORLD/M6",
+        "Earthquakes of magnitude 6.0 or more worldwide, by UTC day (USGS ComCat)",
+        "https://earthquake.usgs.gov/earthquakes/map/",
+        PeriodKind.DAY,
+        (Measure(Transform.LEVEL, 0, "earthquakes"),),
+        "science",
+        live=True,
+        released_after_period=True,
+    ),
+    Series(
+        Provider.SWPC,
+        "KP/MAX",
+        "Daily maximum planetary K-index, by UTC day (NOAA SWPC estimated 3-hour values)",
+        "https://www.swpc.noaa.gov/products/planetary-k-index",
+        PeriodKind.DAY,
+        (Measure(Transform.LEVEL, 2, "Kp"),),
+        "science",
         live=True,
         released_after_period=True,
     ),

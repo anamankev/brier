@@ -54,6 +54,10 @@ pub enum Provider {
     Noaa,
     /// The National Weather Service API (api.weather.gov): daily climate reports.
     Nws,
+    /// The U.S. Geological Survey earthquake catalog (`ComCat`).
+    Usgs,
+    /// NOAA's Space Weather Prediction Center.
+    Swpc,
 }
 
 /// How the resolved value is derived from the series.
@@ -487,6 +491,54 @@ pub const REGISTRY: &[Series] = &[
         kind: PeriodKind::Day,
         measures: &[FAHRENHEIT],
         category: "weather",
+        live: true,
+        released_after_period: true,
+        machine_checkable: true,
+    },
+    Series {
+        provider: Provider::Usgs,
+        id: "WORLD/M5",
+        name: "Earthquakes of magnitude 5.0 or more worldwide, by UTC day (USGS ComCat)",
+        url: "https://earthquake.usgs.gov/earthquakes/map/",
+        kind: PeriodKind::Day,
+        measures: &[Measure {
+            transform: Transform::Level,
+            precision: 0,
+            unit: "earthquakes",
+        }],
+        category: "science",
+        live: true,
+        released_after_period: true,
+        machine_checkable: true,
+    },
+    Series {
+        provider: Provider::Usgs,
+        id: "WORLD/M6",
+        name: "Earthquakes of magnitude 6.0 or more worldwide, by UTC day (USGS ComCat)",
+        url: "https://earthquake.usgs.gov/earthquakes/map/",
+        kind: PeriodKind::Day,
+        measures: &[Measure {
+            transform: Transform::Level,
+            precision: 0,
+            unit: "earthquakes",
+        }],
+        category: "science",
+        live: true,
+        released_after_period: true,
+        machine_checkable: true,
+    },
+    Series {
+        provider: Provider::Swpc,
+        id: "KP/MAX",
+        name: "Daily maximum planetary K-index, by UTC day (NOAA SWPC estimated 3-hour values)",
+        url: "https://www.swpc.noaa.gov/products/planetary-k-index",
+        kind: PeriodKind::Day,
+        measures: &[Measure {
+            transform: Transform::Level,
+            precision: 2,
+            unit: "Kp",
+        }],
+        category: "science",
         live: true,
         released_after_period: true,
         machine_checkable: true,

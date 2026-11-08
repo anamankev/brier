@@ -68,6 +68,8 @@ A series published only after its period ends must also have its release time af
 | FRED | `DGS10` 10-year Treasury yield | day | `level` (2) | yes |
 | NOAA | `USW00094728/TMAX` Central Park daily maximum | day | `level` (0), °F | yes |
 | NWS | `CLI/{NYC, ORD, LAX, MIA, BOS, SEA, DEN, ATL, PHX, DCA, AUS, DFW}` official daily maximum from each city's daily climate report | day (local standard time) | `level` (0), °F | yes |
+| USGS | `WORLD/M5`, `WORLD/M6`: earthquakes of at least magnitude 5.0 (6.0) worldwide | UTC day | `level` (0), earthquakes | yes |
+| SWPC | `KP/MAX`: highest of the day's eight 3-hour planetary K-index estimates | UTC day | `level` (2), Kp | yes |
 
 Adding a series means reading its terms (`docs/data-licenses.md`), writing its resolver, and adding it to both registries and `registry.json`. Tests fail if the three disagree.
 
