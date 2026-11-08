@@ -25,7 +25,7 @@ The exact engine behavior (commands, check order, events, wire format) lives in 
 ## 1. Scope and boundaries
 
 ### 1.1 In scope
-Binary (yes/no) event contracts on economics, weather, and financial-index events; the components in §0; an agent-based simulation harness for load testing and surveillance evaluation (§10).
+Binary (yes/no) event contracts on economics, weather, science, rates, and sports events (sports added 8 November 2026, G10); the components in §0; an agent-based simulation harness for load testing and surveillance evaluation (§10).
 
 ### 1.2 Play-money boundary (enforced in code and terms)
 - Each account receives a one-time grant of credits (`SIGNUP_GRANT` = 1,000,000 credit-cents, i.e. 10,000 credits). Admins may run documented, equal-for-all re-grants; no individual top-ups.
@@ -33,7 +33,7 @@ Binary (yes/no) event contracts on economics, weather, and financial-index event
 - The code contains no deposit, withdrawal, payment, or wallet path. A test asserts that no ledger entry type exists that moves credits between two user accounts outside matched trades and settlement.
 
 ### 1.3 Out of scope
-Real money; KYC; sports contracts; scalar and multi-outcome markets (each outcome of a multi-outcome event is listed as its own binary market); margin or leverage; FIX protocol gateway (REST and WebSocket only; see §16 for the gap); mobile apps; hosted deployment unless a $0, card-free host exists (O5).
+Real money; KYC; scalar and multi-outcome markets (each outcome of a multi-outcome event is listed as its own binary market); margin or leverage; FIX protocol gateway (REST and WebSocket only; see §16 for the gap); mobile apps; users under 18.
 
 ## 2. Contract model
 
@@ -189,7 +189,7 @@ Threat model per component (`docs/threat-model.md`): order forgery (signature ve
 | G7 Market maker and simulation | §8, §10 | Reference market maker; agent-based harness | Market maker quotes through the public API in simulation and on live markets; metrics reported |
 | G8 Surveillance | §9 | Detectors, case management, pre-registered evaluation | Hypotheses commit predates results; precision and recall reported per typology |
 | G9 Live catalogue | §0 item 8, §7, §8 | Events and recurring series from public sources, automatic listing and machine-checked resolution, quotes on every modelled market, a Polymarket-grade browsing and trading interface (`docs/gates/G9-plan.md`; added 8 November 2026) | A 72-hour live run with at least 40 open markets in 5 categories, 20 settling within 72 hours of listing (corrected before the run; G9 plan), all with evidence; Playwright and axe pass |
-| G10 Release | §0, §16 | README, benchmark report, threat model, runbooks, demo | Every item in §0 met with evidence |
+| G10 Public launch | §0, §1, §16 | Public accounts (terms, 18+, recovery codes, deletion, export), daily allowance, profiles, notifications, more series and sports, deployment on a free VM with backups, runbooks | `docs/gates/G10-plan.md` exit criteria |
 
 ## 16. Industry benchmark (what a reviewer will compare against)
 
@@ -225,4 +225,4 @@ Where this project can be better than the leaders: open, verifiable engineering 
 - O3: Terms of use for FRED, BLS, and NOAA data as resolution sources (G5). Resolved 7 November 2026 in `docs/data-licenses.md`: BLS and NOAA public domain, raw responses committable; FRED usable for public-domain series only, raw responses kept local; S&P 500 excluded.
 - O6: A source for index markets (S&P 500) whose terms allow this use; until then no index markets, which affects the market maker's fair value in §8 (decided in G7).
 - O4: The Rust crate choices (serialization, hashing, WebSocket) and their licenses (G0).
-- O5: A $0, card-free host for a public demo; otherwise the release is local-run plus recorded demo (G10).
+- O5 (closed 8 November 2026): the owner chose an Oracle Cloud Always Free VM. The account asks for a card to verify identity and does not charge it (G10).

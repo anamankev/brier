@@ -26,4 +26,4 @@ The 12 cities are New York (Central Park), Chicago, Los Angeles, Miami, Boston, 
 ## What is not listed, and why
 - **Crypto:** no price source whose terms allow settlement (`docs/data-licenses.md`).
 - **Stock indexes:** licensed by their owners.
-- **Sports:** out of scope.
+- **Sports:** in scope from G10 (`docs/gates/G10-plan.md`, U6), once the owner's balldontlie and football-data.org keys exist.

@@ -2,6 +2,8 @@
 
 Reads: SPEC §0 item 8, §7, §8, §15; `docs/data-licenses.md`. Added on 8 November 2026 at the owner's request, between G8 and the release (now G10).
 
+> Note (8 November 2026): sports were later brought into scope for G10. The "no sports" limit below was a spec choice, not an owner rule (`docs/gates/G10-plan.md`).
+
 ## The problem
 Brier has five markets. Polymarket shows thousands, and most of what makes it worth opening is breadth and pace:
 - events that group several outcomes;
