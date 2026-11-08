@@ -19,7 +19,8 @@ const config: NextConfig = {
             // app uses per-request nonces (docs/threat-model.md, G6).
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline'",
+              // React's development build needs eval for its debugging tools; production never does.
+              `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'"}`,
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data:",
               `connect-src 'self' ${ws}`,

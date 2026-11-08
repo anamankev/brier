@@ -71,6 +71,11 @@ Read on 7 November 2026. Every resolution source must be free, public, and autho
 - **Brier's use:** day-ahead forecasts as the market maker's input for temperature markets, and as the backtest's archived forecasts (`docs/notes/catalog-models.md`). It never settles a market.
 - **Attribution:** in the web app's footer, beside the data sources.
 
+### Wikimedia Commons photos
+- **Status:** each photo is public domain (US government works, the Carol M. Highsmith archive), CC0, CC BY 2.0, or CC BY-SA 3.0/4.0, as its Commons page states. Photos with a non-commercial licence were excluded.
+- **Brier's use:** one photo per city, topic or economic series, cropped to a square, resized and stored in `web/public/photos`. The images are decoration and play no part in any market's rules or settlement.
+- **Attribution:** author, licence and source page for every photo on the web app's `/credits` page, linked from the footer; the list is `web/lib/photos.ts`. The crops of ShareAlike photos are adaptations, shared under the same licence.
+
 ### Coinbase market data: not usable
 - Coinbase's Market Data Terms (updated 7 August 2026) license the data only for the user's own personal or research use. Without written consent they forbid:
   - redistributing or displaying the data or anything derived from it to third parties;

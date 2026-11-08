@@ -120,6 +120,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <li><a href="https://github.com/anamankev/brier/blob/main/docs/rulebook.md">Rulebooks</a></li>
                   <li><a href="https://github.com/anamankev/brier/blob/main/docs/resolution.md">Resolution and disputes</a></li>
                   <li><a href="https://github.com/anamankev/brier/blob/main/docs/data-licenses.md">Data sources</a></li>
+                  <li><Link href="/credits">Photo credits</Link></li>
                 </ul>
               </div>
               <div>

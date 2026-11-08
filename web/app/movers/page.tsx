@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { gateway, renderTime } from "@/lib/server";
-import { kind, label, type EventSummary } from "@/lib/events";
+import { label, type EventSummary } from "@/lib/events";
 import { listEvents } from "@/lib/events-server";
 import { relative } from "@/lib/format";
-import { CategoryTile } from "@/components/Icons";
+import { Photo } from "@/components/Photo";
 import { Sparkline } from "@/components/Sparkline";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +39,7 @@ export default async function Movers() {
               <li key={e.slug}>
                 <Link href={`/e/${e.slug}?m=${m.market}`} className="mover">
                   <span className="rank">{i + 1}</span>
-                  <CategoryTile category={kind(e)} />
+                  <Photo of={e} />
                   <span className="what">
                     <span className="t">{e.title}</span>
                     <span className="sub">

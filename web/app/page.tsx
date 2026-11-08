@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { gateway, renderTime } from "@/lib/server";
-import { CATEGORIES, cadence, categoryName, kind, label, leading, noPrice, yesPrice, type EventSummary } from "@/lib/events";
+import { CATEGORIES, cadence, categoryName, label, leading, noPrice, yesPrice, type EventSummary } from "@/lib/events";
 import { listEvents } from "@/lib/events-server";
 import { cents, relative } from "@/lib/format";
 import { EventCard } from "@/components/EventCard";
-import { CategoryTile, Chevron } from "@/components/Icons";
+import { Chevron } from "@/components/Icons";
+import { Banner, Photo } from "@/components/Photo";
 import { MultiChart, type Series } from "@/components/MultiChart";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +21,7 @@ function Move({ e, now }: { e: EventSummary; now: number }) {
   const up = (m.change_24h ?? 0) >= 0;
   return (
     <Link href={`/e/${e.slug}?m=${m.market}`} className="move">
+      <Photo of={e} size="sm" />
       <span className="what">
         <span className="t">{e.title}</span>
         <span className="muted">
@@ -64,8 +66,8 @@ export default async function Home() {
       {featured && (
         <div className="home-top">
           <section className="card feature" aria-labelledby="featured">
+            <Banner of={featured} priority />
             <div className="feature-head">
-              <CategoryTile category={kind(featured)} large />
               <div>
                 <p className="kicker">
                   {categoryName(featured.category)}
@@ -121,6 +123,7 @@ export default async function Home() {
                 const top = leading(e)[0];
                 return (
                   <Link key={e.slug} href={`/e/${e.slug}`} className="move">
+                    <Photo of={e} size="sm" />
                     <span className="what">
                       <span className="t">{e.title}</span>
                       <span className="muted">closes {relative(e.close, now)}</span>

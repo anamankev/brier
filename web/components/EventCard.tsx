@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { cadence, compact, kind, label, leading, noPrice, yesPrice, type EventSummary } from "@/lib/events";
+import { cadence, compact, label, leading, noPrice, yesPrice, type EventSummary } from "@/lib/events";
 import { cents, relative } from "@/lib/format";
-import { CategoryTile, Repeat } from "./Icons";
+import { Repeat } from "./Icons";
+import { Photo } from "./Photo";
 import { WatchButton } from "./WatchButton";
 
 const STATUS: Record<string, string> = { upcoming: "Opens soon", closed: "Awaiting result", settled: "Settled" };
@@ -36,7 +37,7 @@ export function EventCard({ e, now }: { e: EventSummary; now: number }) {
   return (
     <article className="card ecard" aria-labelledby={`ev-${e.slug}`}>
       <header>
-        <CategoryTile category={kind(e)} />
+        <Photo of={e} />
         <Link id={`ev-${e.slug}`} href={href} className={`title${single ? " long" : ""}`}>
           {e.title}
         </Link>

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Summary } from "@/lib/markets";
 import { cents, chance, multiple, shortDate } from "@/lib/format";
-import { CategoryTile } from "./Icons";
+import { Photo } from "./Photo";
 import { Delta } from "./Delta";
 import { Sparkline } from "./Sparkline";
 
@@ -20,7 +20,7 @@ export function MarketCard({ m }: { m: Summary }) {
   return (
     <article className="card mcard" aria-labelledby={`m${m.market}`}>
       <div className="head">
-        <CategoryTile category={m.category} />
+        <Photo of={m} />
         <div>
           <Link id={`m${m.market}`} href={href} className="title">
             {m.title}

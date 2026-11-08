@@ -64,13 +64,6 @@ export function noPrice(m: EventMarket): number | null {
   return m.best_bid == null ? null : 100 - m.best_bid;
 }
 
-/** The kind of picture an event gets, from its category and tags. */
-export function kind(e: Pick<EventSummary, "category" | "tags">): string {
-  if (e.tags.includes("earthquakes")) return "earthquakes";
-  if (e.tags.includes("space-weather")) return "space";
-  return e.category ?? "economics";
-}
-
 export const CATEGORIES: { slug: string; name: string; blurb: string }[] = [
   { slug: "weather", name: "Weather", blurb: "Official daily highs in twelve US cities, from the National Weather Service." },
   { slug: "science", name: "Science", blurb: "Earthquakes worldwide from the USGS catalog, and geomagnetic storms from NOAA." },
@@ -112,6 +105,14 @@ export const TAG_NAMES: Record<string, string> = {
   earthquakes: "Earthquakes",
   "space-weather": "Space weather",
 };
+
+/** What a topic page under a category covers. */
+export function tagBlurb(tag: string): string | null {
+  if (tag === "earthquakes") return "Daily counts of magnitude 5+ and 6+ earthquakes worldwide, from the USGS catalog.";
+  if (tag === "space-weather") return "The day's strongest geomagnetic storm, from NOAA's Space Weather Prediction Center.";
+  const city = TAG_NAMES[tag];
+  return city ? `The official daily high in ${city}, from the National Weather Service.` : null;
+}
 
 export const SORTS: { slug: NonNullable<EventQuery["sort"]>; name: string }[] = [
   { slug: "volume_24h", name: "Trending" },

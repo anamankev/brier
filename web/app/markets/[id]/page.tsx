@@ -7,7 +7,8 @@ import type { Portfolio, ResolutionView, Rules } from "@/lib/types";
 import { MarketLive } from "@/components/MarketLive";
 import { ForecastPanel } from "@/components/ForecastPanel";
 import { DisputeForm } from "@/components/DisputeForm";
-import { CategoryTile, Check } from "@/components/Icons";
+import { Check } from "@/components/Icons";
+import { Photo } from "@/components/Photo";
 import { Delta } from "@/components/Delta";
 
 export const dynamic = "force-dynamic";
@@ -64,7 +65,7 @@ export default async function MarketPage({ params, searchParams }: { params: Pro
   const header = (
     <header className="stack" style={{ gap: 14 }}>
       <div className="mhead">
-        <CategoryTile category={m.category} large />
+        <Photo of={m} size="lg" />
         <div>
           <div className="kicker">
             {m.category} · {STATE_WORDS[m.state]}

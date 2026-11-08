@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { renderTime } from "@/lib/server";
-import { CATEGORIES, SORTS, TAG_NAMES, type EventQuery } from "@/lib/events";
+import { CATEGORIES, SORTS, TAG_NAMES, tagBlurb, type EventQuery } from "@/lib/events";
 import { listEvents } from "@/lib/events-server";
 import { EventCard } from "@/components/EventCard";
-import { CategoryTile } from "@/components/Icons";
+import { Banner } from "@/components/Photo";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +36,6 @@ export default async function Category({ params, searchParams }: { params: Promi
     const text = q.toString();
     return `/c/${category}${text ? `?${text}` : ""}`;
   };
-  const kindOf = category === "science" && s.tag === "space-weather" ? "space" : category === "science" ? "earthquakes" : category;
 
   return (
     <div className="browse">
@@ -55,12 +54,12 @@ export default async function Category({ params, searchParams }: { params: Promi
 
       <section aria-labelledby="cat-h">
         <header className="browse-head">
-          <CategoryTile category={kindOf} />
+          <Banner of={{ category, tags: s.tag ? [s.tag] : [] }} priority />
           <div>
             <h1 id="cat-h" className="display">
               {s.tag ? `${TAG_NAMES[s.tag] ?? s.tag}` : meta.name}
             </h1>
-            <p className="muted">{meta.blurb}</p>
+            <p className="muted">{(s.tag && tagBlurb(s.tag)) ?? meta.blurb}</p>
           </div>
         </header>
         <div className="spread wrap-gap toolbar">

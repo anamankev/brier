@@ -4,7 +4,7 @@ import { gateway, me } from "@/lib/server";
 import { summaries } from "@/lib/markets";
 import { chance, credits } from "@/lib/format";
 import type { Portfolio } from "@/lib/types";
-import { CategoryTile } from "@/components/Icons";
+import { Photo } from "@/components/Photo";
 import { CancelButton } from "./CancelButton";
 
 export const dynamic = "force-dynamic";
@@ -66,7 +66,7 @@ export default async function PortfolioPage() {
                 <tr key={pos.market}>
                   <td>
                     <Link href={`/markets/${pos.market}`} className="row" style={{ flexWrap: "nowrap" }}>
-                      <CategoryTile category={m?.category} />
+                      <Photo of={{ title: m?.title, category: m?.category }} size="sm" />
                       <span style={{ fontWeight: 600 }}>{m?.title ?? `Market ${pos.market}`}</span>
                     </Link>
                   </td>

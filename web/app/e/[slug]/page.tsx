@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { WS_URL, gateway, me, renderTime } from "@/lib/server";
-import { cadence, categoryName, compact, kind, label, leading, type EventSummary } from "@/lib/events";
+import { cadence, categoryName, compact, label, leading, type EventSummary } from "@/lib/events";
 import { getEvent } from "@/lib/events-server";
 import { relative, shortDate, when } from "@/lib/format";
 import type { Portfolio, ResolutionView, Rules } from "@/lib/types";
-import { CategoryTile, Repeat } from "@/components/Icons";
+import { Repeat } from "@/components/Icons";
+import { Photo } from "@/components/Photo";
 import { EventBoard, type Outcome } from "@/components/EventBoard";
 import { MultiChart } from "@/components/MultiChart";
 import { WatchButton } from "@/components/WatchButton";
@@ -76,7 +77,7 @@ export default async function EventPage({ params, searchParams }: { params: Prom
   return (
     <article className="event-page">
       <header className="event-head">
-        <CategoryTile category={kind(e)} large />
+        <Photo of={e} size="lg" />
         <div className="event-title">
           <p className="kicker">
             {e.category ? <Link href={`/c/${e.category}`}>{categoryName(e.category)}</Link> : "Markets"}
