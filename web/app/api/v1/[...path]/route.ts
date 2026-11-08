@@ -2,7 +2,7 @@
 // httpOnly cookie. A request that changes anything must carry `x-brier-request: 1`, which a
 // cross-site form or image cannot send (with the SameSite=Strict cookie, a CSRF defence).
 import { NextResponse, type NextRequest } from "next/server";
-import { GATEWAY, sessionToken } from "@/lib/server";
+import { GATEWAY, proxyHeaders, sessionToken } from "@/lib/server";
 
 async function forward(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   const { path } = await ctx.params;
@@ -10,7 +10,7 @@ async function forward(req: NextRequest, ctx: { params: Promise<{ path: string[]
     return NextResponse.json({ error: { code: "forbidden", message: "missing request header" } }, { status: 403 });
   }
   const target = `${GATEWAY}/v1/${path.map(encodeURIComponent).join("/")}${req.nextUrl.search}`;
-  const headers: Record<string, string> = { "content-type": "application/json" };
+  const headers: Record<string, string> = { "content-type": "application/json", ...(await proxyHeaders()) };
   const token = await sessionToken();
   if (token) headers.authorization = `Bearer ${token}`;
   const body = req.method === "GET" || req.method === "DELETE" ? undefined : await req.text();

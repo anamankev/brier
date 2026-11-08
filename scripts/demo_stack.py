@@ -147,10 +147,13 @@ def main() -> int:
             wes.request("POST", "/v1/orders", {"market": 104, "side": "sell", "price": f104, "qty": 60})
             wyn.request("POST", "/v1/orders", {"market": 104, "side": "buy", "price": f104, "qty": 60, "tif": "ioc"})
         if minute in SPOOF_MINUTES:  # a large bid behind the touch, a sale into the bid, then pull
-            big = sam.request("POST", "/v1/orders", {"market": 101, "side": "buy", "price": f101 - 2, "qty": 300})
-            sam.request("POST", "/v1/orders", {"market": 101, "side": "sell", "price": f101 - 1, "qty": 15, "tif": "ioc"})
-            if big.get("status") == "resting":
-                sam.request("DELETE", f"/v1/orders/{big['order']}")
+            bids = sam.request("GET", "/v1/markets/101/book")["bids"]
+            if bids:
+                best = bids[0][0]
+                big = sam.request("POST", "/v1/orders", {"market": 101, "side": "buy", "price": best - 1, "qty": 300})
+                sam.request("POST", "/v1/orders", {"market": 101, "side": "sell", "price": best, "qty": 15, "tif": "ioc"})
+                if big.get("status") == "resting":
+                    sam.request("DELETE", f"/v1/orders/{big['order']}")
         clock.write_text(str(START + 60 * (minute + 1)))
         time.sleep(1.05)
         print(f"\rminute {minute + 1}/{MINUTES}", end="", flush=True)

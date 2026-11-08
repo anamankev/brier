@@ -1,7 +1,7 @@
 // Sign in and out. The gateway's session token is kept in an httpOnly, SameSite=Strict cookie.
 import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
-import { GATEWAY, SESSION_COOKIE } from "@/lib/server";
+import { GATEWAY, SESSION_COOKIE, proxyHeaders } from "@/lib/server";
 
 const MAX_AGE = 24 * 3600; // the gateway's session lifetime
 
@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   }
   const res = await fetch(`${GATEWAY}/v1/login`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...(await proxyHeaders()) },
     body: await req.text(),
     cache: "no-store",
   });

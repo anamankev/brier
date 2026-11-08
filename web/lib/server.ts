@@ -1,6 +1,6 @@
 // Server-side access to the gateway. The session token lives in an httpOnly cookie, so browser
 // JavaScript never sees it; the browser talks to /api/v1/*, which forwards here.
-import { cookies } from "next/headers";
+import { cookies, headers as requestHeaders } from "next/headers";
 
 export const GATEWAY = process.env.BRIER_GATEWAY_URL ?? "http://127.0.0.1:8080";
 export const SESSION_COOKIE = "brier_session";
@@ -11,6 +11,22 @@ export async function sessionToken(): Promise<string | undefined> {
   return (await cookies()).get(SESSION_COOKIE)?.value;
 }
 
+/**
+ * Headers that let the gateway trust the client address this server saw. Set BRIER_PROXY_KEY
+ * (the gateway's key) and BRIER_CLIENT_ADDRESS_HEADER (the header an edge proxy in front of this
+ * server overwrites with the client's address, such as cf-connecting-ip). Never x-forwarded-for
+ * as sent by a browser: anyone can set it.
+ */
+export async function proxyHeaders(): Promise<Record<string, string>> {
+  const key = process.env.BRIER_PROXY_KEY;
+  if (!key) return {};
+  const out: Record<string, string> = { "x-brier-proxy-key": key };
+  const name = process.env.BRIER_CLIENT_ADDRESS_HEADER;
+  const address = name ? (await requestHeaders()).get(name)?.split(",")[0]?.trim() : undefined;
+  if (address) out["x-brier-client-address"] = address;
+  return out;
+}
+
 export type Answer<T> = { ok: true; status: number; body: T } | { ok: false; status: number; body: ApiErrorBody };
 export type ApiErrorBody = { error?: { code?: string; message?: string; seq?: number } };
 
@@ -18,6 +34,7 @@ export type ApiErrorBody = { error?: { code?: string; message?: string; seq?: nu
 export async function gateway<T>(path: string, init: RequestInit = {}, token?: string): Promise<Answer<T>> {
   const headers = new Headers(init.headers);
   headers.set("content-type", "application/json");
+  for (const [k, v] of Object.entries(await proxyHeaders())) headers.set(k, v);
   const t = token ?? (await sessionToken());
   if (t) headers.set("authorization", `Bearer ${t}`);
   let res: Response;
@@ -39,7 +56,7 @@ export async function gateway<T>(path: string, init: RequestInit = {}, token?: s
     : { ok: false, status: res.status, body: (body ?? {}) as ApiErrorBody };
 }
 
-export type Me = { user_id: number; username: string; role: "trader" | "admin" | "resolver"; totp: boolean; signed_in_with_totp: boolean };
+export type Me = { user_id: number; username: string; role: "trader" | "admin" | "resolver" | "surveillance"; totp: boolean; signed_in_with_totp: boolean };
 
 export async function me(): Promise<Me | null> {
   if (!(await sessionToken())) return null;

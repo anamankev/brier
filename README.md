@@ -20,7 +20,7 @@ Credits are granted once at signup. They cannot be bought, sold, withdrawn, rede
 
 ## Status
 
-Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before every gate passes.
+Built in gates G0 to G10 ([SPEC §15](docs/SPEC.md)). Nothing is released before every gate passes.
 
 | Gate | Scope | State |
 |---|---|---|
@@ -32,8 +32,9 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 | G5 | Markets, rulebook, resolution | Done |
 | G6 | Web app | Done |
 | G7 | Market maker, simulation harness | Done |
-| G8 | Surveillance and its evaluation | Next |
-| G9 | Release | |
+| G8 | Surveillance and its evaluation | Done |
+| G9 | Live catalogue: events, recurring series, a Polymarket-grade interface | Next |
+| G10 | Release | |
 
 ## Measured so far
 

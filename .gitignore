@@ -33,3 +33,6 @@ criterion-scratch/
 
 # OS clutter
 .DS_Store
+
+# Written by `next dev` for coding assistants; not part of the project
+web/AGENTS.md
