@@ -49,6 +49,7 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0009_automatic_review",
         include_str!("../migrations/0009_automatic_review.sql"),
     ),
+    ("0010_lister", include_str!("../migrations/0010_lister.sql")),
 ];
 
 /// Arbitrary but fixed key for the advisory lock that serializes migrations across processes.

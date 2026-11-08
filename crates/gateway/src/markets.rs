@@ -22,6 +22,7 @@ use serde_json::{Value, json};
 
 use crate::AppState;
 use crate::audit::{self, Actor};
+use crate::auth::Role;
 use crate::clock::Unix;
 use crate::error::ApiError;
 use crate::routes::{ApiResult, Req, Shared, admin_user, parse_id};
@@ -282,12 +283,28 @@ async fn store(s: &AppState, v: &Validated, user: i64) -> Result<(), ApiError> {
     }
 }
 
-/// `POST /v1/admin/markets`: list a market from its rulebook (it starts in `pre_open`).
+/// `POST /v1/admin/markets`: list a market from its rulebook (it starts in `pre_open`). An
+/// admin signed in with TOTP may list any market; the lister role (signed key) only markets
+/// of a recurring series with automatic review.
 pub async fn create_market(State(s): Shared, req: Req) -> ApiResult {
-    let user = admin_user(&s, &req).await?;
+    let user = match req.user(&s, true).await? {
+        u if u.role == Role::Lister => u,
+        _ => admin_user(&s, &req).await?,
+    };
     let b: CreateMarketBody = req.json()?;
     let reason = audit::reason(&b.reason)?;
     let v = validate(&b.rulebook).map_err(|e| invalid(format!("{}: {e}", e.code())))?;
+    if user.role == Role::Lister
+        && !(v.rulebook.review == Some(brier_rules::Review::Automatic)
+            && v.rulebook
+                .event
+                .as_ref()
+                .is_some_and(|e| e.series.is_some()))
+    {
+        return Err(ApiError::forbidden_because(
+            "the lister lists only recurring-series markets with automatic review",
+        ));
+    }
     if v.times.close <= s.clock.now() {
         return Err(invalid("schedule_past: the close time has already passed"));
     }

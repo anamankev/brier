@@ -58,6 +58,9 @@ pub enum Role {
     Resolver,
     /// The surveillance service: reads login links and opens cases, and nothing else.
     Surveillance,
+    /// The lister service: lists the markets of recurring series with automatic review, and
+    /// nothing else.
+    Lister,
 }
 
 impl Role {
@@ -68,6 +71,7 @@ impl Role {
             "admin" => Self::Admin,
             "resolver" => Self::Resolver,
             "surveillance" => Self::Surveillance,
+            "lister" => Self::Lister,
             _ => Self::Trader,
         }
     }

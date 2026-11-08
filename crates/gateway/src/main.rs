@@ -4,8 +4,8 @@
 //! brier-gateway [serve]                 run the exchange
 //! brier-gateway promote <user> <reason> give a user the admin role (audit-logged)
 //! brier-gateway role <user> <role> <reason>
-//!                                       set a user's role: trader, admin, resolver, or
-//!                                       surveillance (audit-logged)
+//!                                       set a user's role: trader, admin, resolver,
+//!                                       surveillance, or lister (audit-logged)
 //! ```
 //! Configuration comes from the environment only: `BRIER_DATABASE_URL` (required; never
 //! logged), `BRIER_DATA_DIR` (default `data`), `BRIER_LISTEN` (default `127.0.0.1:8080`),
@@ -214,8 +214,8 @@ async fn promote(url: &str, username: &str, reason: &str) -> Result<(), String> 
 }
 
 async fn set_role(url: &str, username: &str, role: &str, reason: &str) -> Result<(), String> {
-    if !["trader", "admin", "resolver", "surveillance"].contains(&role) {
-        return Err("role must be trader, admin, resolver, or surveillance".to_owned());
+    if !["trader", "admin", "resolver", "surveillance", "lister"].contains(&role) {
+        return Err("role must be trader, admin, resolver, surveillance, or lister".to_owned());
     }
     if !(3..=500).contains(&reason.trim().chars().count()) {
         return Err("reason must be 3 to 500 characters".to_owned());

@@ -96,7 +96,7 @@ async fn markets_group_into_events_with_daily_statistics() {
     ));
     let app = router(Arc::clone(&state));
     let db = connect(&schema).await;
-    for name in ["ada", "bob", "cyd"] {
+    for name in ["ada", "bob", "cyd", "lst"] {
         let (status, body) = call(
             &app,
             Method::POST,
@@ -107,7 +107,7 @@ async fn markets_group_into_events_with_daily_statistics() {
         .await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
     }
-    db.batch_execute("UPDATE users SET role = 'admin' WHERE username = 'ada'")
+    db.batch_execute("UPDATE users SET role = 'admin' WHERE username = 'ada'; UPDATE users SET role = 'lister' WHERE username = 'lst';")
         .await
         .unwrap();
     let ada = login(&app, "ada", PW).await;
@@ -311,4 +311,61 @@ async fn markets_group_into_events_with_daily_statistics() {
     assert_eq!(dates, ["2026-08-30", "2026-08-31"]);
     let (status, _) = call(&app, Method::GET, "/v1/events/no-such-event", None, None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // ---- The lister: recurring-series markets with automatic review, and nothing else -------
+    let lister = login(&app, "lst", PW).await;
+    let by_lister = |rulebook: Value| {
+        let (app, lister) = (app.clone(), lister.clone());
+        async move {
+            call(
+                &app,
+                Method::POST,
+                "/v1/admin/markets",
+                Some(&lister),
+                Some(json!({ "rulebook": rulebook, "reason": "series listing" })),
+            )
+            .await
+        }
+    };
+    let (status, body) = by_lister(bracket(
+        221,
+        "2026-09-01",
+        ">=",
+        "85",
+        None,
+        "85°F or above",
+    ))
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let mut manual = bracket(222, "2026-09-01", "<=", "84", None, "84°F or below");
+    manual["review"] = json!("manual");
+    let (status, _) = by_lister(manual).await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "manual review needs an admin"
+    );
+    let mut one_off = bracket(223, "2026-09-02", ">=", "85", None, "85°F or above");
+    one_off["event"].as_object_mut().unwrap().remove("series");
+    let (status, _) = by_lister(one_off).await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "a one-off event needs an admin"
+    );
+    let (status, _) = by_lister(common::rulebook(302)).await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "a schema 1 market needs an admin"
+    );
+    let (status, _) = call(
+        &app,
+        Method::POST,
+        "/v1/orders",
+        Some(&lister),
+        Some(json!({ "market": 202, "side": "buy", "price": 50, "qty": 1 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "the lister does not trade");
 }
