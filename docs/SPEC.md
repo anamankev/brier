@@ -188,7 +188,8 @@ Threat model per component (`docs/threat-model.md`): order forgery (signature ve
 | G6 Web app | §0 item 8, §7 | Next.js scaffold; trading UI, portfolio, rules and evidence pages, forecaster scorecard and leaderboards, admin console | Playwright flows and axe checks pass |
 | G7 Market maker and simulation | §8, §10 | Reference market maker; agent-based harness | Market maker quotes through the public API in simulation and on live markets; metrics reported |
 | G8 Surveillance | §9 | Detectors, case management, pre-registered evaluation | Hypotheses commit predates results; precision and recall reported per typology |
-| G9 Release | §0, §16 | README, benchmark report, threat model, runbooks, demo | Every item in §0 met with evidence |
+| G9 Live catalogue | §0 item 8, §7, §8 | Events and recurring series from public sources, automatic listing and machine-checked resolution, quotes on every modelled market, a Polymarket-grade browsing and trading interface (`docs/gates/G9-plan.md`; added 8 November 2026) | A 72-hour live run with at least 40 open markets in 5 categories, 20 settling within a day, all with evidence; Playwright and axe pass |
+| G10 Release | §0, §16 | README, benchmark report, threat model, runbooks, demo | Every item in §0 met with evidence |
 
 ## 16. Industry benchmark (what a reviewer will compare against)
 
@@ -224,4 +225,4 @@ Where this project can be better than the leaders: open, verifiable engineering 
 - O3: Terms of use for FRED, BLS, and NOAA data as resolution sources (G5). Resolved 7 November 2026 in `docs/data-licenses.md`: BLS and NOAA public domain, raw responses committable; FRED usable for public-domain series only, raw responses kept local; S&P 500 excluded.
 - O6: A source for index markets (S&P 500) whose terms allow this use; until then no index markets, which affects the market maker's fair value in §8 (decided in G7).
 - O4: The Rust crate choices (serialization, hashing, WebSocket) and their licenses (G0).
-- O5: A $0, card-free host for a public demo; otherwise the release is local-run plus recorded demo (G9).
+- O5: A $0, card-free host for a public demo; otherwise the release is local-run plus recorded demo (G10).
