@@ -2,14 +2,21 @@
 
 A prediction-market exchange, named after the Brier score (Brier, 1950), the standard measure of how good probability forecasts are. It is built to the engineering standard of a regulated venue, and run with play money.
 
-Traders buy and sell yes/no contracts on public events, such as "Will October CPI come in above 3.0%?". A contract pays 100 if the event happens and 0 if it does not, so its price (1 to 99) reads as the market's probability. Under that simple product sits the machinery a real exchange needs:
+Traders buy and sell yes/no contracts on things public data settles: tomorrow's high in twelve US cities, how many strong earthquakes strike today, whether a geomagnetic storm arrives, inflation, jobs, and rates. A recurring catalogue lists the next two days of every series by itself, grouped into events like "Highest temperature in Denver on Nov 12?". A contract pays 100 if the event happens and 0 if it does not, so its price (1 to 99) reads as the market's probability. Under that simple product sits the machinery a real exchange needs:
 
 - **Deterministic matching engine.** Price-time priority order book. Replaying the command log reproduces every state hash exactly.
 - **Double-entry ledger.** Fully collateralized contracts and pre-trade collateral checks. A conservation invariant is checked after every event: credits issued = balances + escrow.
 - **Crash-safe journal.** No order is acknowledged before it is on disk (one full flush per batch of orders), and recovery is proven by killing the core 1,000 times under load.
 - **APIs.** REST and WebSocket order entry with signed requests and idempotent retries; sequenced market data with gap recovery.
-- **Evidence-backed resolution.** Every market has a rulebook whose hash is in the journal, resolves from free public sources (FRED, BLS, NOAA), and settles only after a second admin confirms and a 24-hour dispute window passes; the settlement names its evidence by hash ([docs/resolution.md](docs/resolution.md)).
-- **Reference market maker.** Trades only through the public API, quoting around fair values from simple public-data models (and not at all where no defensible model exists).
+- **Evidence-backed resolution.**
+  - Every market has a rulebook whose hash is in the journal.
+  - It resolves from free public sources: the National Weather Service, USGS, NOAA, BLS, and FRED.
+  - It settles only after a second check: a second admin for monthly markets, or, for daily ones, an independent re-fetch that must agree. A dispute window follows.
+  - The settlement names its evidence by hash ([docs/resolution.md](docs/resolution.md)).
+- **Reference market maker.**
+  - It trades only through the public API.
+  - It quotes around fair values from models backtested on history they were not fitted on ([docs/notes/catalog-models.md](docs/notes/catalog-models.md)).
+  - It does not quote at all where no defensible model exists.
 - **Market surveillance.** Detects wash trading, spoofing, marking the close, and insider-like trading. Precision and recall are measured on simulated manipulation.
 
 The full standard is [docs/SPEC.md](docs/SPEC.md). The exact engine behavior is in [docs/protocol.md](docs/protocol.md). Design decisions are in [docs/adr/](docs/adr/).
@@ -56,6 +63,8 @@ Built in gates G0 to G10 ([SPEC §15](docs/SPEC.md)). Nothing is released before
 | Web app end to end | 6 browser flows (sign-up with TOTP, trading, forecasting, admin confirmation and dispute ruling, settlement, scorecard) against a real exchange; no WCAG 2.2 AA violations on 9 pages (axe-core) | [G6 review](docs/gates/G6-review.md) |
 | Reference market maker | Registered study passed: +69.73 credits per market against noise (t = 12.9), losses rising with traders' information (80.25 → 71.78 → 54.77), inventory within limits in 800 simulated markets; 100% two-sided uptime on four live launch markets | [market-maker note](docs/notes/market-maker.md) |
 | Market surveillance | Pre-registered, thresholds tuned on seeds 1-100 and reported on 101-300: wash trading precision 1.00, recall 0.98; insider-like trading 1.00 and 0.99; spoofing (precision 0.30) and marking the close (0.54) did not meet their targets, reported as failures | [surveillance note](docs/notes/surveillance.md) |
+| Catalogue pricing models | Pre-registered backtest: the temperature model beats 30-year climatology in all 12 cities and is calibrated within 0.05; the earthquake count models failed their hypotheses, reported as failures (outcome frequencies, exploratory, barely beat uniform) | [catalogue-models note](docs/notes/catalog-models.md) |
+| Settlement source check | NWS daily climate reports matched NOAA GHCN-Daily on 53 of 53 days | [catalogue-models note](docs/notes/catalog-models.md) |
 | Book and ledger invariants (I1-I5) | Checked after every command in 2,560 random streams per CI run | `crates/engine/tests/properties.rs` |
 
 Measured on a 16 GB Apple M5 MacBook Air on AC power. Both performance hypotheses were registered before the engine existed.
