@@ -7,14 +7,20 @@ import type { Portfolio } from "@/lib/types";
 import { CATEGORIES} from "@/lib/events";
 import { listEvents } from "@/lib/events-server";
 import { Mark, SearchIcon } from "@/components/Icons";
-import { SignOut } from "@/components/SignOut";
+import { UserMenu } from "@/components/UserMenu";
 import { DailyCredits } from "@/components/DailyCredits";
+import { Bell } from "@/components/Bell";
+import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const display = Barlow_Condensed({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-display" });
 const sans = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  applicationName: "Brier",
+  openGraph: { siteName: "Brier", type: "website" },
+  twitter: { card: "summary_large_image" },
   title: { default: "Brier · Trade what happens next", template: "%s · Brier" },
   description:
     "A play-money prediction market on things public data settles: city temperatures, earthquakes, geomagnetic storms, inflation, jobs, and rates. Every market's rules are pinned and every outcome comes with its evidence.",
@@ -62,10 +68,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                       <strong>{credits(portfolio.body.cash)}</strong>
                     </Link>
                   )}
-                  <Link href="/account" className="btn small">
-                    {user.username}
-                  </Link>
-                  <SignOut />
+                  <Bell />
+                  <UserMenu username={user.username} admin={user.role === "admin"} />
                 </>
               ) : (
                 <>

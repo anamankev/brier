@@ -76,6 +76,19 @@ Read on 7 November 2026. Every resolution source must be free, public, and autho
 - **Brier's use:** one photo per city, topic or economic series, cropped to a square, resized and stored in `web/public/photos`. The images are decoration and play no part in any market's rules or settlement.
 - **Attribution:** author, licence and source page for every photo on the web app's `/credits` page, linked from the footer; the list is `web/lib/photos.ts`. The crops of ShareAlike photos are adaptations, shared under the same licence.
 
+### balldontlie (balldontlie.io): sports scores, usable with independent verification
+- **Terms read:** 8 November 2026 (terms last updated 20 October 2026).
+- **What the terms allow:** data may be used "for any lawful personal or commercial purpose", including "publishing, displaying" it, and "fantasy sports, games, lawful sportsbook and wagering products". No attribution is required.
+- **What the terms forbid:** relying on the data "as the sole source for accepting, grading, or settling a wager without independent verification", and building a substitute sports-data API or feed.
+- **Free tier:** an account and API key (registered by the owner; no card), 5 requests a minute, with teams, players and games (final scores) included.
+- **Brier's use:** schedules and final scores for NBA and NFL markets (G10 U6). Because of the verification clause, sports markets use the manual review lane: an admin confirms each result against the league's official result before payout. Brier serves no data feed.
+
+### football-data.org: soccer scores, usable with attribution
+- **Terms read:** 8 November 2026. The published General Terms and Conditions are dated 1 June 2018; the owner confirms the current terms when registering.
+- **Attribution required (§7.1):** "Football data provided by the Football-Data.org API", shown wherever the data appears.
+- **Free tier:** "free forever", 12 competitions (including the Premier League and the Champions League), scores delayed, 10 calls a minute; an account and key, registered by the owner.
+- **Brier's use:** match schedules and final scores for soccer markets, settled through the manual review lane like every sports market, with the attribution in the footer and on sports pages.
+
 ### Coinbase market data: not usable
 - Coinbase's Market Data Terms (updated 7 August 2026) license the data only for the user's own personal or research use. Without written consent they forbid:
   - redistributing or displaying the data or anything derived from it to third parties;

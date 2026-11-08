@@ -32,7 +32,13 @@ const STATUS: Record<EventSummary["status"], string> = {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const e = await getEvent(slug);
-  return { title: e?.title ?? "Market" };
+  if (!e) return { title: "Market" };
+  const top = [...e.markets].sort((a, b) => (b.chance ?? -1) - (a.chance ?? -1))[0];
+  const description =
+    e.markets.length === 1
+      ? `${top?.chance == null ? "No price yet" : `${top.chance}% chance`} on Brier, the play-money prediction market settled from public data.`
+      : `Leading: ${top?.outcome ?? "—"} at ${top?.chance == null ? "—" : `${top.chance}%`}. Trade it on Brier, the play-money prediction market settled from public data.`;
+  return { title: e.title, description, openGraph: { title: e.title, description }, twitter: { title: e.title, description } };
 }
 
 export default async function EventPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ m?: string; side?: string }> }) {

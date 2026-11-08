@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { gateway } from "@/lib/server";
 import { credits, score } from "@/lib/format";
 
@@ -37,7 +38,9 @@ export default async function Leaderboards() {
               {(skill.ok ? skill.body.leaders : []).map((l) => (
                 <tr key={l.username}>
                   <td className="muted">{l.rank}</td>
-                  <td style={{ fontWeight: 600 }}>{l.username}</td>
+                  <td style={{ fontWeight: 600 }}>
+                    <Link className="link-quiet" href={`/u/${encodeURIComponent(l.username)}`}>{l.username}</Link>
+                  </td>
                   <td className="num">{l.markets}</td>
                   <td className={`num ${l.skill >= 0 ? "yes" : "no"}`} style={{ fontWeight: 650 }}>{score(l.skill)}</td>
                 </tr>
@@ -61,7 +64,9 @@ export default async function Leaderboards() {
               {(profit.ok ? profit.body.leaders : []).map((l) => (
                 <tr key={l.username}>
                   <td className="muted">{l.rank}</td>
-                  <td style={{ fontWeight: 600 }}>{l.username}</td>
+                  <td style={{ fontWeight: 600 }}>
+                    <Link className="link-quiet" href={`/u/${encodeURIComponent(l.username)}`}>{l.username}</Link>
+                  </td>
                   <td className="num">{l.markets}</td>
                   <td className={`num ${l.profit >= 0 ? "yes" : "no"}`} style={{ fontWeight: 650 }}>
                     {l.profit > 0 ? "+" : ""}

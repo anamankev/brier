@@ -25,7 +25,13 @@ async function signIn(page: Page, username: string, secret: string) {
   await page.getByRole("button", { name: "Log in", exact: true }).click();
   await page.getByLabel("Authenticator code").fill(await freshTotp(username, secret));
   await page.getByRole("button", { name: "Log in", exact: true }).click();
-  await expect(page.getByRole("link", { name: username })).toBeVisible();
+  await expect(page.locator(".me-btn", { hasText: username })).toBeVisible();
+}
+
+/** Sign out from the account menu in the header. */
+async function signOut(page: Page) {
+  await page.locator(".me-btn").click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
 }
 
 /** A page signed in as the newcomer, from the session saved by the first test. */
@@ -57,7 +63,7 @@ test("a newcomer signs up, turns on two-step sign-in, and signs in with a code",
   await page.getByLabel("6-digit code").fill(await freshTotp(NEWCOMER, newcomerSecret));
   await page.getByRole("button", { name: "Turn on", exact: true }).click();
   await expect(page.getByText("Two-step sign-in is on.")).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
   await expect(page.getByRole("link", { name: "Log in" })).toBeVisible();
   await page.goto("/signin");
   await accessible(page, "sign-in");
@@ -87,7 +93,7 @@ test("a public account: claims the daily credits, resets a lost password with a 
   await expect(page.locator(".balance strong")).toHaveText(/10,100/);
 
   // Lose the password: sign out, then reset it with the saved code.
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
   await page.goto("/signin");
   await page.getByRole("link", { name: "Forgot your password?" }).click();
   await accessible(page, "password reset");
@@ -100,7 +106,7 @@ test("a public account: claims the daily credits, resets a lost password with a 
   await page.getByLabel("Username").fill(name);
   await page.getByLabel("Password").fill(`${PASSWORD} again`);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name }).first()).toBeVisible();
 
   // Export, then delete.
   await page.goto("/account");

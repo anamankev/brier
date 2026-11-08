@@ -9,6 +9,7 @@ import { compact } from "@/lib/events";
 import { credits } from "@/lib/format";
 import { OrderBook } from "./OrderBook";
 import { TradePanel } from "./TradePanel";
+import { MarketSocial } from "./MarketSocial";
 
 export type Outcome = {
   market: number;
@@ -305,6 +306,8 @@ export function EventBoard({
           </div>
           <OrderBook book={book} depth={6} />
         </section>
+
+        <MarketSocial market={o.market} />
 
         <section className="card pad" aria-labelledby="rules-h">
           <div className="spread">

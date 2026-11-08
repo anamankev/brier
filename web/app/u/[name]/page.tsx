@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { gateway, renderTime } from "@/lib/server";
 import { credits, relative, score } from "@/lib/format";
 import { marketHref, tradeWords, type Profile } from "@/lib/social";
+import { Photo } from "@/components/Photo";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,7 @@ export default async function UserProfile({ params }: { params: Promise<{ name: 
             <ul className="plist">
               {p.positions.map((x) => (
                 <li key={x.market}>
+                  <Photo of={{ title: x.title }} size="sm" />
                   <Link href={marketHref(x)} className="what">
                     <span className="t">{x.title ?? `Market ${x.market}`}</span>
                     {x.outcome && <span className="muted">{x.outcome}</span>}
@@ -81,6 +83,7 @@ export default async function UserProfile({ params }: { params: Promise<{ name: 
                 const w = tradeWords(t.side, t.price);
                 return (
                   <li key={`${t.seq}-${t.market}-${t.price}-${t.qty}`}>
+                    <Photo of={{ title: t.title }} size="sm" />
                     <Link href={marketHref(t)} className="what">
                       <span className="t">{t.title ?? `Market ${t.market}`}</span>
                       <span className="muted">
