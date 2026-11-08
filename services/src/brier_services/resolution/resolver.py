@@ -11,18 +11,19 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 from dataclasses import dataclass
 from types import ModuleType
 from typing import Any
 
-from brier_services.resolution import bls, fred, noaa
+from brier_services.resolution import bls, fred, noaa, nws
 from brier_services.resolution.fetch import Fetcher, Response, fetch
 from brier_services.resolution.sources import MalformedResponseError, Missing, Reading
 from brier_services.resolution.values import format_decimal, holds, round_half_up
 from brier_services.rules import Provider, Rulebook, instant
 
-RESOLVER_VERSION = "brier-resolver 2"  # bump with any change to fetching, parsing, or deciding
+RESOLVER_VERSION = "brier-resolver 3"  # bump with any change to fetching, parsing, or deciding
 
 SOURCES: dict[Provider, ModuleType] = {Provider.BLS: bls, Provider.FRED: fred, Provider.NOAA: noaa}
 
@@ -46,6 +47,7 @@ class Proposal:
     void_condition: str | None
     evidence: dict[str, Any]
     body: bytes
+    extra: tuple[bytes, ...] = ()  # other responses the record names by hash (NWS: the search)
 
 
 def decide(
@@ -97,12 +99,35 @@ def evidence_record(
     return record
 
 
+def _resolve_nws(rule: Rulebook, now: int, fetcher: Fetcher) -> Proposal | Wait:
+    try:
+        found = nws.read(
+            rule, fetcher, dt.datetime.fromtimestamp(now, dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        )
+    except nws.SourceError as e:
+        raise SourceError(str(e)) from e
+    retrieved = instant(found.response.retrieved_at)
+    if retrieved is None:
+        msg = f"unreadable retrieval time {found.response.retrieved_at!r}"
+        raise MalformedResponseError(msg)
+    decided = decide(rule, found.reading, retrieved)
+    if decided is None:
+        assert isinstance(found.reading, Missing)  # noqa: S101 - decide waits only on a missing value
+        return Wait(found.reading.why)
+    record = evidence_record(rule, found.response, found.reading, decided)
+    record["index_url"] = found.index_url
+    record["index_sha256"] = found.index_sha256
+    return Proposal(decided[0], decided[1], record, found.response.body, (found.index_body,))
+
+
 def resolve(
     rule: Rulebook, now: int, api_key: str | None = None, fetcher: Fetcher = fetch
 ) -> Proposal | Wait:
     """Fetch the rule's source and propose an outcome, or say why not yet."""
     if now < rule.times.release:
         return Wait("before the release time")
+    if rule.provider is Provider.NWS:
+        return _resolve_nws(rule, now, fetcher)
     source = SOURCES[rule.provider]
     response = fetcher(source.request(rule, api_key, now))
     if response.status != 200:

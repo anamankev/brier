@@ -47,7 +47,10 @@ Read on 7 November 2026. Every resolution source must be free, public, and autho
 - **Status:** free; NWS describes the data as "free to use for any purpose", and as a U.S. government work it carries no U.S. copyright.
 - **Requirements:** a `User-Agent` identifying the application (Brier sends `brier-exchange (resolver)`, with no personal contact). Rate limits exist but are not published: back off and retry after about 5 seconds.
 - **Limits:** observations are kept for 7 days only, so evidence must be fetched and stored within the dispute window.
-- **Brier's use:** the daily maximum of a station's observed temperatures, for daily high-temperature brackets. GHCN-Daily (above) is the slower, quality-controlled record; a disagreement between the two is a void condition for the admin queue, not an automatic outcome.
+- **Brier's use:** the official daily maximum temperature from each city's daily climate report (product CLI), for daily high-temperature brackets in 12 cities.
+- **Which report counts:** offices issue preliminary reports during the day. The resolver uses only the first report issued the next morning that summarizes the finished day ("YESTERDAY").
+- **The weakness:** both automatic-review fetches read the same NWS report, so they catch a transient error, not a wrong value. A wrong report is caught only by a dispute, against GHCN-Daily (above), the slower quality-controlled record.
+- **Raw responses may be committed** (`services/tests/fixtures/resolution/`).
 
 ### USGS Earthquake Catalog (earthquake.usgs.gov/fdsnws/event/1)
 - **Status:** U.S. government work, public domain. USGS asks to be credited.

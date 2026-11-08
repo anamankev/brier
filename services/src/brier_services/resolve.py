@@ -98,6 +98,8 @@ def run_once(
                 say("wait", market=market, reason=result.reason)
                 continue
             store.put(result.body)
+            for extra in result.extra:
+                store.put(extra)
             what = f"{rule.provider} {rule.series.id} {rule.observation}"
             body: dict[str, Any] = {
                 "outcome": result.outcome,

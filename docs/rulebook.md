@@ -67,6 +67,7 @@ A series published only after its period ends must also have its release time af
 | FRED | `DFEDTARU` fed funds target, upper limit | day | `level` (2) | no; announced before the effective day |
 | FRED | `DGS10` 10-year Treasury yield | day | `level` (2) | yes |
 | NOAA | `USW00094728/TMAX` Central Park daily maximum | day | `level` (0), °F | yes |
+| NWS | `CLI/{NYC, ORD, LAX, MIA, BOS, SEA, DEN, ATL, PHX, DCA, AUS, DFW}` official daily maximum from each city's daily climate report | day (local standard time) | `level` (0), °F | yes |
 
 Adding a series means reading its terms (`docs/data-licenses.md`), writing its resolver, and adding it to both registries and `registry.json`. Tests fail if the three disagree.
 

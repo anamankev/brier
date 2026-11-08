@@ -12,7 +12,9 @@ from dataclasses import dataclass
 from email.message import Message
 from typing import IO
 
-ALLOWED_HOSTS = frozenset({"api.bls.gov", "api.stlouisfed.org", "www.ncei.noaa.gov"})
+ALLOWED_HOSTS = frozenset(
+    {"api.bls.gov", "api.stlouisfed.org", "www.ncei.noaa.gov", "api.weather.gov"}
+)
 MAX_BODY_BYTES = 4 * 1024 * 1024
 TIMEOUT_SECONDS = 30.0
 SECRET_PARAMS = frozenset({"api_key", "registrationkey"})
