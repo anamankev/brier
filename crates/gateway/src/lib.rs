@@ -9,6 +9,7 @@ pub mod audit;
 pub mod auth;
 pub mod clock;
 pub mod error;
+pub mod events;
 pub mod feed;
 pub mod forecasts;
 pub mod limits;
@@ -265,6 +266,8 @@ endpoints! {
     GET "/v1/keys" => routes::list_keys,
     DELETE "/v1/keys/{id}" => routes::revoke_key,
     GET "/v1/markets" => routes::markets,
+    GET "/v1/events" => events::list,
+    GET "/v1/events/{slug}" => events::get,
     GET "/v1/markets/{id}/book" => routes::book,
     GET "/v1/markets/{id}/rules" => markets::rules,
     GET "/v1/markets/{id}/prices" => forecasts::prices,

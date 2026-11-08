@@ -289,6 +289,52 @@ paths:
                         close: { $ref: '#/components/schemas/Instant' }
                         last_price: { type: [integer, 'null'], description: 'The last trade price; null before the first trade' }
                         volume: { type: integer, description: 'Contracts traded, all time' }
+  /v1/events:
+    get:
+      tags: [market data]
+      summary: Events (markets grouped as the outcomes of one question) with their markets and 24-hour statistics; a market listed without an event appears as an event of one market (slug market-{id})
+      security: []
+      parameters:
+        - { name: category, in: query, schema: { type: string } }
+        - { name: tag, in: query, schema: { type: string } }
+        - { name: series, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [open, upcoming, closed, settled, all] } }
+        - { name: sort, in: query, schema: { type: string, enum: [volume, volume_24h, movers, newest, closing] } }
+        - { name: q, in: query, description: Words that must all appear in the title, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 0, maximum: 200 } }
+      responses:
+        '200':
+          description: Events, and the number matching per category
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, categories]
+                properties:
+                  events: { type: array, items: { $ref: '#/components/schemas/EventSummary' } }
+                  categories: { type: object, additionalProperties: { type: integer } }
+        '400': { $ref: '#/components/responses/Error' }
+  /v1/events/{slug}:
+    get:
+      tags: [market data]
+      summary: One event with its markets, and the other events of its recurring series (for date tabs)
+      security: []
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The event
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/EventSummary' }
+                  - type: object
+                    properties:
+                      siblings:
+                        type: array
+                        items: { type: object, required: [slug, observation, status], properties: { slug: { type: string }, observation: { type: string }, status: { type: string } } }
+        '404': { $ref: '#/components/responses/Error' }
   /v1/markets/{id}/book:
     get:
       tags: [market data]
@@ -1216,6 +1262,40 @@ components:
                 description: Engine events in the wire format (docs/protocol.md §6)
                 items: { type: object }
   schemas:
+    EventSummary:
+      type: object
+      required: [slug, title, category, tags, exclusive, standalone, observation, close, release, status, volume, volume_24h, markets]
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        category: { type: [string, 'null'] }
+        tags: { type: array, items: { type: string } }
+        series: { type: [string, 'null'] }
+        exclusive: { type: boolean, description: Exactly one market resolves YES }
+        standalone: { type: boolean }
+        observation: { type: string }
+        close: { type: string, format: date-time }
+        release: { type: string, format: date-time }
+        status: { type: string, enum: [open, upcoming, closed, settled] }
+        volume: { type: integer }
+        volume_24h: { type: integer }
+        markets:
+          type: array
+          items:
+            type: object
+            required: [market, title, state, volume, volume_24h]
+            properties:
+              market: { type: integer }
+              title: { type: string }
+              outcome: { type: [string, 'null'] }
+              state: { type: [string, 'null'] }
+              chance: { type: [integer, 'null'], description: Last trade price, else the middle of the book }
+              change_24h: { type: [integer, 'null'] }
+              last_price: { type: [integer, 'null'] }
+              best_bid: { type: [integer, 'null'] }
+              best_ask: { type: [integer, 'null'] }
+              volume: { type: integer }
+              volume_24h: { type: integer }
     Case:
       type: object
       required: [case, typology, market, account, score, detector, status, opened_at]

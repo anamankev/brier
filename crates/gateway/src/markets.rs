@@ -138,15 +138,115 @@ struct CreateMarketBody {
     reason: String,
 }
 
+/// Check a schema 2 rulebook against its event, and record the event the first time.
+///
+/// Every market of an event must share its title, tags, series, exclusivity, source series,
+/// observation, and close time; in an exclusive event, no two markets' YES ranges may
+/// overlap. Two listings racing into one new event could both pass before either is stored;
+/// the lister lists one event's markets in sequence, so this is not guarded further.
+async fn check_event(s: &AppState, v: &Validated) -> Result<(), ApiError> {
+    let Some(e) = &v.rulebook.event else {
+        return Ok(());
+    };
+    let provider = serde_json::to_value(v.rulebook.source.provider)
+        .ok()
+        .and_then(|p| p.as_str().map(str::to_owned))
+        .unwrap_or_default();
+    let existing = s
+        .db
+        .query_opt(
+            "SELECT title, tags, series, exclusive, provider, source_series, observation, extract(epoch FROM close_at)::bigint \
+             FROM events WHERE slug = $1",
+            &[&e.slug],
+        )
+        .await?;
+    if let Some(r) = existing {
+        let same = r.get::<_, &str>(0) == e.title
+            && r.get::<_, Vec<String>>(1) == e.tags
+            && r.get::<_, Option<String>>(2) == e.series
+            && r.get::<_, bool>(3) == e.exclusive
+            && r.get::<_, &str>(4) == provider
+            && r.get::<_, &str>(5) == v.rulebook.source.series
+            && r.get::<_, &str>(6) == v.rulebook.observation
+            && r.get::<_, i64>(7) == v.times.close;
+        if !same {
+            return Err(invalid(
+                "event_mismatch: the event's other markets have a different title, tags, series, exclusivity, source, observation, or close time",
+            ));
+        }
+        let taken = s
+            .db
+            .query_opt(
+                "SELECT market FROM rulebooks WHERE event_slug = $1 AND outcome = $2 AND market <> $3",
+                &[&e.slug, &e.outcome, &i64::from(v.rulebook.market)],
+            )
+            .await?;
+        if let Some(r) = taken {
+            return Err(invalid(format!(
+                "event_outcome_taken: market {} already has this outcome label",
+                r.get::<_, i64>(0)
+            )));
+        }
+        if e.exclusive {
+            let others =
+                s.db.query(
+                    "SELECT canonical FROM rulebooks WHERE event_slug = $1 AND market <> $2",
+                    &[&e.slug, &i64::from(v.rulebook.market)],
+                )
+                .await?;
+            let mine = v.yes_range();
+            for o in others {
+                let other: Value =
+                    serde_json::from_str(o.get(0)).map_err(|e| ApiError::internal(&e))?;
+                let other = validate(&other).map_err(|e| ApiError::internal(&e))?;
+                if brier_rules::ranges_overlap(mine, other.yes_range()) {
+                    return Err(invalid(format!(
+                        "event_overlap: this outcome's range overlaps market {}'s in an exclusive event",
+                        other.rulebook.market
+                    )));
+                }
+            }
+        }
+    } else {
+        s.db.execute(
+            "INSERT INTO events (slug, title, category, tags, series, exclusive, provider, source_series, observation, close_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, to_timestamp($10::bigint)) ON CONFLICT DO NOTHING",
+            &[
+                &e.slug,
+                &e.title,
+                &v.series.category,
+                &e.tags,
+                &e.series,
+                &e.exclusive,
+                &provider,
+                &v.rulebook.source.series,
+                &v.rulebook.observation,
+                &v.times.close,
+            ],
+        )
+        .await?;
+    }
+    Ok(())
+}
+
 /// Store the rulebook, or accept a retry of the same one; refuse a different one.
 async fn store(s: &AppState, v: &Validated, user: i64) -> Result<(), ApiError> {
+    check_event(s, v).await?;
     let market = i64::from(v.rulebook.market);
     let t = &v.times;
+    let event = v.rulebook.event.as_ref();
+    let slug = event.map(|e| e.slug.as_str());
+    let outcome = event.map(|e| e.outcome.as_str());
+    let review = if v.rulebook.review == Some(brier_rules::Review::Automatic) {
+        "automatic"
+    } else {
+        "manual"
+    };
     let inserted = s
         .db
         .execute(
-            "INSERT INTO rulebooks (market, canonical, rules_hash, open_at, close_at, release_at, deadline_at, listed_by) \
-             VALUES ($1, $2, $3, to_timestamp($4::bigint), to_timestamp($5::bigint), to_timestamp($6::bigint), to_timestamp($7::bigint), $8) \
+            "INSERT INTO rulebooks (market, canonical, rules_hash, open_at, close_at, release_at, deadline_at, listed_by, event_slug, outcome, review) \
+             VALUES ($1, $2, $3, to_timestamp($4::bigint), to_timestamp($5::bigint), to_timestamp($6::bigint), to_timestamp($7::bigint), $8, $9, $10, $11) \
              ON CONFLICT DO NOTHING",
             &[
                 &market,
@@ -157,6 +257,9 @@ async fn store(s: &AppState, v: &Validated, user: i64) -> Result<(), ApiError> {
                 &t.release,
                 &t.deadline,
                 &user,
+                &slug,
+                &outcome,
+                &review,
             ],
         )
         .await?;

@@ -541,6 +541,64 @@ fn decimal_lt(a: &str, b: &str) -> bool {
     }
 }
 
+/// A decimal string with at most `precision` decimal places, as an integer count of
+/// `10^-precision` steps. `None` if it does not parse or needs more places.
+#[must_use]
+pub fn scaled(s: &str, precision: usize) -> Option<i128> {
+    let (neg, body) = s.strip_prefix('-').map_or((false, s), |r| (true, r));
+    let (int, frac) = body.split_once('.').unwrap_or((body, ""));
+    if int.is_empty()
+        || frac.len() > precision
+        || !body.bytes().all(|b| b.is_ascii_digit() || b == b'.')
+    {
+        return None;
+    }
+    let digits = format!("{int}{frac:0<precision$}");
+    let n: i128 = digits.parse().ok()?;
+    Some(if neg { n.checked_neg()? } else { n })
+}
+
+impl Validated {
+    /// The YES set as an inclusive range of resolved values, in steps of the series'
+    /// precision (the resolver rounds to that precision first). `None` is unbounded.
+    #[must_use]
+    pub fn yes_range(&self) -> (Option<i128>, Option<i128>) {
+        let c = &self.rulebook.condition;
+        let p = self.measure.precision;
+        let t = scaled(&c.threshold, p);
+        match c.op {
+            Op::Above => (t.and_then(|t| t.checked_add(1)), None),
+            Op::AtLeast => (t, None),
+            Op::Below => (None, t.and_then(|t| t.checked_sub(1))),
+            Op::AtMost => (None, t),
+            Op::Between => (t, c.upper.as_deref().and_then(|u| scaled(u, p))),
+        }
+    }
+}
+
+/// Whether two inclusive ranges (`None` unbounded) share a value.
+#[must_use]
+pub fn ranges_overlap(a: (Option<i128>, Option<i128>), b: (Option<i128>, Option<i128>)) -> bool {
+    let lo = |x: Option<i128>| x.unwrap_or(i128::MIN);
+    let hi = |x: Option<i128>| x.unwrap_or(i128::MAX);
+    lo(a.0).max(lo(b.0)) <= hi(a.1).min(hi(b.1))
+}
+
+/// Whether the ranges cover every value exactly once: unbounded at both ends and contiguous.
+#[must_use]
+pub fn ranges_partition(ranges: &[(Option<i128>, Option<i128>)]) -> bool {
+    let mut sorted = ranges.to_vec();
+    sorted.sort_by_key(|r| r.0.unwrap_or(i128::MIN));
+    let (Some(first), Some(last)) = (sorted.first(), sorted.last()) else {
+        return false;
+    };
+    first.0.is_none()
+        && last.1.is_none()
+        && sorted
+            .windows(2)
+            .all(|w| matches!(w, [a, b] if a.1.and_then(|h| h.checked_add(1)).is_some_and(|n| Some(n) == b.0)))
+}
+
 /// Find a series in the registry.
 #[must_use]
 pub fn series(provider: Provider, id: &str) -> Option<Series> {

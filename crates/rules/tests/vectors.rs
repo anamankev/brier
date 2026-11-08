@@ -143,3 +143,32 @@ fn describe_states_a_range_with_its_inclusive_ends() {
         "{text}"
     );
 }
+
+#[test]
+fn bracket_ranges_partition_the_line() {
+    use brier_rules::{ranges_overlap, ranges_partition, scaled};
+    assert_eq!(scaled("88", 0), Some(88));
+    assert_eq!(scaled("-1.5", 2), Some(-150));
+    assert_eq!(scaled("1.234", 2), None);
+    let v = |name: &str| {
+        let input = vectors().into_iter().find(|v| v["name"] == name).unwrap()["input"].clone();
+        validate(&input).unwrap()
+    };
+    let bracket = v("v2_bracket_valid").yes_range();
+    let outer = v("v2_outer_bracket_valid_no_series").yes_range();
+    assert_eq!(bracket, (Some(88), Some(89)));
+    assert_eq!(outer, (Some(90), None));
+    assert!(!ranges_overlap(bracket, outer));
+    assert!(ranges_overlap(bracket, (Some(89), Some(90))));
+    let below = (None, Some(87));
+    assert!(ranges_partition(&[outer, bracket, below]));
+    assert!(!ranges_partition(&[outer, bracket]), "no lower end");
+    assert!(
+        !ranges_partition(&[outer, (None, Some(86))]),
+        "a gap at 87-89"
+    );
+    assert!(
+        !ranges_partition(&[outer, bracket, (None, Some(88))]),
+        "88 twice"
+    );
+}

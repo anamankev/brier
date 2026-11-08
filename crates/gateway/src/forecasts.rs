@@ -148,7 +148,9 @@ pub async fn sample(s: &AppState) -> Result<usize, ApiError> {
         let p = price(s, market).await?;
         written = written.saturating_add(usize::try_from(
             s.db.execute(
-                "INSERT INTO score_samples (market, at, price) VALUES ($1, to_timestamp($2::bigint), $3) ON CONFLICT DO NOTHING",
+                "INSERT INTO score_samples (market, at, price, volume) \
+                 VALUES ($1, to_timestamp($2::bigint), $3, (SELECT coalesce(sum(qty), 0)::bigint FROM fills WHERE market = $1)) \
+                 ON CONFLICT DO NOTHING",
                 &[&id, &at, &p],
             )
             .await?,
