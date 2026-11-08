@@ -3,8 +3,8 @@
 
 A fresh release is where a hijacked maintainer account or a typo-squat does its damage, and
 most are caught and yanked within days. This script reads every registry package in
-`Cargo.lock`, `fuzz/Cargo.lock`, and `services/uv.lock`, asks crates.io and PyPI when that
-exact version was published, and fails if any is younger than 14 days. CI runs it whenever a
+`Cargo.lock`, `fuzz/Cargo.lock`, `services/uv.lock`, and `web/package-lock.json`, asks crates.io,
+PyPI, and npm when that exact version was published, and fails if any is younger than 14 days. CI runs it whenever a
 lockfile changes (`.github/workflows/dependency-age.yml`); `make dependency-age` runs it here.
 
 Standard library only; HTTP goes through `curl` so it uses the system's certificate store.
@@ -47,6 +47,25 @@ def uv_packages(lock: Path) -> set[tuple[str, str]]:
     return set(re.findall(pattern, text))
 
 
+def npm_packages(lock: Path) -> set[tuple[str, str]]:
+    packages = json.loads(lock.read_text())["packages"]
+    out = set()
+    for path, meta in packages.items():
+        if path and "resolved" in meta and str(meta["resolved"]).startswith("https://registry.npmjs.org/"):
+            out.add((path.rsplit("node_modules/", 1)[-1], str(meta["version"])))
+    return out
+
+
+_npm_times: dict[str, dict[str, str]] = {}
+
+
+def npm_published(name: str, version: str) -> dt.datetime:
+    if name not in _npm_times:
+        data = fetch(f"https://registry.npmjs.org/{name.replace('/', '%2F')}")
+        _npm_times[name] = data["time"]  # type: ignore[assignment]
+    return dt.datetime.fromisoformat(_npm_times[name][version].replace("Z", "+00:00"))
+
+
 def crate_published(name: str, version: str) -> dt.datetime:
     data = fetch(f"https://crates.io/api/v1/crates/{name}/{version}")
     created = data["version"]["created_at"]  # type: ignore[index]
@@ -66,6 +85,7 @@ def main() -> int:
         ("crates.io", crate_published, cargo_packages(ROOT / "Cargo.lock")
          | cargo_packages(ROOT / "fuzz" / "Cargo.lock")),
         ("PyPI", pypi_published, uv_packages(ROOT / "services" / "uv.lock")),
+        ("npm", npm_published, npm_packages(ROOT / "web" / "package-lock.json")),
     ]
     young = []
     for registry, published, packages in checks:

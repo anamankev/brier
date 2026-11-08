@@ -6,6 +6,7 @@ export function SignOut() {
   return (
     <button
       type="button"
+      className="btn small"
       onClick={async () => {
         await fetch("/api/session", { method: "DELETE", headers: { "x-brier-request": "1" } });
         router.push("/");

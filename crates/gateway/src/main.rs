@@ -125,6 +125,16 @@ async fn serve(url: &str) -> Result<(), String> {
             &json!({}),
         ),
     }
+    // Test builds only: a looser sign-in limit, for browser tests that sign many users in from
+    // one address.
+    #[cfg(feature = "test-clock")]
+    if let Some(n) = std::env::var("BRIER_TEST_AUTH_PER_MINUTE")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+    {
+        info("test sign-in limit", &json!({ "per_minute": n }));
+        state.auth_limits = brier_gateway::limits::Limiter::per_minute(n, n);
+    }
     #[cfg(feature = "test-clock")]
     let state = match std::env::var("BRIER_TEST_CLOCK_FILE") {
         Ok(path) => {

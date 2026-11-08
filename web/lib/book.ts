@@ -5,7 +5,6 @@
 // for a fresh snapshot; never apply a gap.
 import { useEffect, useRef, useState } from "react";
 
-export const WS_URL = process.env.NEXT_PUBLIC_BRIER_WS_URL ?? "ws://127.0.0.1:8080/v1/ws";
 
 export type Level = [price: number, qty: number];
 export type LiveTrade = { price: number; qty: number; taker_side: "buy" | "sell"; ts: number; seq: number };
@@ -35,12 +34,12 @@ export function applyBook(book: Book & { seq: number | null }, m: BookMessage): 
   return { ...book, seq: m.seq, state: m.state, synced: true };
 }
 
-export function useMarketData(market: number): { book: Book; trades: LiveTrade[]; connected: boolean } {
+export function useMarketData(market: number, wsUrl: string): { book: Book; trades: LiveTrade[]; connected: boolean } {
   const [book, setBook] = useState<Book & { seq: number | null }>({ synced: false, state: "", bids: new Map(), asks: new Map(), gaps: 0, seq: null });
   const [trades, setTrades] = useState<LiveTrade[]>([]);
   const [connected, setConnected] = useState(false);
+  // The latest book, for the socket handlers (which update it before rendering it).
   const ref = useRef(book);
-  ref.current = book;
 
   useEffect(() => {
     let socket: WebSocket | null = null;
@@ -49,7 +48,7 @@ export function useMarketData(market: number): { book: Book; trades: LiveTrade[]
     const channel = `book:${market}`;
     const send = (op: string, ch: string) => socket?.send(JSON.stringify({ op, channel: ch }));
     const connect = () => {
-      socket = new WebSocket(WS_URL);
+      socket = new WebSocket(wsUrl);
       socket.onopen = () => {
         retry = 500;
         setConnected(true);
@@ -91,7 +90,7 @@ export function useMarketData(market: number): { book: Book; trades: LiveTrade[]
       closed = true;
       socket?.close();
     };
-  }, [market]);
+  }, [market, wsUrl]);
 
   return { book, trades, connected };
 }

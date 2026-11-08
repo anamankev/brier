@@ -12,7 +12,7 @@ export function TotpSetup() {
     return (
       <button
         type="button"
-        className="primary"
+        className="btn primary"
         onClick={async () => {
           try {
             setSetup(await api("POST", "/v1/totp/setup"));
@@ -41,16 +41,16 @@ export function TotpSetup() {
     >
       <p style={{ margin: 0 }}>
         Add this account to your authenticator app with the key below (or open the{" "}
-        <a href={setup.otpauth_uri}>setup link</a> on a phone), then enter the code it shows.
+        <a className="link" href={setup.otpauth_uri}>setup link</a> on a phone), then enter the code it shows.
       </p>
       <p>
         Key: <code data-testid="totp-secret">{setup.secret}</code>
       </p>
-      <label>
-        6-digit code
+      <label className="field">
+        <span>6-digit code</span>
         <input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" value={code} onChange={(e) => setCode(e.target.value)} required />
       </label>
-      <button className="primary" type="submit">
+      <button className="btn primary" type="submit">
         Turn on
       </button>
       <div aria-live="polite">{message && <p className={`notice ${message.ok ? "ok" : "error"}`}>{message.text}</p>}</div>

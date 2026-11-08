@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
-// The gateway's WebSocket, which the browser connects to directly for public market data.
-const ws = process.env.NEXT_PUBLIC_BRIER_WS_URL ?? "ws://127.0.0.1:8080/v1/ws";
+// The gateway's WebSocket, which the browser connects to directly for public market data. The
+// security headers are fixed at build time, so set BRIER_WS_URL when building as well as when
+// serving (web/README.md).
+const ws = process.env.BRIER_WS_URL ?? "ws://127.0.0.1:8080/v1/ws";
 
 const config: NextConfig = {
   poweredByHeader: false,

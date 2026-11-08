@@ -4,9 +4,9 @@ name: dependency-age
 
 on:
   push:
-    paths: [Cargo.lock, fuzz/Cargo.lock, services/uv.lock, scripts/dependency_age.py]
+    paths: [Cargo.lock, fuzz/Cargo.lock, services/uv.lock, web/package-lock.json, scripts/dependency_age.py]
   pull_request:
-    paths: [Cargo.lock, fuzz/Cargo.lock, services/uv.lock, scripts/dependency_age.py]
+    paths: [Cargo.lock, fuzz/Cargo.lock, services/uv.lock, web/package-lock.json, scripts/dependency_age.py]
 
 permissions:
   contents: read

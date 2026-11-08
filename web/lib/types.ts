@@ -13,7 +13,12 @@ export type MarketRow = {
 export type Rules = {
   market: number;
   rules_hash: string;
-  rulebook: Record<string, unknown> & { title: string; question: string; source: { provider: string; series: string; url: string } };
+  rulebook: Record<string, unknown> & {
+    title: string;
+    question: string;
+    source: { provider: string; series: string; url: string };
+    condition: { transform: string; op: string; threshold: string };
+  };
   canonical: string;
   text: string;
   schedule: { open: string; close: string; release: string; deadline: string };

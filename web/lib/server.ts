@@ -4,6 +4,8 @@ import { cookies } from "next/headers";
 
 export const GATEWAY = process.env.BRIER_GATEWAY_URL ?? "http://127.0.0.1:8080";
 export const SESSION_COOKIE = "brier_session";
+/** The gateway's WebSocket, which browsers connect to directly for public market data. */
+export const WS_URL = process.env.BRIER_WS_URL ?? "ws://127.0.0.1:8080/v1/ws";
 
 export async function sessionToken(): Promise<string | undefined> {
   return (await cookies()).get(SESSION_COOKIE)?.value;
@@ -18,9 +20,20 @@ export async function gateway<T>(path: string, init: RequestInit = {}, token?: s
   headers.set("content-type", "application/json");
   const t = token ?? (await sessionToken());
   if (t) headers.set("authorization", `Bearer ${t}`);
-  const res = await fetch(`${GATEWAY}${path}`, { ...init, headers, cache: "no-store" });
+  let res: Response;
+  try {
+    res = await fetch(`${GATEWAY}${path}`, { ...init, headers, cache: "no-store" });
+  } catch {
+    // The exchange is unreachable: pages render their empty and error states instead of failing.
+    return { ok: false, status: 503, body: { error: { code: "unavailable", message: "the exchange is not reachable" } } };
+  }
   const text = await res.text();
-  const body = text ? (JSON.parse(text) as unknown) : null;
+  let body: unknown = null;
+  try {
+    body = text ? (JSON.parse(text) as unknown) : null;
+  } catch {
+    body = null;
+  }
   return res.ok
     ? { ok: true, status: res.status, body: body as T }
     : { ok: false, status: res.status, body: (body ?? {}) as ApiErrorBody };
@@ -32,4 +45,9 @@ export async function me(): Promise<Me | null> {
   if (!(await sessionToken())) return null;
   const a = await gateway<Me>("/v1/me");
   return a.ok ? a.body : null;
+}
+
+/** The server's clock for one render (relative times like "closes in 3 days"). */
+export function renderTime(): number {
+  return Date.now();
 }

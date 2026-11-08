@@ -29,3 +29,33 @@ export const STATE_LABEL: Record<string, string> = {
   resolved: "Resolved",
   voided: "Voided",
 };
+
+/** "62%" or "—". */
+export function chance(p: number | null | undefined): string {
+  return p == null ? "—" : `${p}%`;
+}
+
+/** A price in cents: "62¢". */
+export function cents(p: number | null | undefined): string {
+  return p == null ? "—" : `${p}¢`;
+}
+
+/** What a winning contract returns per unit staked at this price: "1.6x". */
+export function multiple(price: number | null | undefined): string {
+  return price == null || price <= 0 ? "" : `${(100 / price).toFixed(2)}x`;
+}
+
+/** "Dec 10" in UTC. */
+export function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+/** "in 32 days", "in 5 hours", "3 days ago", relative to `now` (milliseconds). */
+export function relative(iso: string, now: number): string {
+  const ms = Date.parse(iso) - now;
+  const abs = Math.abs(ms);
+  const [n, unit] =
+    abs >= 86_400_000 ? [Math.round(abs / 86_400_000), "day"] : abs >= 3_600_000 ? [Math.round(abs / 3_600_000), "hour"] : [Math.max(1, Math.round(abs / 60_000)), "minute"];
+  const words = `${n} ${unit}${n === 1 ? "" : "s"}`;
+  return ms >= 0 ? `in ${words}` : `${words} ago`;
+}

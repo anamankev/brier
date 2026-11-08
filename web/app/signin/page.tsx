@@ -33,28 +33,29 @@ export default function SignIn() {
   }
 
   return (
-    <>
-      <h1>Sign in</h1>
-      <form className="stack" onSubmit={submit}>
-        <label>
-          Username
-          <input autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
+    <form className="card auth" onSubmit={submit}>
+      <h1 className="display">Log in</h1>
+      <label className="field">
+        <span>Username</span>
+        <input autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
+      </label>
+      <label className="field">
+        <span>Password</span>
+        <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+      </label>
+      {needsCode && (
+        <label className="field">
+          <span>Authenticator code</span>
+          <input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" value={totp} onChange={(e) => setTotp(e.target.value)} required autoFocus />
         </label>
-        <label>
-          Password
-          <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-        </label>
-        {needsCode && (
-          <label>
-            Authenticator code
-            <input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" value={totp} onChange={(e) => setTotp(e.target.value)} required autoFocus />
-          </label>
-        )}
-        <button className="primary" type="submit">
-          Sign in
-        </button>
-        <div aria-live="assertive">{error && <p className="notice error">{error}</p>}</div>
-      </form>
-    </>
+      )}
+      <button className="btn primary block" type="submit">
+        Log in
+      </button>
+      <div aria-live="assertive">{error && <p className="notice error">{error}</p>}</div>
+      <p className="muted" style={{ margin: 0, fontSize: 14 }}>
+        New here? <a className="link" href="/register">Create an account</a> and get 10,000 play credits.
+      </p>
+    </form>
   );
 }

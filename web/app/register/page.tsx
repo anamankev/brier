@@ -27,23 +27,26 @@ export default function Register() {
   }
 
   return (
-    <>
-      <h1>Create an account</h1>
-      <p className="muted">You start with 10,000 play credits. They have no cash value and cannot be bought or withdrawn.</p>
-      <form className="stack" onSubmit={submit}>
-        <label>
-          Username (3–32 characters: a–z, 0–9, _)
-          <input autoComplete="username" pattern="[a-z0-9_]{3,32}" value={username} onChange={(e) => setUsername(e.target.value)} required />
-        </label>
-        <label>
-          Password (at least 12 characters)
-          <input type="password" autoComplete="new-password" minLength={12} maxLength={256} value={password} onChange={(e) => setPassword(e.target.value)} required />
-        </label>
-        <button className="primary" type="submit">
-          Create account
-        </button>
-        <div aria-live="assertive">{error && <p className="notice error">{error}</p>}</div>
-      </form>
-    </>
+    <form className="card auth" onSubmit={submit}>
+      <h1 className="display">Create your account</h1>
+      <p className="muted" style={{ margin: 0 }}>
+        Start with 10,000 play credits. They have no cash value and cannot be bought or withdrawn.
+      </p>
+      <label className="field">
+        <span>Username (3–32 characters: a–z, 0–9, _)</span>
+        <input autoComplete="username" pattern="[a-z0-9_]{3,32}" value={username} onChange={(e) => setUsername(e.target.value)} required />
+      </label>
+      <label className="field">
+        <span>Password (at least 12 characters)</span>
+        <input type="password" autoComplete="new-password" minLength={12} maxLength={256} value={password} onChange={(e) => setPassword(e.target.value)} required />
+      </label>
+      <button className="btn primary block" type="submit">
+        Create account
+      </button>
+      <div aria-live="assertive">{error && <p className="notice error">{error}</p>}</div>
+      <p className="muted" style={{ margin: 0, fontSize: 14 }}>
+        Already trading? <a className="link" href="/signin">Log in</a>
+      </p>
+    </form>
   );
 }

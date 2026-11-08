@@ -45,7 +45,7 @@ PASSWORD = "a long enough password"  # noqa: S105 - a throwaway local test accou
 WINDOW = 3_600
 GRANT = 1_000_000
 
-pytestmark = pytest.mark.slow
+pytestmark = [pytest.mark.slow, pytest.mark.integration]
 
 
 def at(s: str) -> int:

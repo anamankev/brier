@@ -1,0 +1,132 @@
+"""A local exchange with activity, for looking at the web app (not a test).
+
+    BRIER_DEMO_DATABASE_URL=$(make -s db-url) uv run --project services python scripts/demo_stack.py
+
+Starts the test-clock gateway on 127.0.0.1:18080 (its clock read from var/demo/clock), lists the
+launch catalogue, and simulates three hours of trading in fast-forward: two market makers quote
+around a random-walk fair value and several traders take liquidity, one simulated minute per
+second, so the price history, books, and trades are real exchange output. It leaves the gateway
+running and prints how to stop it. Sign in as `demo` with the password below.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import random
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+from brier_services.client import ApiError, RestClient, totp_code
+from brier_services.rules import load_toml
+
+ROOT = Path(__file__).resolve().parents[1]
+DEMO = ROOT / "var" / "demo"
+PORT = 18080
+BASE = f"http://127.0.0.1:{PORT}"
+PASSWORD = "a long enough password"  # noqa: S105 - local demo accounts
+START = 1_794_234_600  # 2026-11-09T14:30:00Z, when the launch markets open
+MINUTES = 120
+FAIR = {101: 55, 102: 42, 103: 31, 104: 63, 105: 48}
+
+
+def main() -> int:
+    url = os.environ.get("BRIER_DEMO_DATABASE_URL")
+    if not url:
+        print("set BRIER_DEMO_DATABASE_URL (make db-url)", file=sys.stderr)
+        return 2
+    target = ROOT / "target" / "test-clock"
+    subprocess.run(  # noqa: S603 - fixed arguments
+        ["cargo", "build", "--release", "--locked", "-p", "brier-gateway", "--features", "test-clock", "--target-dir", str(target)],
+        cwd=ROOT, check=True,
+    )  # fmt: skip
+    binary = str(target / "release" / "brier-gateway")
+    DEMO.mkdir(parents=True, exist_ok=True)
+    clock = DEMO / "clock"
+    clock.write_text(str(START))
+    env = os.environ | {
+        "BRIER_DATABASE_URL": url,
+        "BRIER_DATABASE_SCHEMA": f"demo_{int(time.time())}",
+        "BRIER_DATA_DIR": str(DEMO / f"journal-{int(time.time())}"),
+        "BRIER_LISTEN": f"127.0.0.1:{PORT}",
+        "BRIER_TEST_CLOCK_FILE": str(clock),
+        "BRIER_TOTP_KEY": "42" * 32,
+        "BRIER_DISPUTE_WINDOW_SECONDS": "3600",
+        "BRIER_TEST_AUTH_PER_MINUTE": "10000",
+    }
+    log = (DEMO / "gateway.log").open("w")
+    gateway = subprocess.Popen([binary, "serve"], env=env, stderr=log, start_new_session=True)  # noqa: S603
+    (DEMO / "pid").write_text(str(gateway.pid))
+    for _ in range(150):
+        try:
+            RestClient(BASE, timeout=1).request("GET", "/v1/health")
+            break
+        except OSError:
+            time.sleep(0.2)
+
+    def user(name: str, role: str | None = None) -> RestClient:
+        RestClient(BASE).request("POST", "/v1/register", {"username": name, "password": PASSWORD})
+        if role:
+            subprocess.run([binary, "role", name, role, "demo"], env=env, check=True, capture_output=True)  # noqa: S603
+        c = RestClient(BASE)
+        c.login(name, PASSWORD)
+        return c
+
+    admin = user("ada", "admin")
+    secret, step = admin.enable_totp()
+    admin.login("ada", PASSWORD, totp_code(secret, step + 1))
+    makers = [user("maker_one"), user("maker_two")]  # each starts with 10,000 credits
+    takers = [user(n) for n in ("ana", "ben", "chloe", "dev", "emil")]
+    demo = user("demo")
+    for path in sorted((ROOT / "markets").glob("*.toml")):
+        admin.request("POST", "/v1/admin/markets", {"rulebook": load_toml(path).raw, "reason": "demo"})
+    time.sleep(1.5)  # the scheduler opens them
+
+    rng = random.Random(7)
+    fair = dict(FAIR)
+    quotes: dict[int, list[tuple[RestClient, int]]] = {m: [] for m in fair}
+    for minute in range(MINUTES):
+        for m in fair:
+            fair[m] = min(94, max(6, fair[m] + rng.gauss(0, 1.3)))
+            f = round(fair[m])
+            for c, order in quotes[m]:
+                try:
+                    c.request("DELETE", f"/v1/orders/{order}")
+                except ApiError:
+                    pass  # already filled
+            quotes[m] = []
+            for level in range(1, 6):
+                qty = rng.randint(4, 30) * level
+                for c, side, price in ((makers[0], "buy", f - level), (makers[1], "sell", f + level)):
+                    try:
+                        r = c.request("POST", "/v1/orders", {"market": m, "side": side, "price": price, "qty": qty})
+                    except ApiError:
+                        continue  # out of play credits for now: quote less
+                    if r.get("status") == "resting":
+                        quotes[m].append((c, r["order"]))
+            if rng.random() < 0.55:
+                taker = rng.choice(takers)
+                side = "buy" if rng.random() < 0.5 + (fair[m] - f) else "sell"
+                price = f + 1 if side == "buy" else f - 1
+                try:
+                    taker.request("POST", "/v1/orders", {"market": m, "side": side, "price": price, "qty": rng.randint(3, 40), "tif": "ioc"})
+                except ApiError:
+                    pass
+        clock.write_text(str(START + 60 * (minute + 1)))
+        time.sleep(1.05)
+        print(f"\rminute {minute + 1}/{MINUTES}", end="", flush=True)
+
+    for m in (101, 104):
+        demo.request("POST", "/v1/orders", {"market": m, "side": "buy", "price": round(fair[m]) + 1, "qty": 25, "tif": "ioc"})
+        demo.request("PUT", f"/v1/markets/{m}/forecast", {"probability": min(95, round(fair[m]) + 8)})
+    demo.request("POST", "/v1/orders", {"market": 102, "side": "buy", "price": round(fair[102]) - 6, "qty": 40})
+    info = {"web": "BRIER_GATEWAY_URL=http://127.0.0.1:18080 BRIER_WS_URL=ws://127.0.0.1:18080/v1/ws", "admin": "ada", "admin_totp_secret": secret, "user": "demo", "password": PASSWORD}
+    (DEMO / "info.json").write_text(json.dumps(info, indent=1))
+    print(f"\nexchange running (pid {gateway.pid}); sign in as demo / {PASSWORD}; stop with: kill {gateway.pid}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

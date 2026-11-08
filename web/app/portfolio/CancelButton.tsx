@@ -7,6 +7,7 @@ export function CancelButton({ order }: { order: number }) {
   return (
     <button
       type="button"
+      className="btn small"
       aria-label={`Cancel order ${order}`}
       onClick={async () => {
         await api("DELETE", `/v1/orders/${order}`).catch(() => {});
