@@ -7,8 +7,10 @@ the templates build them. Readings are whole numbers, so a continuous model's pr
 
 from __future__ import annotations
 
+import datetime as dt
 import itertools
 import math
+import re
 from collections.abc import Sequence
 
 Range = tuple[int | None, int | None]
@@ -104,3 +106,35 @@ def temperature_ranges(forecast_high: int, width: int = 2, inner: int = 5) -> li
 
 
 QUAKE_RANGES: list[Range] = [(None, 2), (3, 4), (5, 6), (7, None)]
+
+
+MONTHS_ABBR = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def storm_probabilities(text: str) -> dict[str, list[float]]:
+    """NOAA SWPC's 3-day geomagnetic forecast: for each forecast day (``YYYY-MM-DD``), the
+    probabilities of the four storm-level outcomes (no storm, G1, G2, G3 or stronger), from its
+    minor, moderate, and strong-extreme storm probabilities."""
+    issued = re.search(r":Issued: (\d{4}) (\w{3}) (\d{2})", text)
+    header = re.search(
+        r"NOAA Geomagnetic Activity Probabilities (\d{2}) (\w{3})-(\d{2}) (\w{3})", text
+    )
+    rows: dict[str, list[float]] = {}
+    for name in ("Minor storm", "Moderate storm", "Strong-Extreme storm"):
+        found = re.search(rf"^{name}\s+(\d+)/(\d+)/(\d+)", text, re.M)
+        if found is None:
+            msg = f"no {name} row"
+            raise ValueError(msg)
+        rows[name] = [int(x) / 100 for x in found.groups()]
+    if issued is None or header is None:
+        msg = "not a 3-day geomagnetic forecast"
+        raise ValueError(msg)
+    year = int(issued.group(1))
+    start = dt.date(year, MONTHS_ABBR.index(header.group(2)) + 1, int(header.group(1)))
+    if start < dt.date(year, MONTHS_ABBR.index(issued.group(2)) + 1, int(issued.group(3))):
+        start = start.replace(year=year + 1)  # a forecast issued in late December
+    out = {}
+    for i in range(3):
+        g1, g2, g3 = (rows[n][i] for n in ("Minor storm", "Moderate storm", "Strong-Extreme storm"))
+        out[(start + dt.timedelta(days=i)).isoformat()] = [max(0.0, 1.0 - g1 - g2 - g3), g1, g2, g3]
+    return out

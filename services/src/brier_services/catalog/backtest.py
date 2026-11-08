@@ -290,12 +290,70 @@ def earthquakes(get: Callable[[str], Any], rng: random.Random) -> dict[str, Any]
     }
 
 
+def explore_earthquakes(get: Callable[[str], Any], rng: random.Random) -> dict[str, Any]:
+    """Exploratory, chosen after the registered results (docs/notes/catalog-models.md §5):
+    alternatives to the registered count model, scored on the same test year."""
+    url = (
+        "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&eventtype=earthquake"
+        f"&starttime={QUAKE_FIT[0].isoformat()}T00:00:00&endtime={QUAKE_TEST[1].isoformat()}T23:59:59.999"
+        "&minmagnitude=5&orderby=time-asc&limit=20000"
+    )
+    counts: dict[dt.date, int] = defaultdict(int)
+    sixes: dict[dt.date, int] = defaultdict(int)
+    for f in get(url)["features"]:
+        day = dt.datetime.fromtimestamp(f["properties"]["time"] / 1000, dt.UTC).date()
+        counts[day] += 1
+        if f["properties"]["mag"] >= 6:
+            sixes[day] += 1
+    fit = [counts[d] for d in days(QUAKE_FIT)]
+    cut = sorted(fit)[int(0.99 * (len(fit) - 1))]
+    trimmed = [c for c in fit if c <= cut]
+    models = {
+        "registered_negative_binomial": m.negative_binomial_probs(
+            statistics.fmean(fit), statistics.variance(fit), m.QUAKE_RANGES
+        ),
+        "poisson": m.poisson_probs(statistics.fmean(fit), m.QUAKE_RANGES),
+        "empirical_frequencies": m.empirical_probs(fit, m.QUAKE_RANGES),
+        "negative_binomial_without_top_1pct_days": m.negative_binomial_probs(
+            statistics.fmean(trimmed), statistics.variance(trimmed), m.QUAKE_RANGES
+        ),
+        "uniform": [0.25] * 4,
+    }
+    test = days(QUAKE_TEST)
+    scores = {
+        name: [m.brier(p, m.outcome_index(counts[d], m.QUAKE_RANGES)) for d in test]
+        for name, p in models.items()
+    }
+    best = min(scores, key=lambda k: statistics.fmean(scores[k]))
+    six_rate = sum(1 for d in days(QUAKE_FIT) if sixes[d] > 0) / len(days(QUAKE_FIT))
+    six_scores = [(six_rate - (1.0 if sixes[d] > 0 else 0.0)) ** 2 for d in test]
+    base_six = sum(1 for d in test if sixes[d] > 0) / len(test)
+    return {
+        "trim_at": cut,
+        "probabilities": models,
+        "brier": {k: statistics.fmean(v) for k, v in scores.items()},
+        "best": best,
+        "best_minus_uniform_ci95": bootstrap(
+            [a - b for a, b in zip(scores[best], scores["uniform"], strict=True)], rng
+        ),
+        "m6": {"fit_rate": six_rate, "test_rate": base_six, "brier": statistics.fmean(six_scores)},
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m brier_services.catalog.backtest")
     parser.add_argument("--out", type=Path, default=Path("var/catalog-backtest"))
+    parser.add_argument("--explore", action="store_true", help="the exploratory follow-ups only")
     args = parser.parse_args(argv)
     get = fetcher(args.out / "raw")
     rng = random.Random(SEED)  # noqa: S311 - resampling
+    if args.explore:
+        explored = explore_earthquakes(get, rng)
+        (args.out / "explore.json").write_text(
+            json.dumps(explored, indent=1, sort_keys=True) + "\n"
+        )
+        print(json.dumps(explored, indent=1, sort_keys=True))
+        return 0
     results = {
         "temperature": temperature(get, rng),
         "earthquakes": earthquakes(get, rng),

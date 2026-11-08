@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import datetime as dt
 import math
+from pathlib import Path
 
 import pytest
 
@@ -55,3 +56,15 @@ def test_model_ranges_are_the_templates_ranges() -> None:
                 case _:
                     listed.append((int(c["threshold"]), int(c["upper"])))
         assert listed == m.temperature_ranges(forecast)
+
+
+def test_storm_probabilities_from_the_swpc_forecast() -> None:
+    text = (
+        Path(__file__).parent / "fixtures" / "catalog" / "swpc_3day_geomag_2026-11-07.txt"
+    ).read_text()
+    probs = m.storm_probabilities(text)
+    assert list(probs) == ["2026-11-08", "2026-11-09", "2026-11-10"]
+    assert probs["2026-11-08"] == pytest.approx([0.25, 0.35, 0.35, 0.05])
+    assert probs["2026-11-10"] == pytest.approx([0.69, 0.25, 0.05, 0.01])
+    for p in probs.values():
+        assert sum(p) == pytest.approx(1.0)
