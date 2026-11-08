@@ -546,6 +546,28 @@ paths:
                 properties:
                   units: { const: credits }
                   leaders: { type: array, items: { type: object, required: [rank, username, markets, profit] } }
+  /v1/markets/{id}/prices:
+    get:
+      tags: [market data]
+      summary: The price once a minute while the market was open (last trade, else book midpoint), oldest first, at most 10,000 points
+      security: []
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: Price history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [market, every_seconds, points]
+                properties:
+                  market: { type: integer }
+                  every_seconds: { const: 60 }
+                  points:
+                    type: array
+                    items:
+                      type: array
+                      prefixItems: [{ $ref: '#/components/schemas/Instant' }, { $ref: '#/components/schemas/Price' }]
   /v1/markets/{id}/trades:
     get:
       tags: [market data]
@@ -907,6 +929,39 @@ paths:
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
+  /v1/admin/queue:
+    get:
+      tags: [administration]
+      summary: Resolutions not yet settled or withdrawn, and open disputes with their reasons
+      responses:
+        '200':
+          description: 'The queue; `yours` marks what the caller proposed (and so cannot confirm or rule on)'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [resolutions, disputes]
+                properties:
+                  resolutions: { type: array, items: { type: object } }
+                  disputes: { type: array, items: { type: object } }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+  /v1/admin/audit:
+    get:
+      tags: [administration]
+      summary: The newest 200 audit-log entries
+      responses:
+        '200':
+          description: Audit log, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entries]
+                properties:
+                  entries: { type: array, items: { type: object, required: [id, at, actor, action, reason] } }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
   /v1/admin/cancel-all:
     post:
       tags: [administration]

@@ -381,6 +381,13 @@ async fn markets_resolve_through_propose_confirm_dispute_and_settle() {
         body["dispute_until"],
         json!(format_instant(release + 60 + WINDOW).unwrap())
     );
+    let (_, queue) = call(&w.app, Method::GET, "/v1/admin/queue", Some(&carol), None).await;
+    assert_eq!(
+        queue["resolutions"][0]["state"],
+        json!("confirmed"),
+        "{queue}"
+    );
+    assert_eq!(queue["resolutions"][0]["yours"], json!(false));
     let path = format!("/v1/resolutions/{first}/disputes");
     let (status, _) = w
         .post(&path, &dave, json!({ "reason": "I disagree" }))
@@ -397,6 +404,14 @@ async fn markets_resolve_through_propose_confirm_dispute_and_settle() {
     let first_dispute = body["dispute"].as_i64().unwrap();
     let (status, _) = w.post(&path, &bob, json!({ "reason": "again" })).await;
     assert_eq!(status, StatusCode::CONFLICT, "one dispute per holder");
+    let (_, queue) = call(&w.app, Method::GET, "/v1/admin/queue", Some(&carol), None).await;
+    assert_eq!(
+        queue["disputes"][0]["reason"],
+        json!("the value was revised"),
+        "{queue}"
+    );
+    let (status, _) = call(&w.app, Method::GET, "/v1/admin/queue", Some(&bob), None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
     let report = w.tick_at(release + 60 + WINDOW + 1).await;
     assert_eq!(report.settled, 0, "an open dispute stops settlement");
     let rule = format!("/v1/admin/disputes/{first_dispute}/rule");
@@ -622,6 +637,15 @@ async fn markets_resolve_through_propose_confirm_dispute_and_settle() {
         .get(0);
     assert_eq!(u64::try_from(seq).unwrap(), settled.seq.get());
 
+    let (_, audit) = call(&w.app, Method::GET, "/v1/admin/audit", Some(&alice), None).await;
+    assert!(
+        audit["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["actor"] == "system" && e["action"] == "settle"),
+        "{audit}"
+    );
     // Every step is audited; the gateway's own commands as `system`, with their seq.
     let system: Vec<String> =
         w.db.query(

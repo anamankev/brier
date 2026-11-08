@@ -196,6 +196,7 @@ endpoints! {
     GET "/v1/markets" => routes::markets,
     GET "/v1/markets/{id}/book" => routes::book,
     GET "/v1/markets/{id}/rules" => markets::rules,
+    GET "/v1/markets/{id}/prices" => forecasts::prices,
     GET "/v1/markets/{id}/resolution" => resolution::get,
     POST "/v1/markets/{id}/resolution" => resolution::propose,
     POST "/v1/resolutions/{id}/disputes" => resolution::dispute,
@@ -218,6 +219,8 @@ endpoints! {
     POST "/v1/admin/resolutions/{id}/confirm" => resolution::confirm,
     POST "/v1/admin/resolutions/{id}/withdraw" => resolution::withdraw,
     POST "/v1/admin/disputes/{id}/rule" => resolution::rule,
+    GET "/v1/admin/queue" => resolution::queue,
+    GET "/v1/admin/audit" => resolution::audit_log,
     POST "/v1/admin/cancel-all" => routes::cancel_all,
     POST "/v1/admin/halt-all" => routes::halt_all,
 }

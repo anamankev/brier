@@ -310,3 +310,25 @@ pub async fn profit_leaderboard(State(s): Shared) -> ApiResult {
         .collect();
     Ok(Json(json!({ "units": "credits", "leaders": items })).into_response())
 }
+
+/// `GET /v1/markets/{id}/prices`: the market's price once a minute while it was open (the
+/// scoring samples), oldest first, for price charts. At most 10,000 points: the most recent.
+pub async fn prices(State(s): Shared, Path(raw): Path<String>) -> ApiResult {
+    let market = MarketId::new(parse_id(&raw, "market")?);
+    let rows =
+        s.db.query(
+            "SELECT extract(epoch FROM at)::bigint, price FROM ( \
+               SELECT at, price FROM score_samples WHERE market = $1 ORDER BY at DESC LIMIT 10000 \
+             ) recent ORDER BY at",
+            &[&i64::from(market.get())],
+        )
+        .await?;
+    let points: Vec<Value> = rows
+        .iter()
+        .map(|r| json!([iso(r.get(0)), r.get::<_, i16>(1)]))
+        .collect();
+    Ok(
+        Json(json!({ "market": market.get(), "every_seconds": SAMPLE_EVERY, "points": points }))
+            .into_response(),
+    )
+}

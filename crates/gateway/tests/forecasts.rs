@@ -225,6 +225,16 @@ async fn forecasts_are_scored_against_the_market_and_ranked() {
         .map(|r| r.get(0))
         .collect();
     assert_eq!(prices, [50, 50, 70, 70]);
+    let (_, history) = call(&w.app, Method::GET, "/v1/markets/21/prices", None, None).await;
+    assert_eq!(
+        history["points"],
+        json!([
+            ["2026-09-01T13:30:00Z", 50],
+            ["2026-09-01T13:31:00Z", 50],
+            ["2026-09-01T13:32:00Z", 70],
+            ["2026-09-01T13:33:00Z", 70]
+        ])
+    );
 
     // Forecasts freeze at close, and the table refuses edits.
     let close = instant("2026-10-15T12:00:00Z").unwrap();

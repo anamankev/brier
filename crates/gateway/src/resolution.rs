@@ -494,3 +494,76 @@ pub async fn get(State(s): Shared, Path(raw): Path<String>) -> ApiResult {
             .into_response(),
     )
 }
+
+/// `GET /v1/admin/queue`: what needs an admin: resolutions not yet settled or withdrawn, and
+/// open disputes with their reasons.
+pub async fn queue(State(s): Shared, req: Req) -> ApiResult {
+    let user = admin_user(&s, &req).await?;
+    let resolutions = s
+        .db
+        .query(
+            "SELECT r.id, r.market, b.canonical::jsonb ->> 'title', r.outcome, r.void_condition, r.state, \
+                    r.proposed_by = $1, u.username, extract(epoch FROM r.dispute_until)::bigint, r.evidence_hash \
+             FROM resolutions r JOIN rulebooks b ON b.market = r.market JOIN users u ON u.id = r.proposed_by \
+             WHERE r.state IN ('proposed', 'confirmed', 'settling') ORDER BY r.id",
+            &[&user.id],
+        )
+        .await?;
+    let disputes = s
+        .db
+        .query(
+            "SELECT d.id, d.resolution, r.market, d.reason, extract(epoch FROM d.filed_at)::bigint, r.proposed_by = $1 \
+             FROM disputes d JOIN resolutions r ON r.id = d.resolution WHERE d.state = 'open' ORDER BY d.id",
+            &[&user.id],
+        )
+        .await?;
+    let resolutions: Vec<Value> = resolutions
+        .iter()
+        .map(|r| {
+            json!({
+                "resolution": r.get::<_, i64>(0), "market": r.get::<_, i64>(1),
+                "title": r.get::<_, Option<&str>>(2), "outcome": r.get::<_, &str>(3),
+                "void_condition": r.get::<_, Option<&str>>(4), "state": r.get::<_, &str>(5),
+                "yours": r.get::<_, bool>(6), "proposed_by": r.get::<_, &str>(7),
+                "dispute_until": r.get::<_, Option<i64>>(8).map_or(Value::Null, iso),
+                "evidence_hash": hex(r.get::<_, &[u8]>(9)),
+            })
+        })
+        .collect();
+    let disputes: Vec<Value> = disputes
+        .iter()
+        .map(|r| {
+            json!({
+                "dispute": r.get::<_, i64>(0), "resolution": r.get::<_, i64>(1),
+                "market": r.get::<_, i64>(2), "reason": r.get::<_, &str>(3),
+                "filed_at": iso(r.get(4)), "yours": r.get::<_, bool>(5),
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "resolutions": resolutions, "disputes": disputes })).into_response())
+}
+
+/// `GET /v1/admin/audit`: the newest 200 audit-log rows.
+pub async fn audit_log(State(s): Shared, req: Req) -> ApiResult {
+    admin_user(&s, &req).await?;
+    let rows = s
+        .db
+        .query(
+            "SELECT a.id, extract(epoch FROM a.at)::bigint, a.actor, u.username, a.action, a.reason, a.seq, a.detail::text \
+             FROM audit_log a LEFT JOIN users u ON u.id = a.user_id ORDER BY a.id DESC LIMIT 200",
+            &[],
+        )
+        .await?;
+    let items: Vec<Value> = rows
+        .iter()
+        .map(|r| {
+            json!({
+                "id": r.get::<_, i64>(0), "at": iso(r.get(1)), "actor": r.get::<_, &str>(2),
+                "username": r.get::<_, Option<&str>>(3), "action": r.get::<_, &str>(4),
+                "reason": r.get::<_, &str>(5), "seq": r.get::<_, Option<i64>>(6),
+                "detail": serde_json::from_str::<Value>(r.get(7)).unwrap_or(Value::Null),
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "entries": items })).into_response())
+}
