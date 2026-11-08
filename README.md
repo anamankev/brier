@@ -9,7 +9,7 @@ Traders buy and sell yes/no contracts on public events, such as "Will October CP
 - **Crash-safe journal.** No order is acknowledged before it is on disk (one full flush per batch of orders), and recovery is proven by killing the core 1,000 times under load.
 - **APIs.** REST and WebSocket order entry with signed requests and idempotent retries; sequenced market data with gap recovery.
 - **Evidence-backed resolution.** Every market has a rulebook whose hash is in the journal, resolves from free public sources (FRED, BLS, NOAA), and settles only after a second admin confirms and a 24-hour dispute window passes; the settlement names its evidence by hash ([docs/resolution.md](docs/resolution.md)).
-- **Reference market maker.** Trades only through the public API, quoting around options-implied fair values.
+- **Reference market maker.** Trades only through the public API, quoting around fair values from simple public-data models (and not at all where no defensible model exists).
 - **Market surveillance.** Detects wash trading, spoofing, marking the close, and insider-like trading. Precision and recall are measured on simulated manipulation.
 
 The full standard is [docs/SPEC.md](docs/SPEC.md). The exact engine behavior is in [docs/protocol.md](docs/protocol.md). Design decisions are in [docs/adr/](docs/adr/).
