@@ -14,8 +14,9 @@ export type Plan = {
   average: number;
 };
 
-/** Spend up to `budget` cents on YES or NO. Buying YES takes offers, cheapest first; buying NO
- * sells YES into bids, highest first, at a cost of 100 minus the bid. */
+/** Spend at most `budget` cents on YES or NO, guaranteed even if the book moves. Buying YES
+ * takes offers, cheapest first; buying NO sells YES into bids, highest first, at a cost of 100
+ * minus the bid. */
 export function planBuy(book: Book, outcome: "yes" | "no", budget: number): Plan | null {
   const levels =
     outcome === "yes"
@@ -35,6 +36,22 @@ export function planBuy(book: Book, outcome: "yes" | "no", budget: number): Plan
     if (n < size) break;
   }
   if (worst === null || qty === 0) return null;
+  // The order is one IOC at the worst price reached. If the book changes before it arrives,
+  // every contract could fill at that price, so cap the quantity to keep that within budget.
+  const worstCost = outcome === "yes" ? worst : 100 - worst;
+  const cap = Math.floor(budget / worstCost);
+  if (qty > cap) {
+    qty = cap;
+    total = 0;
+    let need = qty;
+    for (const [, cost, size] of levels) {
+      const n = Math.min(size, need);
+      total += n * cost;
+      need -= n;
+      if (need === 0) break;
+    }
+  }
+  if (qty === 0) return null;
   return { side: outcome === "yes" ? "buy" : "sell", price: worst, qty, total, average: total / qty };
 }
 
