@@ -329,6 +329,7 @@ version = "1.0.0"
 dependencies = [
  "brier-engine",
  "brier-types",
+ "proptest",
  "serde",
  "serde_json",
 ]

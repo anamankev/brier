@@ -220,6 +220,80 @@ fn to_command(w: WireCommand) -> Result<Command, WireError> {
     })
 }
 
+/// Wire name of a time in force.
+#[must_use]
+pub const fn tif_name(t: TimeInForce) -> &'static str {
+    match t {
+        TimeInForce::Gtc => "gtc",
+        TimeInForce::Ioc => "ioc",
+        TimeInForce::Fok => "fok",
+    }
+}
+
+/// One command as its wire JSON object with its sequence number: the inverse of
+/// [`parse_command`] (`brier-core export`). Optional fields are present only when set.
+#[must_use]
+pub fn command_json(seq: u64, c: &Command) -> Value {
+    match *c {
+        Command::CreateMarket { market, rules_hash } => with_digest(
+            json!({"seq": seq, "cmd": "create_market", "market": market.get()}),
+            "rules_hash",
+            rules_hash,
+        ),
+        Command::SetState { market, state } => json!({
+            "seq": seq, "cmd": "set_state", "market": market.get(), "state": state_name(state),
+        }),
+        Command::Place(o) => {
+            let mut v = json!({
+                "seq": seq, "cmd": "place", "account": o.account.get(), "market": o.market.get(),
+                "side": side_name(o.side), "price": o.price, "qty": o.qty,
+                "tif": tif_name(o.tif), "post_only": o.post_only,
+            });
+            if let (Some(id), Some(map)) = (o.client_order_id, v.as_object_mut()) {
+                map.insert("client_order_id".to_owned(), json!(id));
+            }
+            v
+        }
+        Command::Cancel { account, order } => json!({
+            "seq": seq, "cmd": "cancel", "account": account.get(), "order": order.get(),
+        }),
+        Command::Amend {
+            account,
+            order,
+            qty,
+        } => json!({
+            "seq": seq, "cmd": "amend", "account": account.get(), "order": order.get(), "qty": qty,
+        }),
+        Command::OpenAccount { account } => {
+            json!({"seq": seq, "cmd": "open_account", "account": account.get()})
+        }
+        Command::Settle {
+            market,
+            outcome,
+            evidence_hash,
+        } => with_digest(
+            json!({
+                "seq": seq, "cmd": "settle", "market": market.get(), "outcome": outcome_name(outcome),
+            }),
+            "evidence_hash",
+            evidence_hash,
+        ),
+        Command::CancelAll { account, market } => {
+            let mut v = json!({"seq": seq, "cmd": "cancel_all"});
+            if let Some(map) = v.as_object_mut() {
+                if let Some(a) = account {
+                    map.insert("account".to_owned(), json!(a.get()));
+                }
+                if let Some(m) = market {
+                    map.insert("market".to_owned(), json!(m.get()));
+                }
+            }
+            v
+        }
+        Command::HaltAll => json!({"seq": seq, "cmd": "halt_all"}),
+    }
+}
+
 /// Add `key: hex` to an event object when the digest is present (docs/protocol.md §6).
 fn with_digest(mut v: Value, key: &str, d: Option<Digest>) -> Value {
     if let (Some(d), Some(map)) = (d, v.as_object_mut()) {
@@ -451,17 +525,121 @@ pub fn outcome_from_name(name: &str) -> Option<Outcome> {
 /// The time in force with this wire name (`gtc`, `ioc`, `fok`).
 #[must_use]
 pub fn tif_from_name(name: &str) -> Option<TimeInForce> {
-    match name {
-        "gtc" => Some(TimeInForce::Gtc),
-        "ioc" => Some(TimeInForce::Ioc),
-        "fok" => Some(TimeInForce::Fok),
-        _ => None,
-    }
+    [TimeInForce::Gtc, TimeInForce::Ioc, TimeInForce::Fok]
+        .into_iter()
+        .find(|&t| tif_name(t) == name)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+
+    fn command() -> impl Strategy<Value = Command> {
+        let account = any::<u64>().prop_map(AccountId::new);
+        let market = any::<u32>().prop_map(MarketId::new);
+        let state = prop_oneof![
+            Just(MarketState::PreOpen),
+            Just(MarketState::Open),
+            Just(MarketState::Halted),
+            Just(MarketState::Closed),
+            Just(MarketState::Resolved),
+            Just(MarketState::Voided),
+        ];
+        let side = prop_oneof![Just(Side::Buy), Just(Side::Sell)];
+        let tif = prop_oneof![
+            Just(TimeInForce::Gtc),
+            Just(TimeInForce::Ioc),
+            Just(TimeInForce::Fok)
+        ];
+        let outcome = prop_oneof![Just(Outcome::Yes), Just(Outcome::No), Just(Outcome::Void)];
+        let digest = || prop::option::of(any::<[u8; 32]>().prop_map(Digest::new));
+        prop_oneof![
+            (market.clone(), digest())
+                .prop_map(|(market, rules_hash)| Command::CreateMarket { market, rules_hash }),
+            (market.clone(), state).prop_map(|(market, state)| Command::SetState { market, state }),
+            (
+                account.clone(),
+                market.clone(),
+                side,
+                any::<u8>(),
+                any::<u32>(),
+                tif,
+                any::<bool>(),
+                prop::option::of(any::<u64>())
+            )
+                .prop_map(
+                    |(account, market, side, price, qty, tif, post_only, client_order_id)| {
+                        Command::Place(NewOrder {
+                            account,
+                            market,
+                            side,
+                            price,
+                            qty,
+                            tif,
+                            post_only,
+                            client_order_id,
+                        })
+                    }
+                ),
+            (account.clone(), any::<u64>()).prop_map(|(account, o)| Command::Cancel {
+                account,
+                order: OrderId::new(o)
+            }),
+            (account.clone(), any::<u64>(), any::<u32>()).prop_map(|(account, o, qty)| {
+                Command::Amend {
+                    account,
+                    order: OrderId::new(o),
+                    qty,
+                }
+            }),
+            account
+                .clone()
+                .prop_map(|account| Command::OpenAccount { account }),
+            (market.clone(), outcome, digest()).prop_map(|(market, outcome, evidence_hash)| {
+                Command::Settle {
+                    market,
+                    outcome,
+                    evidence_hash,
+                }
+            }),
+            (prop::option::of(account), prop::option::of(market))
+                .prop_map(|(account, market)| Command::CancelAll { account, market }),
+            Just(Command::HaltAll),
+        ]
+    }
+
+    proptest! {
+        #[test]
+        fn command_json_is_the_inverse_of_parse_command(seq in any::<u64>(), c in command()) {
+            let line = command_json(seq, &c).to_string();
+            prop_assert_eq!(parse_command(&line), Ok((Some(seq), c)));
+        }
+    }
+
+    #[test]
+    fn optional_command_fields_are_absent_when_unset() {
+        assert_eq!(
+            command_json(
+                4,
+                &Command::CancelAll {
+                    account: None,
+                    market: Some(MarketId::new(2))
+                }
+            ),
+            json!({"seq": 4, "cmd": "cancel_all", "market": 2})
+        );
+        assert_eq!(
+            command_json(
+                5,
+                &Command::CreateMarket {
+                    market: MarketId::new(2),
+                    rules_hash: None
+                }
+            ),
+            json!({"seq": 5, "cmd": "create_market", "market": 2})
+        );
+    }
 
     const HEX: &str = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
 

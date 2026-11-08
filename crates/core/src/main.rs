@@ -13,6 +13,12 @@
 //!   Replay the whole journal from empty, without snapshots and without modifying anything.
 //!   Run the full invariant check, and print the state hash.
 //!
+//! `brier-core export --data DIR [--from SEQ]`
+//!   Print every journalled command from `SEQ` (default 1) as a wire command line with its
+//!   `seq`, without modifying anything: the input to surveillance (docs/surveillance.md).
+//!   Replaying the output through `brier-replay` or the reference engine rebuilds the same
+//!   state. A record still being written (a torn tail) is not printed.
+//!
 //! `brier-core sync-bench --data DIR --count N`
 //!   Time N append-and-sync cycles of 4 KiB each (the durability note's sync cost).
 
@@ -28,7 +34,7 @@ use brier_core::{Committed, CoreConfig, CoreError, Recovery, start};
 use brier_engine::{Command, Engine, Sequenced};
 use brier_journal::{JournalError, JournalWriter, SEGMENT_BYTES, read_journal};
 use brier_types::{AccountId, Seq};
-use brier_wire::{event_json, parse_command};
+use brier_wire::{command_json, event_json, parse_command};
 use serde_json::json;
 use tokio::sync::oneshot;
 
@@ -174,6 +180,19 @@ fn verify(data: &Path) -> Result<(), Failure> {
     Ok(())
 }
 
+fn export(data: &Path, from: u64) -> Result<(), Failure> {
+    let stdout = io::stdout();
+    let mut out = BufWriter::new(stdout.lock());
+    read_journal::<Failure>(data, |seq, command| {
+        if seq.get() >= from {
+            writeln!(out, "{}", command_json(seq.get(), &command))?;
+        }
+        Ok(())
+    })?;
+    out.flush()?;
+    Ok(())
+}
+
 fn sync_bench(data: &Path, count: u64) -> Result<(), Failure> {
     std::fs::create_dir_all(data)?;
     let mut journal = JournalWriter::open(data, Seq::FIRST)?;
@@ -220,7 +239,7 @@ fn run() -> Result<(), Failure> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         Failure::Usage(
-            "usage: brier-core serve --data DIR [--snapshot-every N] [--segment-bytes N] | verify --data DIR | sync-bench --data DIR --count N"
+            "usage: brier-core serve --data DIR [--snapshot-every N] [--segment-bytes N] | verify --data DIR | export --data DIR [--from SEQ] | sync-bench --data DIR --count N"
                 .to_owned(),
         )
     };
@@ -239,6 +258,7 @@ fn run() -> Result<(), Failure> {
             serve(config)
         }
         Some("verify") => verify(&data),
+        Some("export") => export(&data, number("--from", 1)?),
         Some("sync-bench") => sync_bench(&data, number("--count", 1_000)?),
         _ => Err(usage()),
     }
