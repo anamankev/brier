@@ -104,7 +104,7 @@ export function TradePanel({
         <span>Contracts</span>
         <div className="input-adorn">
           <input type="number" inputMode="numeric" min={1} max={25000} value={qty} onChange={(e) => setQty(Number(e.target.value))} />
-          <span className="unit">contracts</span>
+          <span className="unit" aria-hidden="true">contracts</span>
         </div>
       </label>
       <div className="quick" aria-label="Add contracts">
@@ -118,7 +118,7 @@ export function TradePanel({
         <span>Limit price for {word}</span>
         <div className="input-adorn">
           <input type="number" inputMode="numeric" min={1} max={99} value={price} onChange={(e) => setPrice(Number(e.target.value))} />
-          <span className="unit">¢</span>
+          <span className="unit" aria-hidden="true">¢</span>
         </div>
       </label>
       <label className="field">

@@ -9,6 +9,8 @@ export const WEB_PORT = 3100;
 export const GATEWAY = `http://127.0.0.1:${GATEWAY_PORT}`;
 export const PASSWORD = "a long enough password";
 export const STATE_FILE = join(__dirname, ".state.json");
+export const NEWCOMER_SESSION = join(__dirname, ".newcomer-session.json");
+const USED_STEPS = join(__dirname, ".totp-steps.json");
 
 export type StackState = {
   pid: number;
@@ -65,6 +67,37 @@ export function totp(secret: string, offset = 0): string {
   const o = digest[digest.length - 1]! & 0x0f;
   const word = digest.readUInt32BE(o) & 0x7fffffff;
   return String(word % 1_000_000).padStart(6, "0");
+}
+
+function usedSteps(): Record<string, number> {
+  try {
+    return JSON.parse(readFileSync(USED_STEPS, "utf8")) as Record<string, number>;
+  } catch {
+    return {};
+  }
+}
+
+/** Remember that `user` has used TOTP step `step` (the gateway accepts each step once). */
+export function recordStep(user: string, step: number): void {
+  writeFileSync(USED_STEPS, JSON.stringify({ ...usedSteps(), [user]: step }));
+}
+
+export function currentStep(): number {
+  return Math.floor(Date.now() / 1000 / 30);
+}
+
+/** A code `user` has not used yet: the earliest acceptable step (one either side of now) after
+ * the last one used, waiting for the clock if all three are spent. */
+export async function freshTotp(user: string, secret: string): Promise<string> {
+  for (;;) {
+    const now = currentStep();
+    const step = Math.max(now - 1, (usedSteps()[user] ?? -Infinity) + 1);
+    if (step <= now + 1) {
+      recordStep(user, step);
+      return totp(secret, step - now);
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
 }
 
 export async function call<T = unknown>(method: string, path: string, token?: string, body?: unknown): Promise<T> {

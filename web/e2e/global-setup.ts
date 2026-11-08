@@ -2,11 +2,13 @@ import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { GATEWAY_PORT, PASSWORD, STATE_FILE, call, instant, totp, type StackState } from "./stack";
+import { rmSync } from "node:fs";
+import { GATEWAY_PORT, PASSWORD, STATE_FILE, call, currentStep, freshTotp, instant, recordStep, type StackState } from "./stack";
 
 const ROOT = resolve(__dirname, "../..");
 
 export default async function setup(): Promise<void> {
+  for (const f of [".totp-steps.json", ".newcomer-session.json"]) rmSync(join(__dirname, f), { force: true });
   const db = process.env.BRIER_TEST_DATABASE_URL;
   if (!db) throw new Error("set BRIER_TEST_DATABASE_URL (make db-url) for the browser tests");
   const target = join(ROOT, "target", "test-clock");
@@ -51,8 +53,9 @@ export default async function setup(): Promise<void> {
   for (const [name, role] of [["ada", "admin"], ["cyd", "admin"], ["tom", undefined]] as const) await register(name, role);
   for (const name of ["ada", "cyd"]) {
     const { secret } = await call<{ secret: string }>("POST", "/v1/totp/setup", users[name]!.token);
-    await call("POST", "/v1/totp/enable", users[name]!.token, { code: totp(secret) });
-    const { token } = await call<{ token: string }>("POST", "/v1/login", undefined, { username: name, password: PASSWORD, totp: totp(secret, 1) });
+    recordStep(name, currentStep() - 2);
+    await call("POST", "/v1/totp/enable", users[name]!.token, { code: await freshTotp(name, secret) });
+    const { token } = await call<{ token: string }>("POST", "/v1/login", undefined, { username: name, password: PASSWORD, totp: await freshTotp(name, secret) });
     users[name] = { token, secret };
   }
 
