@@ -41,6 +41,12 @@ pub const MAX_EVIDENCE_BYTES: usize = 4 * 1_024;
 /// How far an evidence record's retrieval time may be ahead of the gateway's clock.
 pub const MAX_CLOCK_SKEW: Unix = 300;
 
+/// How long after the proposal's evidence the verifying re-fetch must be (automatic review).
+pub const VERIFY_AFTER: Unix = 600;
+/// The dispute window for an automatically confirmed market that traded a week or less.
+pub const SHORT_DISPUTE_WINDOW: Unix = 3_600;
+const WEEK: Unix = 7 * 86_400;
+
 const VOID_CONDITIONS: [&str; 2] = ["no_value_by_deadline", "source_discontinued"];
 
 #[derive(Deserialize)]
@@ -246,6 +252,158 @@ pub async fn confirm(State(s): Shared, Path(raw): Path<String>, req: Req) -> Api
         "confirm_resolution",
         &json!({ "resolution": id, "market": market, "dispute_until": iso(until) }),
         reason,
+    )
+    .await?;
+    Ok(
+        Json(json!({ "resolution": id, "state": "confirmed", "dispute_until": iso(until) }))
+            .into_response(),
+    )
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VerifyBody {
+    evidence: Value,
+}
+
+/// The proposal a re-fetch may verify: its market, outcome, and evidence record, or why not.
+async fn verifiable(s: &AppState, id: i64) -> Result<(i64, String, String), ApiError> {
+    let r = s
+        .db
+        .query_opt(
+            "SELECT r.market, r.state, r.outcome, b.review, e.canonical, r.verify_mismatch IS NOT NULL \
+             FROM resolutions r JOIN rulebooks b ON b.market = r.market JOIN evidence e ON e.evidence_hash = r.evidence_hash \
+             WHERE r.id = $1",
+            &[&id],
+        )
+        .await?
+        .ok_or_else(|| ApiError::not_found("no such resolution"))?;
+    let (market_col, state, outcome, review, proposal, mismatched): (
+        i64,
+        String,
+        String,
+        String,
+        String,
+        bool,
+    ) = (r.get(0), r.get(1), r.get(2), r.get(3), r.get(4), r.get(5));
+    if review != "automatic" {
+        return Err(ApiError::conflict(
+            "this market's rulebook needs an admin to confirm (review = manual)",
+        ));
+    }
+    if state != "proposed" {
+        return Err(ApiError::conflict(format!(
+            "only a proposed resolution can be verified; this one is {state}"
+        )));
+    }
+    if outcome == "void" {
+        return Err(ApiError::conflict(
+            "a void outcome is always confirmed by an admin",
+        ));
+    }
+    if mismatched {
+        return Err(ApiError::conflict(
+            "an earlier re-fetch disagreed with this proposal; an admin decides",
+        ));
+    }
+    Ok((market_col, outcome, proposal))
+}
+
+/// `POST /v1/resolutions/{id}/verify`: confirm a proposal on a market with automatic review by
+/// an independent re-fetch (resolver or admin role).
+///
+/// The re-fetch's evidence must be retrieved at least [`VERIFY_AFTER`] after the proposal's. If
+/// it computes the same outcome, the resolution is confirmed, with a dispute window of
+/// [`SHORT_DISPUTE_WINDOW`] for a market that traded a week or less and the usual window
+/// otherwise. If it disagrees, it is kept and only an admin can confirm from then on. A void
+/// outcome is never confirmed automatically.
+pub async fn verify(State(s): Shared, Path(raw): Path<String>, req: Req) -> ApiResult {
+    let id: i64 = parse_id(&raw, "resolution")?;
+    let user = req.user(&s, true).await?;
+    if !matches!(user.role, Role::Resolver | Role::Admin) {
+        return Err(ApiError::forbidden_because(
+            "verifying a resolution needs the resolver or admin role",
+        ));
+    }
+    let b: VerifyBody = req.json()?;
+    let (market_col, outcome, proposal) = verifiable(&s, id).await?;
+    let market = MarketId::new(u32::try_from(market_col).map_err(|e| ApiError::internal(&e))?);
+    let l = listing(&s, market)
+        .await?
+        .ok_or_else(|| ApiError::internal(&"a resolution without a rulebook"))?;
+    let proposed_at = serde_json::from_str::<Value>(&proposal)
+        .ok()
+        .and_then(|v| {
+            v.get("retrieved_at")
+                .and_then(Value::as_str)
+                .and_then(instant)
+        })
+        .ok_or_else(|| ApiError::internal(&"stored evidence without retrieved_at"))?;
+    let theirs = b
+        .evidence
+        .get("outcome")
+        .and_then(Value::as_str)
+        .filter(|o| ["yes", "no", "void"].contains(o))
+        .ok_or_else(|| ApiError::bad_request("evidence: outcome must be yes, no, or void"))?
+        .to_owned();
+    let now = s.clock.now();
+    let (record, hash) = check_evidence(
+        &b.evidence,
+        market,
+        &l.rules_hash.to_hex(),
+        &theirs,
+        proposed_at.saturating_add(VERIFY_AFTER),
+        now,
+    )?;
+    s.db.execute(
+        "INSERT INTO evidence (evidence_hash, market, canonical, submitted_by) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+        &[&hash.as_slice(), &market_col, &record, &user.id],
+    )
+    .await?;
+    let agreed = theirs == outcome;
+    if !agreed {
+        s.db.execute(
+            "UPDATE resolutions SET verify_mismatch = $2 WHERE id = $1 AND state = 'proposed'",
+            &[&id, &hash.as_slice()],
+        )
+        .await?;
+        audit::record(
+            &s,
+            Actor::User(user.id),
+            "verify_resolution",
+            &json!({ "resolution": id, "market": market_col, "agreed": false, "evidence_hash": hex(&hash) }),
+            "independent re-fetch disagreed",
+        )
+        .await?;
+        return Err(ApiError::conflict(format!(
+            "the re-fetch computed {theirs}, the proposal {outcome}: an admin decides"
+        )));
+    }
+    let window = if l.close.saturating_sub(l.open) <= WEEK {
+        SHORT_DISPUTE_WINDOW
+    } else {
+        s.dispute_window
+    };
+    let until = now.saturating_add(window);
+    let changed = s
+        .db
+        .execute(
+            "UPDATE resolutions SET state = 'confirmed', verified_by = $2, confirmed_at = to_timestamp($3::bigint), dispute_until = to_timestamp($4::bigint) \
+             WHERE id = $1 AND state = 'proposed' AND verify_mismatch IS NULL",
+            &[&id, &hash.as_slice(), &now, &until],
+        )
+        .await?;
+    if changed != 1 {
+        return Err(ApiError::conflict(
+            "the resolution changed while it was being verified",
+        ));
+    }
+    audit::record(
+        &s,
+        Actor::User(user.id),
+        "verify_resolution",
+        &json!({ "resolution": id, "market": market_col, "agreed": true, "evidence_hash": hex(&hash), "dispute_until": iso(until) }),
+        "independent re-fetch agreed",
     )
     .await?;
     Ok(
@@ -503,7 +661,7 @@ pub async fn queue(State(s): Shared, req: Req) -> ApiResult {
         .db
         .query(
             "SELECT r.id, r.market, b.canonical::jsonb ->> 'title', r.outcome, r.void_condition, r.state, \
-                    r.proposed_by = $1, u.username, extract(epoch FROM r.dispute_until)::bigint, r.evidence_hash \
+                    r.proposed_by = $1, u.username, extract(epoch FROM r.dispute_until)::bigint, r.evidence_hash, r.verify_mismatch \
              FROM resolutions r JOIN rulebooks b ON b.market = r.market JOIN users u ON u.id = r.proposed_by \
              WHERE r.state IN ('proposed', 'confirmed', 'settling') ORDER BY r.id",
             &[&user.id],
@@ -527,6 +685,7 @@ pub async fn queue(State(s): Shared, req: Req) -> ApiResult {
                 "yours": r.get::<_, bool>(6), "proposed_by": r.get::<_, &str>(7),
                 "dispute_until": r.get::<_, Option<i64>>(8).map_or(Value::Null, iso),
                 "evidence_hash": hex(r.get::<_, &[u8]>(9)),
+                "verify_mismatch": r.get::<_, Option<&[u8]>>(10).map(hex),
             })
         })
         .collect();

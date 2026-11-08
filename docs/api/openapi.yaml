@@ -466,6 +466,28 @@ paths:
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
+  /v1/resolutions/{id}/verify:
+    post:
+      tags: [resolution]
+      summary: Confirm a proposal on a market with automatic review by an independent re-fetch (resolver or admin role), retrieved at least 10 minutes after the proposal's; a disagreeing re-fetch is kept and the proposal then needs an admin
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [evidence], properties: { evidence: { type: object } } }
+      responses:
+        '200':
+          description: Confirmed
+          content:
+            application/json:
+              schema: { type: object, required: [resolution, state, dispute_until], properties: { resolution: { type: integer }, state: { type: string, enum: [confirmed] }, dispute_until: { type: string, format: date-time } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
   /v1/resolutions/{id}/disputes:
     post:
       tags: [resolution]

@@ -76,3 +76,14 @@ One module per source; each builds the request for a rulebook and parses the res
 
 ## Error codes
 `invalid_rulebook` (400; the message starts with the rulebook error code), `forbidden` (403: wrong role, four eyes, or no position to dispute), `not_found` (404), `conflict` (409: the state does not allow it), `too_early` (409: before the open, release, or deadline time). Engine rejections keep their codes (422, `docs/protocol.md`).
+
+## Automatic review (G9)
+A schema 2 rulebook on a machine-checkable series may say `review = "automatic"`.
+- **Confirmation without a second admin.**
+  - A resolver re-fetches the source at least 10 minutes after the proposal's fetch.
+  - It sends its own evidence record to `POST /v1/resolutions/{id}/verify`.
+  - If the re-fetch computes the same outcome, the gateway confirms the resolution with that record as the confirmation (`verified_by`), in place of a second admin.
+- **The dispute window** is 1 hour for a market that traded a week or less, and the usual window otherwise. Disputes work exactly as for manual review.
+- **A re-fetch that disagrees is kept** (`verify_mismatch`, shown in the admin queue). From then on only an admin can confirm or withdraw.
+- **A void outcome is never confirmed automatically.**
+- **Why two fetches:** one fetch can catch a source mid-update or a transient error page that still parses. Two fetches at least 10 minutes apart that agree are the machine version of four eyes. They do not protect against a source that publishes a wrong number and keeps it; the dispute window does.

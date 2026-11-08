@@ -274,6 +274,7 @@ endpoints! {
     GET "/v1/markets/{id}/resolution" => resolution::get,
     POST "/v1/markets/{id}/resolution" => resolution::propose,
     POST "/v1/resolutions/{id}/disputes" => resolution::dispute,
+    POST "/v1/resolutions/{id}/verify" => resolution::verify,
     PUT "/v1/markets/{id}/forecast" => forecasts::put,
     GET "/v1/forecasts" => forecasts::mine,
     GET "/v1/scorecard" => forecasts::scorecard,
