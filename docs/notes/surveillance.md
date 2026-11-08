@@ -94,5 +94,13 @@ The detectors measure time in market commands: the commands that concern a marke
 | Marking the close: window n | the last 60 market commands before the close |
 | Insider-like: window n | the last 180 market commands before the close |
 
+## 3b. Second amendment, 7 November 2026, before any simulation ran
+Writing the agents settled four more details. Nothing in §2 or §3a's detector parameters changes.
+
+1. **Where the wash order rests.** §3a put it at the last trade price. In these markets, that price is almost always the maker's own bid or ask, so the other account's order would trade with the maker first, and the episode would not be a wash trade. The resting order goes instead at the price strictly inside the spread nearest the last trade price, which is within a tick or two of it, as §3 intended. A step with no price inside the spread has no episode, and the episode moves to the next step.
+2. **The informed flow.** As with noise, the three informed accounts share the market-maker study's flow: each step, with probability 0.15, one of them, chosen uniformly at random, arrives.
+3. **The late informed trader** is a fourth informed account, separate from the three, with its own rates (§3a).
+4. **The closer's early position.** At a step uniform in 20-100, it sends one immediate-or-cancel buy of 20-60 contracts priced 2 ticks above the best ask.
+
 ## 4. Results
 Not yet run.
