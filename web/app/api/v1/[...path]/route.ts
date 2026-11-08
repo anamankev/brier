@@ -13,7 +13,7 @@ async function forward(req: NextRequest, ctx: { params: Promise<{ path: string[]
   const headers: Record<string, string> = { "content-type": "application/json", ...(await proxyHeaders()) };
   const token = await sessionToken();
   if (token) headers.authorization = `Bearer ${token}`;
-  const body = req.method === "GET" || req.method === "DELETE" ? undefined : await req.text();
+  const body = req.method === "GET" ? undefined : (await req.text()) || undefined;
   const res = await fetch(target, { method: req.method, headers, body, cache: "no-store" });
   const text = await res.text();
   return new NextResponse(text || null, {

@@ -22,6 +22,7 @@ U8_MAX: Final = 2**8 - 1
 U32_MAX: Final = 2**32 - 1
 U64_MAX: Final = 2**64 - 1
 SIGNUP_GRANT: Final = 1_000_000  # credit-cents (G2 plan)
+ALLOWANCE: Final = 10_000  # credit-cents, the daily allowance (G10 U2)
 MAX_RESTING_ORDERS: Final = 1_000  # GTC orders per account (G2 plan)
 CLIENT_ID_WINDOW: Final = 10_000  # accepted client order IDs remembered per account
 
@@ -45,6 +46,7 @@ COMMANDS: Final = {
     "settle",
     "cancel_all",
     "halt_all",
+    "allowance",
 }
 
 Event = dict[str, Any]
@@ -180,6 +182,8 @@ class ReferenceEngine:
                 _optional_int_field(cmd, "account", U64_MAX),
                 _optional_int_field(cmd, "market", U32_MAX),
             )
+        elif kind == "allowance":
+            events = self._allowance(_int_field(cmd, "account", U64_MAX))
         else:
             events = self._halt_all()
         events.extend(self._finish_command())
@@ -265,6 +269,13 @@ class ReferenceEngine:
             {"ev": "account_opened", "account": account, "cash": SIGNUP_GRANT},
             _entry("grant", [("issuance", -SIGNUP_GRANT), (f"cash:{account}", SIGNUP_GRANT)]),
         ]
+
+    def _allowance(self, account: int) -> list[Event]:
+        if account not in self.cash:
+            return [{"ev": "rejected", "reason": "unknown_account"}]
+        self.cash[account] += ALLOWANCE
+        self.issuance -= ALLOWANCE
+        return [_entry("grant", [("issuance", -ALLOWANCE), (f"cash:{account}", ALLOWANCE)])]
 
     def _set_state(self, market: int, state: str) -> list[Event]:
         if market not in self.states:

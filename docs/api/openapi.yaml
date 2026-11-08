@@ -91,13 +91,65 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [user_id, username]
+                required: [user_id, username, recovery_codes]
                 properties:
                   user_id: { type: integer, description: Also the engine account ID }
                   username: { type: string }
+                  recovery_codes:
+                    type: array
+                    items: { type: string, pattern: '^[A-Z2-7]{4}(-[A-Z2-7]{4}){3}$' }
+                    description: Ten one-time codes that reset a lost password (POST /v1/recover). Shown only here; Brier keeps their hashes.
         '400': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/recover:
+    post:
+      tags: [identity]
+      summary: Set a new password with a recovery code; the code is used up and every session ends
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [username, code, new_password]
+              properties:
+                username: { type: string }
+                code: { type: string, description: 'A recovery code; case, spaces and dashes are ignored' }
+                new_password: { type: string, minLength: 12, maxLength: 256 }
+                totp: { type: string, pattern: '^[0-9]{6}$', description: 'Required when TOTP is on: a recovery code replaces the password, not the second factor' }
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [codes_left]
+                properties:
+                  codes_left: { type: integer, description: Unused recovery codes left }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /v1/recovery-codes:
+    post:
+      tags: [identity]
+      summary: Replace the caller's recovery codes with ten new ones (the old ones stop working)
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: The new codes, shown only here
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recovery_codes]
+                properties:
+                  recovery_codes: { type: array, items: { type: string } }
+        '401': { $ref: '#/components/responses/Error' }
   /v1/login:
     post:
       tags: [identity]
@@ -190,6 +242,133 @@ paths:
                   role: { enum: [trader, admin, resolver] }
                   totp: { type: boolean, description: 'TOTP is on for this account' }
                   signed_in_with_totp: { type: boolean, description: 'This request carries the second factor (needed for admin actions)' }
+        '401': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [identity]
+      summary: Delete the caller's account
+      description: >-
+        Needs the password. Open orders are cancelled. Positions stay in the ledger under the name
+        deleted_N and still settle (conservation needs them), but the username, password, TOTP,
+        recovery codes, API keys and login signals are removed, and the name is free for reuse.
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [password]
+              properties:
+                password: { type: string }
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /v1/me/export:
+    get:
+      tags: [identity]
+      summary: Everything Brier holds about the caller, as JSON
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: >-
+            The profile (with the age and terms confirmations), balance, order events, fills,
+            forecasts and API keys
+          content:
+            application/json:
+              schema: { type: object }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/allowance:
+    get:
+      tags: [identity]
+      summary: Whether the caller has claimed today's allowance (UTC days, by the exchange's clock)
+      responses:
+        '200':
+          description: Today's allowance
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [amount, claimed_today, next_at]
+                properties:
+                  amount: { type: integer, description: 'Credits (cents) a claim grants: 10000' }
+                  claimed_today: { type: boolean }
+                  next_at: { type: string, format: date-time, description: When the next UTC day starts }
+        '401': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [identity]
+      summary: Claim today's allowance, a grant from issuance journaled as a command (409 if already claimed today)
+      responses:
+        '201':
+          description: Granted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [granted, seq, next_at]
+                properties:
+                  granted: { type: integer, description: Credits (cents) }
+                  seq: { type: integer, description: The journaled grant }
+                  next_at: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /v1/users/{name}:
+    get:
+      tags: [market data]
+      summary: A public profile
+      description: >-
+        When the user joined, their settled trading profit (credits, cents), markets traded,
+        contracts traded, scored markets and average skill, open positions (unsettled markets;
+        + YES, − NO, with the cash paid or received), and recent trades with their own side.
+        From the read models. Deleted accounts are not found.
+      security: []
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 30 } }
+      responses:
+        '200':
+          description: The profile
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /v1/notifications:
+    get:
+      tags: [identity]
+      summary: The caller's recent fills, settlements of markets they traded, and allowance grants, newest first, with the unread count
+      responses:
+        '200':
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [as_of, seen_seq, unread, items]
+                properties:
+                  as_of: { type: integer }
+                  seen_seq: { type: integer }
+                  unread: { type: integer }
+                  items: { type: array, items: { type: object } }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/notifications/seen:
+    post:
+      tags: [identity]
+      summary: Mark notifications up to a sequence number as read (never moves back)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [seq]
+              properties:
+                seq: { type: integer, minimum: 0 }
+      responses:
+        '204': { description: Marked }
+        '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
   /v1/logout:
     post:
@@ -656,6 +835,42 @@ paths:
                     items:
                       type: array
                       prefixItems: [{ $ref: '#/components/schemas/Instant' }, { $ref: '#/components/schemas/Price' }]
+  /v1/markets/{id}/holders:
+    get:
+      tags: [market data]
+      summary: The ten largest YES and NO positions in the market, by username
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Holders
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [as_of, market, 'yes', 'no']
+                properties:
+                  as_of: { type: integer }
+                  market: { type: integer }
+                  'yes': { type: array, items: { type: object, properties: { username: { type: string }, contracts: { type: integer } } } }
+                  'no': { type: array, items: { type: object, properties: { username: { type: string }, contracts: { type: integer } } } }
+        '400': { $ref: '#/components/responses/Error' }
+  /v1/markets/{id}/activity:
+    get:
+      tags: [market data]
+      summary: The market's recent trades with the taker's username and the time each was recorded, newest first
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 30 } }
+      responses:
+        '200':
+          description: Trades
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/Error' }
   /v1/markets/{id}/trades:
     get:
       tags: [market data]
@@ -1183,6 +1398,33 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
+  /v1/admin/users/{id}/close:
+    post:
+      tags: [administration]
+      summary: Close a trader account that broke the house rules (admin with TOTP; audited)
+      description: >-
+        The same as the user deleting it: open orders cancelled, every way to sign in removed,
+        personal data erased; positions stay in the ledger under deleted_N. Admin and service
+        accounts cannot be closed this way (409).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { $ref: '#/components/schemas/Reason' }
+      responses:
+        '204': { description: Closed }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
   /v1/admin/cancel-all:
     post:
       tags: [administration]
@@ -1346,7 +1588,7 @@ components:
       description: |
         Gateway codes: bad_request (400), invalid_rulebook (400; the message starts with the
         rulebook error code, docs/rulebook.md), unauthorized (401), totp_required (401: this account needs its TOTP code), forbidden (403; also an admin action from a sign-in without TOTP), not_found
-        (404), username_taken (409), conflict (409: the state does not allow this), too_early
+        (404), adult_required (400: sign-up needs adult: true), terms_required (400: sign-up needs the current terms version), username_taken (409), too_many_signups (429: the day's sign-ups from this network), signups_paused (503: the exchange's sign-ups for the day), conflict (409: the state does not allow this), too_early
         (409: allowed later, such as before a release time), too_large (413), rate_limited (429),
         too_many_in_flight (429, WebSocket only), unavailable (503), timeout (504). Every other
         code is an engine reject reason (422, docs/protocol.md).
@@ -1356,6 +1598,10 @@ components:
         - forbidden
         - not_found
         - username_taken
+        - adult_required
+        - terms_required
+        - too_many_signups
+        - signups_paused
         - too_large
         - rate_limited
         - too_many_in_flight
@@ -1413,10 +1659,12 @@ components:
     Credentials:
       type: object
       additionalProperties: false
-      required: [username, password]
+      required: [username, password, adult, terms]
       properties:
         username: { type: string, pattern: '^[a-z0-9_]{3,32}$' }
         password: { type: string, minLength: 12, maxLength: 256 }
+        adult: { type: boolean, description: 'The user confirms they are 18 or older; must be true (400 adult_required)' }
+        terms: { type: string, description: 'The version of the terms of use the user accepts; must be the current one, 2026-11-08 (400 terms_required)' }
     Reason:
       type: string
       minLength: 3

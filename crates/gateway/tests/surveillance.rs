@@ -63,7 +63,7 @@ async fn logins_link_accounts_and_cases_are_opened_and_closed() {
             Method::POST,
             "/v1/register",
             None,
-            Some(json!({ "username": name, "password": PW })),
+            Some(json!({ "username": name, "password": PW, "adult": true, "terms": "2026-11-08" })),
         )
         .await;
         assert_eq!(status, StatusCode::CREATED, "{body}");

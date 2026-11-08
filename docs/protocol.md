@@ -32,6 +32,7 @@ The first failing check names the rejection. A rejected command changes nothing.
 | `settle` | market, outcome (`yes`, `no`, `void`), evidence_hash? | `unknown_market`, `invalid_transition` (the market must be `closed`) | Pays out every position; the market becomes `resolved` or `voided` |
 | `cancel_all` | account?, market? | `unknown_account`, `unknown_market` | Cancels every matching resting order; with neither field, all of them |
 | `halt_all` | none | none | Every `open` market becomes `halted` |
+| `allowance` | account | `unknown_account` | Grants `ALLOWANCE` = 10,000 from issuance (one `grant` entry). The gateway allows one claim per account per UTC day (G10) |
 
 Notes on the checks:
 - `unknown_order` covers an order that never existed, has already gone, or belongs to another account, so other accounts' orders are never revealed. Cancel and amend from an account that doesn't exist also answer `unknown_order`.

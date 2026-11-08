@@ -52,6 +52,11 @@ export function SignInForm() {
       <button className="btn primary block" type="submit">
         Log in
       </button>
+      <p className="muted" style={{ margin: "-6px 0 0", fontSize: 14, textAlign: "right" }}>
+        <a className="link" href="/recover">
+          Forgot your password?
+        </a>
+      </p>
       <div aria-live="assertive">{error && <p className="notice error">{error}</p>}</div>
       <p className="muted" style={{ margin: 0, fontSize: 14 }}>
         New here? <a className="link" href="/register">Create an account</a> and get 10,000 play credits.

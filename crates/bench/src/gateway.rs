@@ -424,7 +424,7 @@ fn one_run(url: &str, run: usize, plan: Plan) -> Run {
                 "POST",
                 "/v1/register",
                 None,
-                &json!({ "username": name, "password": PASSWORD }),
+                &json!({ "username": name, "password": PASSWORD, "adult": true, "terms": "2026-11-08" }),
             )
             .await;
             if i == 0 {

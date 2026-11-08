@@ -50,6 +50,15 @@ const MIGRATIONS: &[(&str, &str)] = &[
         include_str!("../migrations/0009_automatic_review.sql"),
     ),
     ("0010_lister", include_str!("../migrations/0010_lister.sql")),
+    (
+        "0011_public_accounts",
+        include_str!("../migrations/0011_public_accounts.sql"),
+    ),
+    (
+        "0012_allowance",
+        include_str!("../migrations/0012_allowance.sql"),
+    ),
+    ("0013_social", include_str!("../migrations/0013_social.sql")),
 ];
 
 /// Arbitrary but fixed key for the advisory lock that serializes migrations across processes.
@@ -345,6 +354,14 @@ impl Projector {
                     &f.price,
                     &f.qty,
                 ],
+            )
+            .await?;
+        }
+        // When these fills were first projected (`fill_times`; the journal has no clock).
+        if let (Some(first), Some(last)) = (fills.first(), fills.last()) {
+            tx.execute(
+                "INSERT INTO fill_times (seq) SELECT DISTINCT seq FROM fills WHERE seq BETWEEN $1 AND $2 ON CONFLICT DO NOTHING",
+                &[&first.seq, &last.seq],
             )
             .await?;
         }

@@ -90,6 +90,9 @@ enum WireCommand {
         market: Option<u32>,
     },
     HaltAll,
+    Allowance {
+        account: u64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -217,6 +220,9 @@ fn to_command(w: WireCommand) -> Result<Command, WireError> {
             market: market.map(MarketId::new),
         },
         WireCommand::HaltAll => Command::HaltAll,
+        WireCommand::Allowance { account } => Command::Allowance {
+            account: AccountId::new(account),
+        },
     })
 }
 
@@ -291,6 +297,9 @@ pub fn command_json(seq: u64, c: &Command) -> Value {
             v
         }
         Command::HaltAll => json!({"seq": seq, "cmd": "halt_all"}),
+        Command::Allowance { account } => {
+            json!({"seq": seq, "cmd": "allowance", "account": account.get()})
+        }
     }
 }
 
@@ -603,9 +612,12 @@ mod tests {
                     evidence_hash,
                 }
             }),
-            (prop::option::of(account), prop::option::of(market))
+            (prop::option::of(account.clone()), prop::option::of(market))
                 .prop_map(|(account, market)| Command::CancelAll { account, market }),
             Just(Command::HaltAll),
+            account
+                .clone()
+                .prop_map(|account| Command::Allowance { account }),
         ]
     }
 

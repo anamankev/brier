@@ -137,7 +137,7 @@ def users(env: dict[str, str]) -> dict[str, Session]:
     else:
         saved = {"password": secrets.token_urlsafe(18), "roles": {"lister": "lister", "rex": "resolver", "maker": None, "ada": "admin"}}
         for name, role in saved["roles"].items():
-            RestClient(BASE).request("POST", "/v1/register", {"username": name, "password": saved["password"]})
+            RestClient(BASE).request("POST", "/v1/register", {"username": name, "password": saved["password"], "adult": True, "terms": "2026-11-08"})
             if role:
                 subprocess.run([env["binary"], "role", name, role, "G9 live run"], env=env, check=True, capture_output=True)  # noqa: S603
         admin = RestClient(BASE)

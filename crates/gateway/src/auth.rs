@@ -120,6 +120,26 @@ pub fn verify_password(password: &str, stored: &str) -> bool {
             .is_ok()
 }
 
+/// [`hash_password`] off the async runtime.
+///
+/// # Errors
+/// As [`hash_password`].
+pub async fn hash_password_blocking(password: String) -> Result<String, ApiError> {
+    tokio::task::spawn_blocking(move || hash_password(&password))
+        .await
+        .map_err(|e| ApiError::internal(&e))?
+}
+
+/// [`verify_password`] off the async runtime.
+///
+/// # Errors
+/// [`ApiError`] if the blocking task fails.
+pub async fn verify_password_blocking(password: String, stored: String) -> Result<bool, ApiError> {
+    tokio::task::spawn_blocking(move || verify_password(&password, &stored))
+        .await
+        .map_err(|e| ApiError::internal(&e))
+}
+
 fn check_password_length(password: &str) -> Result<(), ApiError> {
     if (MIN_PASSWORD_LEN..=MAX_PASSWORD_LEN).contains(&password.chars().count()) {
         Ok(())

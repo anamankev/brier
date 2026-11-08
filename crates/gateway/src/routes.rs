@@ -48,7 +48,7 @@ pub struct Req {
     method: Method,
     uri: Uri,
     headers: HeaderMap,
-    ip: IpAddr,
+    pub(crate) ip: IpAddr,
     /// The client address to record as a login signal, if the gateway knows it
     /// ([`crate::LoginAddress`]).
     pub(crate) signal: Option<IpAddr>,
@@ -141,9 +141,13 @@ async fn blocking<T: Send + 'static>(
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Credentials {
+struct Registration {
     username: String,
     password: String,
+    /// The user confirms they are 18 or older.
+    adult: bool,
+    /// The version of the terms the user accepts ([`crate::account::TERMS_VERSION`]).
+    terms: String,
 }
 
 #[derive(Deserialize)]
@@ -197,8 +201,18 @@ pub async fn register(State(s): Shared, req: Req) -> ApiResult {
     if !s.auth_limits.allow(req.ip) {
         return Err(ApiError::rate_limited());
     }
-    let Credentials { username, password } = req.json()?;
+    let Registration {
+        username,
+        password,
+        adult,
+        terms,
+    } = req.json()?;
     check_username(&username)?;
+    let address = match (s.totp_key, req.signal) {
+        (Some(key), Some(ip)) => Some(crate::surveillance::address_hash(&key, ip)?),
+        _ => None,
+    };
+    crate::account::check_signup(&s.db, adult, &terms, address.as_ref()).await?;
     let hash = blocking(move || auth::hash_password(&password)).await??;
     let row = s
         .db
@@ -217,9 +231,11 @@ pub async fn register(State(s): Shared, req: Req) -> ApiResult {
             .await?;
         return Err(e);
     }
+    crate::account::record_signup(&s, user.id, address).await?;
+    let codes = crate::account::new_codes(&s.db, user.id).await?;
     Ok((
         StatusCode::CREATED,
-        Json(json!({ "user_id": user.id, "username": username })),
+        Json(json!({ "user_id": user.id, "username": username, "recovery_codes": codes })),
     )
         .into_response())
 }
@@ -280,7 +296,12 @@ pub async fn login(State(s): Shared, req: Req) -> ApiResult {
 
 /// Accept `code` for this user once: it must match a step within one of now, and be later than
 /// the last step accepted.
-async fn check_totp(s: &AppState, user: i64, stored: &[u8], code: &str) -> Result<(), ApiError> {
+pub(crate) async fn check_totp(
+    s: &AppState,
+    user: i64,
+    stored: &[u8],
+    code: &str,
+) -> Result<(), ApiError> {
     let key = totp_key(s)?;
     let secret = totp::open_secret(&key, stored)?;
     let now_step = totp::step(auth::now_ms() / 1_000);

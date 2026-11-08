@@ -128,6 +128,12 @@ pub enum Command {
     },
     /// Kill switch: halt every open market.
     HaltAll,
+    /// Grant the daily allowance (`ALLOWANCE`) to an account. The gateway decides who may
+    /// claim and when (once per UTC day); the engine only records the grant (SPEC §1.2).
+    Allowance {
+        /// The account.
+        account: AccountId,
+    },
     /// Reduce a resting order's quantity, keeping its time priority.
     Amend {
         /// The account that owns the order.

@@ -178,6 +178,12 @@ impl Engine {
             } => self.settle(market, outcome, evidence_hash, out)?,
             Command::CancelAll { account, market } => self.cancel_all(account, market, out)?,
             Command::HaltAll => self.halt_all(out),
+            Command::Allowance { account } => match self.ledger.grant(account, crate::ALLOWANCE)? {
+                Some(entry) => out.push(Event::Entry(entry)),
+                None => out.push(Event::Rejected {
+                    reason: RejectReason::UnknownAccount,
+                }),
+            },
         }
         self.ledger.finish_command(out)
     }

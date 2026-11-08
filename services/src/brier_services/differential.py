@@ -296,6 +296,8 @@ class StreamGenerator:
             return [{"cmd": "cancel_all", **filters}]
         if roll < 0.911:
             return [{"cmd": "halt_all"}]
+        if roll < 0.913:
+            return [{"cmd": "allowance", "account": self._account()}]
         if roll < 0.916:
             new = self.accounts + 1 if rng.random() < 0.8 else rng.randint(1, max(1, self.accounts))
             return [{"cmd": "open_account", "account": new}]

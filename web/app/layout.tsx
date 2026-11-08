@@ -8,6 +8,7 @@ import { CATEGORIES} from "@/lib/events";
 import { listEvents } from "@/lib/events-server";
 import { Mark, SearchIcon } from "@/components/Icons";
 import { SignOut } from "@/components/SignOut";
+import { DailyCredits } from "@/components/DailyCredits";
 import "./globals.css";
 
 const display = Barlow_Condensed({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-display" });
@@ -21,7 +22,9 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const [user, open] = await Promise.all([me(), listEvents({ status: "open", limit: 0 })]);
-  const portfolio = user ? await gateway<Portfolio>("/v1/portfolio") : null;
+  const [portfolio, allowance] = user
+    ? await Promise.all([gateway<Portfolio>("/v1/portfolio"), gateway<{ amount: number; claimed_today: boolean }>("/v1/allowance")])
+    : [null, null];
   const count = (c: string) => open?.categories[c] ?? 0;
   return (
     <html lang="en" className={`${display.variable} ${sans.variable}`}>
@@ -52,6 +55,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <div className="who">
               {user ? (
                 <>
+                  {allowance?.ok && !allowance.body.claimed_today && <DailyCredits amount={allowance.body.amount} />}
                   {portfolio?.ok && (
                     <Link href="/portfolio" className="balance">
                       Cash
@@ -121,6 +125,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <li><a href="https://github.com/anamankev/brier/blob/main/docs/resolution.md">Resolution and disputes</a></li>
                   <li><a href="https://github.com/anamankev/brier/blob/main/docs/data-licenses.md">Data sources</a></li>
                   <li><Link href="/credits">Photo credits</Link></li>
+                  <li><Link href="/rules">House rules</Link></li>
+                  <li><Link href="/terms">Terms of use</Link></li>
+                  <li><Link href="/privacy">Privacy</Link></li>
                 </ul>
               </div>
               <div>

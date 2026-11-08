@@ -89,7 +89,7 @@ async fn a_matching_refetch_confirms_and_a_mismatch_needs_an_admin() {
             Method::POST,
             "/v1/register",
             None,
-            Some(json!({ "username": name, "password": PW })),
+            Some(json!({ "username": name, "password": PW, "adult": true, "terms": "2026-11-08" })),
         )
         .await;
         assert_eq!(status, StatusCode::CREATED, "{body}");

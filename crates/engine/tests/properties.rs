@@ -71,6 +71,7 @@ fn command(max_id: u64) -> impl Strategy<Value = Command> {
         1 => (prop::option::of((1u64..=5).prop_map(AccountId::new)), prop::option::of(market))
             .prop_map(|(account, market)| Command::CancelAll { account, market }),
         1 => Just(Command::HaltAll),
+        2 => (1u64..=5).prop_map(|a| Command::Allowance { account: AccountId::new(a) }),
     ]
 }
 

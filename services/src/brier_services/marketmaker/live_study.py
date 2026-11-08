@@ -105,7 +105,11 @@ def study(binary: str, env: dict[str, str], clock: Path) -> int:
             time.sleep(0.2)
 
     def user(name: str, role: str | None = None) -> RestClient:
-        RestClient(BASE).request("POST", "/v1/register", {"username": name, "password": PASSWORD})
+        RestClient(BASE).request(
+            "POST",
+            "/v1/register",
+            {"username": name, "password": PASSWORD, "adult": True, "terms": "2026-11-08"},
+        )
         if role:
             subprocess.run(  # noqa: S603 - fixed arguments
                 [binary, "role", name, role, "market-maker study"],

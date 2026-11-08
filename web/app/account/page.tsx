@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { me } from "@/lib/server";
 import { TotpSetup } from "./TotpSetup";
+import { DeleteAccount, ExportData, NewCodes } from "./AccountControls";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,24 @@ export default async function Account() {
         {user.role === "admin" && !user.signed_in_with_totp && (
           <p className="notice error">Admin actions need a sign-in with a code: sign out and sign in again.</p>
         )}
+      </section>
+      <section className="card pad stack" aria-labelledby="codes-h">
+        <h2 id="codes-h" style={{ fontSize: 18 }}>Recovery codes</h2>
+        <p style={{ margin: 0 }} className="dim">
+          The only way back in if you forget your password. If you have lost them or used most of them, make new ones.
+        </p>
+        <NewCodes username={user.username} />
+      </section>
+      <section className="card pad stack" aria-labelledby="data-h">
+        <h2 id="data-h" style={{ fontSize: 18 }}>Your data</h2>
+        <p style={{ margin: 0 }} className="dim">
+          A copy of everything Brier holds about you: your profile, orders, trades, forecasts and balance, as a JSON file.
+        </p>
+        <ExportData username={user.username} />
+      </section>
+      <section className="card pad stack danger-zone" aria-labelledby="delete-h">
+        <h2 id="delete-h" style={{ fontSize: 18 }}>Delete account</h2>
+        <DeleteAccount username={user.username} />
       </section>
     </div>
   );

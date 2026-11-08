@@ -29,6 +29,7 @@ Binary (yes/no) event contracts on economics, weather, science, rates, and sport
 
 ### 1.2 Play-money boundary (enforced in code and terms)
 - Each account receives a one-time grant of credits (`SIGNUP_GRANT` = 1,000,000 credit-cents, i.e. 10,000 credits). Admins may run documented, equal-for-all re-grants; no individual top-ups.
+- From G10, every account may claim a daily allowance (`ALLOWANCE` = 10,000 credit-cents, i.e. 100 credits) once per UTC day. It is the same rule for everyone, journaled as a grant from issuance; the profit leaderboard counts trading only.
 - Credits cannot be bought, sold, withdrawn, redeemed, or transferred between users. They have no cash value and there are no prizes. This keeps the product outside gambling, sweepstakes, and money-transmission rules. Real-money operation for US persons would require CFTC designation as a contract market and a clearing arrangement; that is out of scope (§17).
 - The code contains no deposit, withdrawal, payment, or wallet path. A test asserts that no ledger entry type exists that moves credits between two user accounts outside matched trades and settlement.
 

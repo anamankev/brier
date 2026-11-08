@@ -24,6 +24,9 @@ const TAG_OPEN_ACCOUNT: u8 = 6;
 const TAG_SETTLE: u8 = 7;
 const TAG_CANCEL_ALL: u8 = 8;
 const TAG_HALT_ALL: u8 = 9;
+/// Added in G10 without a format change: a new tag cannot be misread by an older reader, which
+/// rejects it as unknown.
+const TAG_ALLOWANCE: u8 = 10;
 
 /// Why a payload could not be decoded into a command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,6 +142,10 @@ pub fn encode(command: &Command, out: &mut Vec<u8>) {
             }
         }
         Command::HaltAll => out.push(TAG_HALT_ALL),
+        Command::Allowance { account } => {
+            out.push(TAG_ALLOWANCE);
+            out.extend_from_slice(&account.get().to_le_bytes());
+        }
     }
 }
 
@@ -215,6 +222,41 @@ fn state_from(code: u8) -> Result<MarketState, CodecError> {
     }
 }
 
+/// The fields of a `place` command, after its tag.
+fn decode_place(r: &mut Reader<'_>, version: u16) -> Result<Command, CodecError> {
+    let account = AccountId::new(r.u64()?);
+    let market = MarketId::new(r.u32()?);
+    let side = match r.u8()? {
+        0 => Side::Buy,
+        1 => Side::Sell,
+        _ => return Err(CodecError::BadCode("side")),
+    };
+    let price = r.u8()?;
+    let qty = r.u32()?;
+    let tif = match r.u8()? {
+        0 => TimeInForce::Gtc,
+        1 => TimeInForce::Ioc,
+        2 => TimeInForce::Fok,
+        _ => return Err(CodecError::BadCode("tif")),
+    };
+    let post_only = r.flag("post_only")?;
+    let client_order_id = if version >= 2 && r.flag("client order ID presence")? {
+        Some(r.u64()?)
+    } else {
+        None
+    };
+    Ok(Command::Place(NewOrder {
+        account,
+        market,
+        side,
+        price,
+        qty,
+        tif,
+        post_only,
+        client_order_id,
+    }))
+}
+
 /// Decode exactly one command from `payload`, written in journal format `version`.
 /// Version 1 has no client order ID; version 2 adds it to `place`; version 3 adds the rules
 /// and evidence hashes (ADR-0006).
@@ -238,39 +280,7 @@ pub fn decode(payload: &[u8], version: u16) -> Result<Command, CodecError> {
                 state: state_from(r.u8()?)?,
             }
         }
-        TAG_PLACE => {
-            let account = AccountId::new(r.u64()?);
-            let market = MarketId::new(r.u32()?);
-            let side = match r.u8()? {
-                0 => Side::Buy,
-                1 => Side::Sell,
-                _ => return Err(CodecError::BadCode("side")),
-            };
-            let price = r.u8()?;
-            let qty = r.u32()?;
-            let tif = match r.u8()? {
-                0 => TimeInForce::Gtc,
-                1 => TimeInForce::Ioc,
-                2 => TimeInForce::Fok,
-                _ => return Err(CodecError::BadCode("tif")),
-            };
-            let post_only = r.flag("post_only")?;
-            let client_order_id = if version >= 2 && r.flag("client order ID presence")? {
-                Some(r.u64()?)
-            } else {
-                None
-            };
-            Command::Place(NewOrder {
-                account,
-                market,
-                side,
-                price,
-                qty,
-                tif,
-                post_only,
-                client_order_id,
-            })
-        }
+        TAG_PLACE => decode_place(&mut r, version)?,
         TAG_CANCEL => {
             let account = AccountId::new(r.u64()?);
             Command::Cancel {
@@ -318,6 +328,9 @@ pub fn decode(payload: &[u8], version: u16) -> Result<Command, CodecError> {
             Command::CancelAll { account, market }
         }
         TAG_HALT_ALL => Command::HaltAll,
+        TAG_ALLOWANCE => Command::Allowance {
+            account: AccountId::new(r.u64()?),
+        },
         tag => return Err(CodecError::UnknownTag(tag)),
     };
     r.finish()?;
@@ -390,9 +403,12 @@ mod tests {
                     evidence_hash,
                 }
             }),
-            (prop::option::of(account), prop::option::of(market))
+            (prop::option::of(account.clone()), prop::option::of(market))
                 .prop_map(|(account, market)| Command::CancelAll { account, market }),
             Just(Command::HaltAll),
+            account
+                .clone()
+                .prop_map(|account| Command::Allowance { account }),
         ]
     }
 
@@ -428,8 +444,8 @@ mod tests {
     fn unknown_tags_and_codes_are_rejected() {
         assert_eq!(decode(&[0], FORMAT_VERSION), Err(CodecError::UnknownTag(0)));
         assert_eq!(
-            decode(&[10], FORMAT_VERSION),
-            Err(CodecError::UnknownTag(10))
+            decode(&[11], FORMAT_VERSION),
+            Err(CodecError::UnknownTag(11))
         );
         let mut set = bytes(&Command::SetState {
             market: MarketId::new(1),

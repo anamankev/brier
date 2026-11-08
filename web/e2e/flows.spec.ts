@@ -39,7 +39,16 @@ test("a newcomer signs up, turns on two-step sign-in, and signs in with a code",
   await accessible(page, "registration");
   await page.getByLabel(/Username/).fill(NEWCOMER);
   await page.getByLabel(/Password/).fill(PASSWORD);
+  await expect(page.getByRole("button", { name: "Create account" })).toBeDisabled();
+  await page.getByLabel("I am 18 or older").check();
+  await page.getByLabel(/I agree to the terms of use/).check();
   await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("heading", { name: "Save your recovery codes" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Recovery codes" }).getByRole("listitem")).toHaveCount(10);
+  await accessible(page, "recovery codes");
+  await page.getByLabel("I have saved my recovery codes").check();
+  await page.getByRole("button", { name: "Start trading" }).click();
+  await page.goto("/account");
   await expect(page.getByRole("heading", { name: NEWCOMER })).toBeVisible();
   await accessible(page, "account");
   await page.getByRole("button", { name: "Turn on two-step sign-in" }).click();
@@ -54,6 +63,74 @@ test("a newcomer signs up, turns on two-step sign-in, and signs in with a code",
   await accessible(page, "sign-in");
   await signIn(page, NEWCOMER, newcomerSecret);
   await page.context().storageState({ path: NEWCOMER_SESSION });
+});
+
+test("a public account: claims the daily credits, resets a lost password with a code, exports its data, and deletes itself", async ({ page }) => {
+  const name = `pub_${Date.now() % 1_000_000}`;
+  await page.goto("/register");
+  await page.getByLabel(/Username/).fill(name);
+  await page.getByLabel(/Password/).fill(PASSWORD);
+  await page.getByLabel("I am 18 or older").check();
+  await page.getByLabel(/I agree to the terms of use/).check();
+  await page.getByRole("button", { name: "Create account" }).click();
+  const first = page.getByRole("list", { name: "Recovery codes" }).getByRole("listitem").first();
+  const code = ((await first.textContent()) ?? "").trim();
+  expect(code).toMatch(/^[A-Z2-7]{4}(-[A-Z2-7]{4}){3}$/);
+  await page.getByLabel("I have saved my recovery codes").check();
+  await page.getByRole("button", { name: "Start trading" }).click();
+
+  // The daily allowance: a button in the header until claimed.
+  const daily = page.getByRole("button", { name: /\+100 daily/ });
+  await expect(daily).toBeVisible();
+  await daily.click();
+  await expect(daily).toBeHidden();
+  await expect(page.locator(".balance strong")).toHaveText(/10,100/);
+
+  // Lose the password: sign out, then reset it with the saved code.
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.goto("/signin");
+  await page.getByRole("link", { name: "Forgot your password?" }).click();
+  await accessible(page, "password reset");
+  await page.getByLabel("Username").fill(name);
+  await page.getByLabel("Recovery code").fill(code.toLowerCase());
+  await page.getByLabel(/New password/).fill(`${PASSWORD} again`);
+  await page.getByRole("button", { name: "Reset password" }).click();
+  await expect(page.getByRole("heading", { name: "Password changed" })).toBeVisible();
+  await page.getByRole("main").getByRole("link", { name: "Log in" }).click();
+  await page.getByLabel("Username").fill(name);
+  await page.getByLabel("Password").fill(`${PASSWORD} again`);
+  await page.getByRole("button", { name: "Log in" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  // Export, then delete.
+  await page.goto("/account");
+  await accessible(page, "account controls");
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download my data" }).click();
+  expect((await download).suggestedFilename()).toBe(`brier-${name}.json`);
+  await page.getByRole("button", { name: "Delete my account" }).click();
+  await page.getByLabel("Your password").fill(`${PASSWORD} again`);
+  await page.getByLabel(/to confirm/).fill(name);
+  await page.getByRole("button", { name: "Delete forever" }).click();
+  await expect(page.getByRole("link", { name: "Log in" })).toBeVisible();
+  await page.goto("/signin");
+  await page.getByLabel("Username").fill(name);
+  await page.getByLabel("Password").fill(`${PASSWORD} again`);
+  await page.getByRole("button", { name: "Log in" }).click();
+  await expect(page.getByText("wrong username or password")).toBeVisible();
+});
+
+test("the legal pages are reachable from every page", async ({ page }) => {
+  await page.goto("/");
+  for (const [link, heading] of [
+    ["Terms of use", "Terms of use"],
+    ["Privacy", "Privacy notice"],
+    ["House rules", "House rules"],
+  ] as const) {
+    await page.getByRole("contentinfo").getByRole("link", { name: link, exact: true }).click();
+    await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+    await accessible(page, heading);
+  }
 });
 
 test("the market list shows the launch catalogue, open by schedule", async ({ page }) => {

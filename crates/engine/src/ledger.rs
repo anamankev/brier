@@ -15,6 +15,9 @@ use crate::{EngineError, Entry, EntryKind, Event, LedgerAccount};
 
 /// Credits granted to every new account: 1,000,000 credit-cents = 10,000 credits (SPEC §1.2).
 pub const SIGNUP_GRANT: Credits = Credits::from_cents(1_000_000);
+/// The daily allowance an account may claim (G10 U2): 100 credits, 1% of the signup grant.
+/// Enough to keep playing after going broke, too little to matter to anyone with a bankroll.
+pub const ALLOWANCE: Credits = Credits::from_cents(10_000);
 /// Most GTC orders one account may have resting across all markets (SPEC §4.4).
 pub const MAX_RESTING_ORDERS: u32 = 1_000;
 
@@ -180,6 +183,29 @@ impl Ledger {
                     SIGNUP_GRANT.checked_neg().map_err(err)?,
                 ),
                 (LedgerAccount::Cash(a), SIGNUP_GRANT),
+            ],
+        )?;
+        Ok(Some(entry))
+    }
+
+    /// Grant `amount` from issuance to an existing account. `None` if the account does not
+    /// exist.
+    pub(crate) fn grant(
+        &mut self,
+        a: AccountId,
+        amount: Credits,
+    ) -> Result<Option<Entry>, EngineError> {
+        if !self.accounts.contains_key(&a) {
+            return Ok(None);
+        }
+        self.issuance = self.issuance.checked_sub(amount).map_err(err)?;
+        let account = self.account_mut(a)?;
+        account.cash = account.cash.checked_add(amount).map_err(err)?;
+        let entry = Entry::new(
+            EntryKind::Grant,
+            &[
+                (LedgerAccount::Issuance, amount.checked_neg().map_err(err)?),
+                (LedgerAccount::Cash(a), amount),
             ],
         )?;
         Ok(Some(entry))

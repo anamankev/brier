@@ -142,7 +142,7 @@ async fn markets_resolve_through_propose_confirm_dispute_and_settle() {
             Method::POST,
             "/v1/register",
             None,
-            Some(json!({ "username": name, "password": pw })),
+            Some(json!({ "username": name, "password": pw, "adult": true, "terms": "2026-11-08" })),
         )
         .await;
         assert_eq!(status, StatusCode::CREATED, "{body}");

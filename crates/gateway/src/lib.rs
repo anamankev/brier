@@ -5,6 +5,8 @@
 //! so there is exactly one writer. Every command a client sends is answered only after its
 //! batch is durable.
 
+pub mod account;
+pub mod allowance;
 pub mod audit;
 pub mod auth;
 pub mod clock;
@@ -17,6 +19,7 @@ pub mod markets;
 pub mod resolution;
 pub mod routes;
 pub mod scheduler;
+pub mod social;
 pub mod surveillance;
 pub mod totp;
 pub mod ws;
@@ -260,6 +263,12 @@ endpoints! {
     POST "/v1/login" => routes::login,
     POST "/v1/logout" => routes::logout,
     GET "/v1/me" => routes::me,
+    DELETE "/v1/me" => account::delete,
+    GET "/v1/me/export" => account::export,
+    POST "/v1/recover" => account::recover,
+    POST "/v1/recovery-codes" => account::regenerate,
+    GET "/v1/allowance" => allowance::status,
+    POST "/v1/allowance" => allowance::claim,
     POST "/v1/totp/setup" => routes::totp_setup,
     POST "/v1/totp/enable" => routes::totp_enable,
     POST "/v1/keys" => routes::add_key,
@@ -281,6 +290,11 @@ endpoints! {
     GET "/v1/leaderboards/skill" => forecasts::skill_leaderboard,
     GET "/v1/leaderboards/profit" => forecasts::profit_leaderboard,
     GET "/v1/markets/{id}/trades" => routes::trades,
+    GET "/v1/markets/{id}/holders" => social::holders,
+    GET "/v1/markets/{id}/activity" => social::activity,
+    GET "/v1/users/{name}" => social::profile,
+    GET "/v1/notifications" => social::notifications,
+    POST "/v1/notifications/seen" => social::seen,
     GET "/v1/ws" => ws::upgrade,
     POST "/v1/orders" => routes::place,
     GET "/v1/orders/history" => routes::history,
@@ -302,6 +316,7 @@ endpoints! {
     GET "/v1/surveillance/links" => surveillance::links,
     POST "/v1/surveillance/cases" => surveillance::open_case,
     POST "/v1/admin/cancel-all" => routes::cancel_all,
+    POST "/v1/admin/users/{id}/close" => account::close,
     POST "/v1/admin/halt-all" => routes::halt_all,
 }
 

@@ -652,3 +652,50 @@ fn the_client_id_window_forgets_the_oldest_beyond_its_size() {
         Some(Event::Duplicate { .. })
     ));
 }
+
+/// The daily allowance moves `ALLOWANCE` from issuance to the account, as a grant, and an
+/// unknown account is rejected without touching the ledger (G10 U2).
+#[test]
+fn the_allowance_is_a_grant_from_issuance() {
+    let mut engine = brier_engine::Engine::new();
+    let mut seq = 0u64;
+    let mut apply = |command| {
+        seq += 1;
+        let mut out = Vec::new();
+        engine
+            .apply(
+                &brier_engine::Sequenced {
+                    seq: brier_types::Seq::from_raw(seq),
+                    command,
+                },
+                &mut out,
+            )
+            .unwrap();
+        engine.check_invariants().unwrap();
+        out
+    };
+    apply(Command::OpenAccount { account: ALICE });
+    let out = apply(Command::Allowance { account: ALICE });
+    assert!(
+        matches!(out.as_slice(), [brier_engine::Event::Entry(_)]),
+        "{out:?}"
+    );
+    let out = apply(Command::Allowance {
+        account: brier_types::AccountId::new(999),
+    });
+    assert!(
+        matches!(
+            out.as_slice(),
+            [brier_engine::Event::Rejected {
+                reason: brier_engine::RejectReason::UnknownAccount
+            }]
+        ),
+        "{out:?}"
+    );
+    let views = engine.accounts();
+    let view = views.iter().find(|v| v.account == ALICE).unwrap();
+    assert_eq!(
+        view.cash.cents(),
+        brier_engine::SIGNUP_GRANT.cents() + brier_engine::ALLOWANCE.cents()
+    );
+}

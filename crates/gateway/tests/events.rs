@@ -102,7 +102,7 @@ async fn markets_group_into_events_with_daily_statistics() {
             Method::POST,
             "/v1/register",
             None,
-            Some(json!({ "username": name, "password": PW })),
+            Some(json!({ "username": name, "password": PW, "adult": true, "terms": "2026-11-08" })),
         )
         .await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
@@ -212,6 +212,63 @@ async fn markets_group_into_events_with_daily_statistics() {
     projected().await;
     clock.set(t("2026-08-22T00:02:00Z"));
     tick(&state).await.unwrap();
+
+    // ---- The social layer (G10 U3) ------------------------------------------------------------
+    let (status, body) = call(&app, Method::GET, "/v1/markets/202/holders", None, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["yes"], json!([{ "username": "cyd", "contracts": 35 }]));
+    assert_eq!(body["no"], json!([{ "username": "bob", "contracts": 35 }]));
+    let (status, body) = call(&app, Method::GET, "/v1/markets/202/activity", None, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let trades = body["trades"].as_array().unwrap();
+    assert_eq!(trades.len(), 2, "{body}");
+    assert_eq!(
+        (
+            &trades[0]["username"],
+            &trades[0]["side"],
+            &trades[0]["price"],
+            &trades[0]["qty"]
+        ),
+        (&json!("cyd"), &json!("buy"), &json!(55), &json!(25)),
+        "newest first, named by the taker"
+    );
+    assert!(trades[0]["at"].is_string());
+    let (status, body) = call(&app, Method::GET, "/v1/users/cyd", None, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        (body["volume"].as_i64(), body["markets_traded"].as_i64()),
+        (Some(35), Some(1))
+    );
+    assert_eq!(body["positions"][0]["market"], 202);
+    assert_eq!(body["positions"][0]["position"], 35);
+    assert_eq!(body["positions"][0]["outcome"], "80-81°F");
+    assert_eq!(body["positions"][0]["event"], "nyc-high-2026-08-30");
+    assert_eq!(body["trades"].as_array().unwrap().len(), 2);
+    let (status, body) = call(&app, Method::GET, "/v1/users/bob", None, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["positions"][0]["position"], -35,
+        "bob is short YES (holds NO)"
+    );
+    assert_eq!(body["trades"][0]["side"], "sell", "the maker's own side");
+    let (status, _) = call(&app, Method::GET, "/v1/users/nobody", None, None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, body) = call(&app, Method::GET, "/v1/notifications", Some(&bo), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["unread"], 2, "{body}");
+    assert_eq!(body["items"][0]["kind"], "fill");
+    let newest = body["items"][0]["seq"].as_i64().unwrap();
+    let (status, _) = call(
+        &app,
+        Method::POST,
+        "/v1/notifications/seen",
+        Some(&bo),
+        Some(json!({ "seq": newest })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, body) = call(&app, Method::GET, "/v1/notifications", Some(&bo), None).await;
+    assert_eq!(body["unread"], 0);
 
     // ---- The events API -----------------------------------------------------------------------
     let (status, body) = call(&app, Method::GET, "/v1/events", None, None).await;

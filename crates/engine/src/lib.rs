@@ -20,5 +20,5 @@ pub use client_ids::CLIENT_ID_WINDOW;
 pub use command::{Command, MarketState, NewOrder, Sequenced, TimeInForce};
 pub use engine::{AccountView, Engine, EngineError, RestingOrder};
 pub use event::{CancelReason, Entry, EntryKind, Event, LedgerAccount, RejectReason, Trade};
-pub use ledger::{MAX_RESTING_ORDERS, SIGNUP_GRANT};
+pub use ledger::{ALLOWANCE, MAX_RESTING_ORDERS, SIGNUP_GRANT};
 pub use snapshot::{RestoreError, SNAPSHOT_BODY_VERSION};
