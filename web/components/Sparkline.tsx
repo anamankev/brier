@@ -1,6 +1,17 @@
 /** A tiny price line (0-100%), coloured by direction, with a soft fill. Decorative: the number
  * beside it says the same thing in text. */
-export function Sparkline({ points, width = 160, height = 44 }: { points: [string, number][]; width?: number; height?: number }) {
+export function Sparkline({
+  points,
+  width = 160,
+  height = 44,
+  fluid = false,
+}: {
+  points: [string, number][];
+  width?: number;
+  height?: number;
+  /** Scale to the container's width instead of a fixed size. */
+  fluid?: boolean;
+}) {
   if (points.length < 2) {
     return <svg width={width} height={height} aria-hidden="true"><line x1="0" x2={width} y1={height - 2} y2={height - 2} stroke="var(--line)" strokeDasharray="2 4" /></svg>;
   }
@@ -14,7 +25,14 @@ export function Sparkline({ points, width = 160, height = 44 }: { points: [strin
   const colour = up ? "var(--yes)" : "var(--no)";
   const id = `spark-${up ? "u" : "d"}`;
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+    <svg
+      width={fluid ? undefined : width}
+      height={fluid ? undefined : height}
+      className={fluid ? "fluid" : undefined}
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio={fluid ? "none" : undefined}
+      aria-hidden="true"
+    >
       <defs>
         <linearGradient id={id} x1="0" x2="0" y1="0" y2="1">
           <stop offset="0" stopColor={colour} stopOpacity="0.28" />
@@ -22,7 +40,7 @@ export function Sparkline({ points, width = 160, height = 44 }: { points: [strin
         </linearGradient>
       </defs>
       <path d={`${d}L${width},${height}L0,${height}Z`} fill={`url(#${id})`} />
-      <path d={d} fill="none" stroke={colour} strokeWidth="1.8" strokeLinejoin="round" />
+      <path d={d} fill="none" stroke={colour} strokeWidth="1.8" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }

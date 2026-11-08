@@ -71,12 +71,22 @@ Updated at every gate review (SPEC §13). Each entry gives the threat, its mitig
 | Gateway clock | Moving the clock to open, close, or settle early | The schedule, proposals, and windows read the system clock; a file-driven clock exists only in builds with the `test-clock` feature, built into its own target directory by the exit test | `clock.rs`; `test_launch_catalogue.py` | A wrong system clock on the host moves everything; there is no external time check |
 | Credentials | Leaking the FRED API key | Read only from the environment (`.env`, git-ignored); replaced by `REDACTED` in every evidence URL and study manifest; never logged | `test_resolution.py` redaction cases; study manifest | The key is in the process environment of the resolver and the study |
 
+## Components that exist (G6)
+
+| Asset | Threat | Mitigation | Evidence | Gap |
+|---|---|---|---|---|
+| Accounts | Account takeover with a stolen password | TOTP second factor (RFC 6238) for anyone who turns it on; each code accepted once; admin actions need a sign-in that used a code; secrets encrypted under `BRIER_TOTP_KEY` | `totp.rs` RFC vectors; `rest.rs` admin-without-TOTP case; browser flow 1 | TOTP is optional for traders. No recovery codes yet: losing the authenticator means an operator must reset the account |
+| Sessions in the browser | Token theft by injected script | The token lives in an httpOnly, SameSite=Strict cookie that page scripts cannot read; the browser talks to `/api/v1/*`, which adds the token server-side | `web/app/api/v1/[...path]/route.ts`; browser flows | Server-side rendering trusts the cookie as-is; a stolen cookie works until expiry like any session |
+| Mutating requests | Cross-site request forgery | SameSite=Strict cookie, and every non-GET call through the web server must carry `x-brier-request: 1`, which a cross-site form or image cannot send | proxy route | No per-session CSRF token; the header and SameSite are the defence |
+| The web app | Injected script or framing | Content Security Policy (`default-src 'self'`, sockets only to the gateway, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `nosniff`; React escapes all text; evidence is shown as text, never as HTML | `next.config.ts` | Scripts allow `'unsafe-inline'` because Next.js inlines its bootstrap; per-request nonces would remove it |
+| Market data in the browser | A book that silently misses an update | Snapshot then deltas, each with a sequence number; any gap resubscribes for a fresh snapshot (the same rule as the Python reference client) | `web/lib/book.ts`; Python tracker tests | The browser book has no automated gap-injection test of its own; the rule is shared with the tested Python client |
+| Leaderboards | Privacy of usernames and results | Leaderboards show usernames, scores, and settled profit only; no balances, orders, or positions of others | `forecasts.rs` | There is no opt-out from the public leaderboards yet |
+| Dependencies | A compromised npm package | npm resolves nothing published after a fixed date (`before` in `web/.npmrc`), every npm package is in the 14-day check, and CI audits the runtime dependencies | `scripts/dependency_age.py` (393 npm packages); `check.yml` web job | One moderate advisory in dev-only lint tooling (`minimatch`) is accepted until its fix is 14 days old (10 November 2026) |
+
 ## Components to come (from SPEC §13), owned by their gates
 
 | Gate | Threat | Planned mitigation |
 |---|---|---|
 | G1-G2 | Engine or ledger bug that creates or destroys credits | Invariants I1-I5 checked after every event; differential tests against the reference engine; halt on violation |
 | G3 | Acknowledged order lost in a crash; corrupt journal | Sync before acknowledgment (F_FULLFSYNC on macOS); CRC32C per record; SIGKILL crash harness |
-| G6 | Account takeover | TOTP second factor for people and admins |
-| G5-G6 | Admin misuse | Every admin action is a sequenced, audit-logged command; least-privilege roles |
 | G8 | Multi-accounting and collusion | Account-linkage signals in surveillance; credits have no value, which limits the incentive |

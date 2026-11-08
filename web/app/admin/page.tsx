@@ -3,6 +3,7 @@ import { gateway, me } from "@/lib/server";
 import { AdminConsole, type Entry, type QueueDispute, type QueueResolution } from "./AdminConsole";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Admin" };
 
 export default async function Admin() {
   const user = await me();

@@ -83,10 +83,11 @@ export default async function MarketPage({ params, searchParams }: { params: Pro
         </span>
         <span className="dim">chance</span>
         <Delta change={m.change} suffix=" today" />
-        <span className="muted" style={{ fontSize: 14 }}>
-          · {(m.volume ?? 0).toLocaleString("en-US")} contracts traded · {Date.parse(r.schedule.close) > now ? `closes ${relative(r.schedule.close, now)}` : `closed ${when(r.schedule.close)}`}
-        </span>
       </div>
+      <p className="muted" style={{ fontSize: 14, margin: 0 }}>
+        {(m.volume ?? 0).toLocaleString("en-US")} contracts traded ·{" "}
+        {Date.parse(r.schedule.close) > now ? `trading closes ${relative(r.schedule.close, now)}` : `trading closed ${when(r.schedule.close)}`}
+      </p>
     </header>
   );
 

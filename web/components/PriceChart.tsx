@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const RANGES = [
   ["1H", 3600],
@@ -13,6 +13,16 @@ const RANGES = [
 export function PriceChart({ points }: { points: [string, number][] }) {
   const [range, setRange] = useState<(typeof RANGES)[number][0]>("ALL");
   const [hover, setHover] = useState<number | null>(null);
+  // Draw at the container's real width, so text and lines are never stretched.
+  const box = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(760);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => setWidth(Math.max(280, Math.round(entries[0]!.contentRect.width))));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const shown = useMemo(() => {
     if (points.length === 0) return points;
     const end = Date.parse(points[points.length - 1]![0]);
@@ -21,8 +31,8 @@ export function PriceChart({ points }: { points: [string, number][] }) {
     return cut.length >= 2 ? cut : points.slice(-2);
   }, [points, range]);
 
-  const W = 760;
-  const H = 300;
+  const W = width;
+  const H = width < 500 ? 220 : 300;
   const pad = { l: 8, r: 44, t: 14, b: 26 };
   if (points.length < 2) {
     return (
@@ -50,10 +60,10 @@ export function PriceChart({ points }: { points: [string, number][] }) {
 
   return (
     <div className="stack" style={{ gap: 8 }}>
-      <div className="chart-wrap">
+      <div className="chart-wrap" ref={box}>
         <svg
           viewBox={`0 0 ${W} ${H}`}
-          preserveAspectRatio="none"
+          style={{ height: H }}
           role="img"
           aria-label={summary}
           onMouseMove={(e) => {
@@ -87,9 +97,9 @@ export function PriceChart({ points }: { points: [string, number][] }) {
             </text>
           ))}
           <path d={`${path}L${x(t1)},${H - pad.b}L${x(t0)},${H - pad.b}Z`} fill="url(#area)" />
-          <path className="line" d={path} vectorEffect="non-scaling-stroke" />
+          <path className="line" d={path} />
           <circle cx={x(t1)} cy={y(last)} r="4" fill="var(--yes)" />
-          {h && <line className="cursor" x1={x(Date.parse(h[0]))} x2={x(Date.parse(h[0]))} y1={pad.t} y2={H - pad.b} vectorEffect="non-scaling-stroke" />}
+          {h && <line className="cursor" x1={x(Date.parse(h[0]))} x2={x(Date.parse(h[0]))} y1={pad.t} y2={H - pad.b} />}
         </svg>
         {h && (
           <div className="chart-tip" style={{ left: `min(calc(${(x(Date.parse(h[0])) / W) * 100}% + 8px), calc(100% - 150px))` }}>

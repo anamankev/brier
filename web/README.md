@@ -7,7 +7,7 @@ market data straight from the gateway's WebSocket.
 ```bash
 npm ci
 BRIER_WS_URL=ws://127.0.0.1:8080/v1/ws npx next build
-BRIER_GATEWAY_URL=http://127.0.0.1:8080 BRIER_WS_URL=ws://127.0.0.1:8080/v1/ws npx next start
+BRIER_GATEWAY_URL=http://127.0.0.1:8080 BRIER_WS_URL=ws://127.0.0.1:8080/v1/ws npx next start --port 3005
 ```
 
 `BRIER_WS_URL` is needed at build time too: the Content Security Policy that allows the browser

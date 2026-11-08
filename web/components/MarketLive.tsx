@@ -54,7 +54,7 @@ export function MarketLive({
   const tape = [
     ...trades.map((t) => ({ key: `l${t.seq}`, ...t })),
     ...recent.map((t) => ({ key: `r${t.seq}-${t.price}-${t.qty}`, ...t })),
-  ].slice(0, 10);
+  ].slice(0, 7);
 
   return (
     <div className="with-rail">

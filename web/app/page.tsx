@@ -43,7 +43,7 @@ function Featured({ m, now }: { m: Summary; now: number }) {
         </p>
       </div>
       <div style={{ display: "grid", alignContent: "center" }}>
-        <Sparkline points={m.points} width={600} height={240} />
+        <Sparkline points={m.points} width={600} height={240} fluid />
       </div>
     </section>
   );

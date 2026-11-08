@@ -12,7 +12,7 @@ export function OrderBook({ book, depth = 8 }: { book: Book; depth?: number }) {
       <caption className="sr-only">{label}</caption>
       <thead>
         <tr>
-          <th scope="col">{cls === "bids" ? "Bid (Yes)" : "Ask (Yes)"}</th>
+          <th scope="col">{cls === "bids" ? "Bid" : "Ask"}</th>
           <th scope="col" className="num">
             Contracts
           </th>
