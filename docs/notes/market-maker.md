@@ -44,4 +44,25 @@ Status: REGISTERED. Written before any market-maker code exists. The registering
 Means, standard deviations, t-statistics, and 95% intervals for M1 and M2; the largest inventory seen for M3; uptime per market for M4. Also reported: average quoted spread, the share of time quoting, and the inventory path for one example market. Results go in §4 with the code commit and the machine.
 
 ## 4. Results
+### M1-M3 (simulation)
+Run on 8 November 2026 with code `db5b2f7` (`python -m brier_services.sim.study`), 800 markets in 5.7 s on the M5 MacBook Air.
+
+| Condition | Mean P&L per market (credits) | SD | t | 95% interval | Max inventory | Average spread (ticks) | Time quoting |
+|---|---|---|---|---|---|---|---|
+| noise | 69.73 | 76.57 | 12.88 | 59.05 to 80.40 | 510 | 5.66 | 96.9% |
+| informed sd 2.0 | 80.25 | 84.05 | 13.50 | 68.53 to 91.97 | 517 | 5.66 | 96.8% |
+| informed sd 1.0 | 71.78 | 80.28 | 12.64 | 60.58 to 82.97 | 517 | 5.66 | 96.8% |
+| informed sd 0.25 | 54.77 | 78.27 | 9.90 | 43.85 to 65.68 | 518 | 5.66 | 96.8% |
+
+- **M1 passed:** t = 12.88 against the critical value 1.6526 (one-sided, 5%, 199 degrees of freedom).
+- **M2 passed:** mean P&L falls as the informed traders' signal improves: 80.25, then 71.78, then 54.77 credits.
+- **M3 passed:** the largest inventory in any market at any step was 518 contracts, within the bound of 525 (limit plus one quote size).
+
+Notes:
+- **Poor informed traders raised the maker's P&L above noise alone** (80.25 against 69.73 credits). With a signal that weak, the "informed" traders are mostly extra noise flow paying the spread. M2 compares only the three informed levels, as registered.
+- **The P&L includes inventory gains and losses, not only the spread.** The maker's fair value lags the truth by 30 steps, so trends cost it; the spread more than covers that against noise.
+- **Time quoting is 96.8-96.9%** because quotes are pulled for the last 15 of 480 steps (3.1%).
+- **These are simulated markets.** They show the quoting logic behaves as theory says; they say nothing about real traders, who are not drawn from these distributions.
+
+### M4 (live)
 Not yet run.
