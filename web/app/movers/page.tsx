@@ -25,7 +25,7 @@ export default async function Movers() {
         <h1 id="movers-h" className="display">
           Biggest moves
         </h1>
-        <p className="dim">The open markets whose chance moved most since this time yesterday, from the exchange&apos;s minute prices.</p>
+        <p className="dim">The open markets whose chance moved most since this time yesterday (or since they opened, if younger), from the exchange&apos;s minute prices.</p>
       </header>
       {rows.length === 0 ? (
         <p className="card empty">Nothing has moved in the last 24 hours yet.</p>

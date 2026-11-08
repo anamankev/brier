@@ -73,10 +73,20 @@ The rule (`docs/data-licenses.md`): free, public, authoritative, and terms that 
 - At any moment of a 72-hour live run on a real gateway (sped up by the test clock where the source allows it):
   - at least 40 markets are open;
   - they span at least 5 categories;
-  - at least 20 settle within 48 hours of listing.
+  - at least 20 settle within 72 hours of listing (corrected on 8 November 2026, before the run: see below).
 - Every market settled in that run has an evidence record, and the recomputed outcome matches.
 - The maker quotes at least 90% of open markets for at least 95% of the run.
 - Playwright flows: browse a category, open an event, buy an outcome with a market order, see it in the portfolio, and watch it settle. Axe passes on every new page.
+
+### Correction to the exit criteria (8 November 2026, before the live run)
+- **Settlement time.** The criterion first said 48 hours, which the catalogue's own design cannot meet.
+  - Events list two days ahead and close at the start of their day.
+  - The fastest series, city highs, settle from the next afternoon's report, about 64 hours after listing; earthquakes and storms take longer.
+  - The criterion is 72 hours. A daily market cannot settle faster without trading while its value can be watched, which Brier refuses.
+- **Categories.** The run has four: weather, science, economics, and rates. A fifth is not possible within the rules.
+  - Crypto has no permitted source.
+  - Energy (EIA) needs an API key that only the owner can register.
+  - The run reports the shortfall as it stands rather than splitting a category to reach five.
 
 ## Units
 0. Finish G8: the admin case view, the web server's proxy key, and the G8 review.
