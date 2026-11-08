@@ -1,6 +1,6 @@
 # Market maker: does it make money from noise, lose to information, and stay inside its limits? (G7)
 
-Status: REGISTERED. Written before any market-maker code exists. The registering commit is the first commit that contains this file. Nothing below changes after results are seen; a change would be a new, dated section.
+Status: COMPLETE (registered before any market-maker code existed). M1-M4 passed; results in §4. The registering commit is the first commit that contains this file. Nothing below changes after results are seen; a change would be a new, dated section.
 
 ## 1. Questions
 1. Does the reference market maker earn the spread from uninformed flow?
@@ -65,4 +65,18 @@ Notes:
 - **These are simulated markets.** They show the quoting logic behaves as theory says; they say nothing about real traders, who are not drawn from these distributions.
 
 ### M4 (live)
-Not yet run.
+Run on 8 November 2026 (`python -m brier_services.marketmaker.live_study`, code `db6a4fd` plus the pacing change below). The real service ran under its own account and signed key, through the public API, against the test-clock gateway with the launch catalogue, for 10,080 simulated minutes. It took 575 s of wall time.
+
+| Market | Fair value | Minutes it should quote | Minutes two-sided (both best prices its own) | Uptime |
+|---|---|---|---|---|
+| 101 CPI above 3.5% (Nov) | 96.9% | 10,080 | 10,080 | 100% |
+| 102 Unemployment at or above 4.2% (Nov) | 36.8% | 10,080 | 10,080 | 100% |
+| 104 10-year yield above 4.75% (31 Dec) | 62.0% | 10,080 | 10,080 | 100% |
+| 105 Central Park at or above 40 °F (25 Dec) | 63.5% | 10,080 | 10,080 | 100% |
+
+The FOMC market (103) was not quoted, as planned.
+
+**M4 passed.** What it does and does not show:
+- **It shows availability, not trading skill.** No other trader was present, so the maker's quotes were never hit; P&L on real flow is not measured.
+- **Fair values did not move during the run.** Each model measures from its latest real observation, not from the test clock, and the inputs were fetched once (real time stayed within the 6-hour refresh). So requoting on a fair-value change was exercised only by the unit tests, not here.
+- **Pacing.** The first attempt failed on day 1: the study loop sent more than the gateway's per-address limit of 500 requests a second and got 429 answers. The rerun paces itself (30 ms a minute) and retries any 429; none occurred. The registered design did not specify pacing; this is the only change.

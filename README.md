@@ -31,8 +31,8 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 | G4 | Gateway, APIs, PostgreSQL read models | Done |
 | G5 | Markets, rulebook, resolution | Done |
 | G6 | Web app | Done |
-| G7 | Market maker, simulation harness | Next |
-| G8 | Surveillance and its evaluation | |
+| G7 | Market maker, simulation harness | Done |
+| G8 | Surveillance and its evaluation | Next |
 | G9 | Release | |
 
 ## Measured so far
@@ -53,6 +53,7 @@ Built in gates G0 to G9 ([SPEC §15](docs/SPEC.md)). Nothing is released before 
 | Resolver accuracy | 855 values from BLS, FRED, and NOAA equal to independent comparators (FRED, Treasury, FOMC statements, GHCN-Daily), 0 mismatches; every decision recomputed identically from the stored response with networking disabled | [resolution note](docs/notes/resolution.md) |
 | Resolution end to end | All five launch markets listed, traded, closed by schedule, resolved, disputed, and settled through a real gateway | [G5 review](docs/gates/G5-review.md) |
 | Web app end to end | 6 browser flows (sign-up with TOTP, trading, forecasting, admin confirmation and dispute ruling, settlement, scorecard) against a real exchange; no WCAG 2.2 AA violations on 9 pages (axe-core) | [G6 review](docs/gates/G6-review.md) |
+| Reference market maker | Registered study passed: +69.73 credits per market against noise (t = 12.9), losses rising with traders' information (80.25 → 71.78 → 54.77), inventory within limits in 800 simulated markets; 100% two-sided uptime on four live launch markets | [market-maker note](docs/notes/market-maker.md) |
 | Book and ledger invariants (I1-I5) | Checked after every command in 2,560 random streams per CI run | `crates/engine/tests/properties.rs` |
 
 Measured on a 16 GB Apple M5 MacBook Air on AC power. Both performance hypotheses were registered before the engine existed.

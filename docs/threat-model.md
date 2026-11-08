@@ -83,6 +83,15 @@ Updated at every gate review (SPEC §13). Each entry gives the threat, its mitig
 | Leaderboards | Privacy of usernames and results | Leaderboards show usernames, scores, and settled profit only; no balances, orders, or positions of others | `forecasts.rs` | There is no opt-out from the public leaderboards yet |
 | Dependencies | A compromised npm package | npm resolves nothing published after a fixed date (`before` in `web/.npmrc`), every npm package is in the 14-day check, and CI audits the runtime dependencies | `scripts/dependency_age.py` (393 npm packages); `check.yml` web job | One moderate advisory in dev-only lint tooling (`minimatch`) is accepted until its fix is 14 days old (10 November 2026) |
 
+## Components that exist (G7)
+
+| Asset | Threat | Mitigation | Evidence | Gap |
+|---|---|---|---|---|
+| Market-maker account | A stolen maker key trading recklessly | The maker is an ordinary user: signed requests, the per-account order rate limit, collateral checks, self-trade prevention; no admin role and no special limits; play money | `service.py`; gateway auth tests | The position limit lives in the maker's own code; the exchange has no per-account position cap, so a stolen key is limited only by the account's credits |
+| Fair value | A wrong or poisoned input mispricing quotes | Inputs only from BLS, FRED, and NOAA over HTTPS to the resolvers' allowlist, no redirects; probabilities clamped to 2-98%; quotes pulled when inputs fail or are over 24 hours old; inventory skew and the position limit cap the loss from one wrong price | `test_marketmaker_service.py` stale case; `test_fairvalue.py` | A source that returns a plausible but wrong number is quoted on until it is corrected; there is no cross-check between sources |
+| Markets with no model | Quoting a price the maker cannot defend | The FOMC market is not quoted at all (no free, licensed futures or OIS data) | `test_marketmaker_service.py` | That market's liquidity depends on traders alone |
+| Simulated activity | Simulated orders mixing with real users' markets | M1-M3 run on in-process copies of the reference engine; M4 and the demo run a separate test-clock gateway with its own database schema and journal | `sim/market.py`; `live_study.py` | Nothing technical stops someone from pointing the service at a real exchange with a test account; that is a policy (SPEC §10) |
+
 ## Components to come (from SPEC §13), owned by their gates
 
 | Gate | Threat | Planned mitigation |

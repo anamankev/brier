@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from brier_services.client import Ed25519Key, RestClient, clock_ms, totp_code
+from brier_services.client import ApiError, Ed25519Key, RestClient, clock_ms, totp_code
 from brier_services.marketmaker.service import CLOSE_BUFFER, FairValues, MarketMaker
 from brier_services.rules import instant, load_toml
 
@@ -34,6 +34,23 @@ PASSWORD = "a long enough password"  # noqa: S105 - local study accounts
 START = 1_794_234_600  # 2026-11-09T14:30:00Z, when the launch markets open
 MINUTES = 7 * 1440
 MARKETS = (101, 102, 104, 105)
+PACE = 0.03  # seconds between simulated minutes: stays well under 500 requests a second per address
+throttled = 0
+
+
+def patient(call: Any) -> Any:  # noqa: ANN401 - any API call
+    """Retry a call the gateway rate-limited (429), as a well-behaved client does."""
+    global throttled
+    for _ in range(50):
+        try:
+            return call()
+        except ApiError as e:
+            if e.status != 429:
+                raise
+            throttled += 1
+            time.sleep(0.5)
+    msg = "still rate limited"
+    raise RuntimeError(msg)
 
 
 def main() -> int:
@@ -144,14 +161,19 @@ def study(binary: str, env: dict[str, str], clock: Path) -> int:
     for minute in range(MINUTES):
         now = START + 60 * minute
         clock.write_text(str(now))
-        decided = maker.run_once()
-        states = {m["market"]: m["state"] for m in api.request("GET", "/v1/markets")["markets"]}
-        mine = api.request("GET", "/v1/portfolio")["open_orders"]
+        decided = patient(maker.run_once)
+        states = {
+            m["market"]: m["state"]
+            for m in patient(lambda: api.request("GET", "/v1/markets"))["markets"]
+        }
+        mine = patient(lambda: api.request("GET", "/v1/portfolio"))["open_orders"]
         for m in MARKETS:
             fresh = decided[m]["fair"] is not None
             if states[m] == "open" and closes[m] - now >= CLOSE_BUFFER and fresh:
                 should[m] += 1
-                book: dict[str, Any] = api.request("GET", f"/v1/markets/{m}/book")
+                book: dict[str, Any] = patient(
+                    lambda m=m: api.request("GET", f"/v1/markets/{m}/book")
+                )
                 best_bid = book["bids"][0][0] if book["bids"] else None
                 best_ask = book["asks"][0][0] if book["asks"] else None
                 own = {(o["side"], o["price"]) for o in mine if o["market"] == m}
@@ -161,6 +183,7 @@ def study(binary: str, env: dict[str, str], clock: Path) -> int:
                 fairs[m].append(decided[m]["fair"])
         if minute % 1440 == 0:
             print(f"day {minute // 1440 + 1}/7", flush=True)
+        time.sleep(PACE)
     uptime = {m: (quoted[m] / should[m] if should[m] else None) for m in MARKETS}
     results = {
         "minutes": MINUTES,
@@ -170,6 +193,7 @@ def study(binary: str, env: dict[str, str], clock: Path) -> int:
         "fair_value_range": {m: [min(f), max(f)] if f else None for m, f in fairs.items()},
         "fomc_market_decision": "no model, no quotes",
         "seconds": round(time.time() - started, 1),
+        "rate_limited_and_retried": throttled,
         "verdict": "passed"
         if all(u is not None and u >= 0.95 for u in uptime.values())
         else "refuted",
