@@ -10,8 +10,9 @@ FRED key comes from the environment (``FRED_API_KEY``), never from an argument.
 
 Each pass, for every closed market without a live resolution: read its rulebook from the
 gateway, check it against the rules hash and the journal, resolve it, store the raw response,
-and propose. One JSON line is logged per market; a failure for one market does not stop the
-others.
+and propose. A proposal on a market with automatic review is then verified by a fresh fetch
+at least 10 minutes later (docs/resolution.md, "Automatic review"). One JSON line is logged
+per market; a failure for one market does not stop the others.
 """
 
 from __future__ import annotations
@@ -35,16 +36,17 @@ from brier_services.resolution.evidence import DEFAULT_DIR, EvidenceStore
 from brier_services.resolution.fetch import Fetcher, FetchError, fetch
 from brier_services.resolution.resolver import Proposal, SourceError, resolve
 from brier_services.resolution.sources import MalformedResponseError
-from brier_services.rules import RuleError, validate
+from brier_services.rules import Review, Rulebook, RuleError, instant, validate
 
 
 class Gateway(Protocol):
-    """The four gateway calls the resolver makes."""
+    """The gateway calls the resolver makes."""
 
     def markets(self) -> list[dict[str, Any]]: ...
     def rules(self, market: int) -> dict[str, Any]: ...
     def resolutions(self, market: int) -> list[dict[str, Any]]: ...
     def propose(self, market: int, body: Mapping[str, Any]) -> dict[str, Any]: ...
+    def verify(self, resolution: int, body: Mapping[str, Any]) -> dict[str, Any]: ...
 
 
 @dataclass
@@ -65,9 +67,50 @@ class RestGateway:
     def propose(self, market: int, body: Mapping[str, Any]) -> dict[str, Any]:
         return dict(self.client.request("POST", f"/v1/markets/{market}/resolution", body))
 
+    def verify(self, resolution: int, body: Mapping[str, Any]) -> dict[str, Any]:
+        return dict(self.client.request("POST", f"/v1/resolutions/{resolution}/verify", body))
+
 
 def log(event: str, **fields: Any) -> None:  # noqa: ANN401 - JSON fields
     print(json.dumps({"event": event, **fields}, sort_keys=True), file=sys.stderr)
+
+
+VERIFY_AFTER = 600 + 60  # the gateway's 10 minutes, and a minute of margin for clock skew
+
+
+def _verify(
+    gateway: Gateway,
+    store: EvidenceStore,
+    rule: Rulebook,
+    proposal: Mapping[str, Any],
+    now: int,
+    api_key: str | None,
+    fetcher: Fetcher,
+    say: Callable[..., None],
+) -> bool:
+    """Verify once it is time; returns whether a verification was sent (agreeing or not)."""
+    first = instant(str(proposal.get("evidence", {}).get("retrieved_at", "")))
+    if first is None or now < first + VERIFY_AFTER:
+        say("verify_wait", market=rule.market, resolution=proposal["resolution"])
+        return False
+    result = resolve(rule, now, api_key, fetcher)
+    if not isinstance(result, Proposal):
+        say("verify_wait", market=rule.market, reason=result.reason)
+        return False
+    store.put(result.body)
+    for extra in result.extra:
+        store.put(extra)
+    try:
+        answer = gateway.verify(int(proposal["resolution"]), {"evidence": result.evidence})
+        say(
+            "verified",
+            market=rule.market,
+            resolution=proposal["resolution"],
+            dispute_until=answer.get("dispute_until"),
+        )
+    except ApiError as e:
+        say("verify_refused", market=rule.market, resolution=proposal["resolution"], error=str(e))
+    return True
 
 
 def run_once(
@@ -77,21 +120,34 @@ def run_once(
     api_key: str | None,
     fetcher: Fetcher = fetch,
     say: Callable[..., None] = log,
+    verified: set[int] | None = None,
 ) -> list[int]:
-    """One pass; returns the markets proposed for."""
+    """One pass; returns the markets proposed for. A proposal on a market with automatic
+    review is verified by a fresh fetch at least ``VERIFY_AFTER`` seconds after its own, once
+    per process (``verified``): a disagreement is the gateway's to record, not to retry."""
     proposed: list[int] = []
+    verified = set() if verified is None else verified
     for m in gateway.markets():
         market = int(m["market"])
         if m.get("state") != "closed":
             continue
         try:
-            if any(r["state"] != "withdrawn" for r in gateway.resolutions(market)):
+            live = [r for r in gateway.resolutions(market) if r["state"] != "withdrawn"]
+            if live and not (live[0]["state"] == "proposed" and live[0]["outcome"] != "void"):
                 continue
             published = gateway.rules(market)
             rule = validate(published["rulebook"])
             journal = published.get("journal")
             if rule.hash != published["rules_hash"] or not (journal and journal.get("matches")):
                 say("rules_mismatch", market=market)
+                continue
+            if live:
+                if (
+                    rule.review is Review.AUTOMATIC
+                    and market not in verified
+                    and _verify(gateway, store, rule, live[0], now, api_key, fetcher, say)
+                ):
+                    verified.add(market)
                 continue
             result = resolve(rule, now, api_key, fetcher)
             if not isinstance(result, Proposal):
@@ -170,9 +226,10 @@ def main(argv: Iterable[str] | None = None) -> int:
     client.use_key(args.key_id, key.sign, clock_ms)
     gateway, store = RestGateway(client), EvidenceStore(args.evidence_dir)
     api_key = os.environ.get("FRED_API_KEY")
+    verified: set[int] = set()
     while True:
         try:
-            run_once(gateway, store, int(time.time()), api_key)
+            run_once(gateway, store, int(time.time()), api_key, verified=verified)
         except (ApiError, OSError) as e:
             log("pass_failed", error=f"{type(e).__name__}: {e}")
         if args.once:

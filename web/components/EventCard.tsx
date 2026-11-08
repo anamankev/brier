@@ -32,11 +32,12 @@ export function EventCard({ e, now }: { e: EventSummary; now: number }) {
   const top = leading(e).slice(0, 2);
   const open = e.status === "open";
   const repeat = cadence(e);
+  const quoted = e.markets.some((m) => m.best_bid != null || m.best_ask != null || m.chance != null);
   return (
     <article className="card ecard" aria-labelledby={`ev-${e.slug}`}>
       <header>
         <CategoryTile category={kind(e)} />
-        <Link id={`ev-${e.slug}`} href={href} className="title">
+        <Link id={`ev-${e.slug}`} href={href} className={`title${single ? " long" : ""}`}>
           {e.title}
         </Link>
         {single && <Gauge value={e.markets[0]!.chance} />}
@@ -55,6 +56,8 @@ export function EventCard({ e, now }: { e: EventSummary; now: number }) {
         ) : (
           <p className="muted state">{STATUS[e.status]}</p>
         )
+      ) : open && !quoted ? (
+        <p className="muted state">No quotes yet. The market maker quotes once its forecast covers this day.</p>
       ) : (
         <ul className="outcomes">
           {top.map((m) => (

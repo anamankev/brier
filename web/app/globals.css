@@ -421,7 +421,11 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--no); }
 .ticket small { font-size: 12px; }
 @media (max-width: 1000px) {
   .event-grid { grid-template-columns: 1fr; }
-  .event-side { position: static; order: -1; }
+  /* One column: outcomes, then the ticket, then the book and rules. */
+  .event-main { display: contents; }
+  .event-main > .otable { order: 1; }
+  .event-side { position: static; order: 2; }
+  .event-main > section { order: 3; }
 }
 @media (max-width: 680px) {
   .ohead { display: none; }
@@ -444,3 +448,6 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--no); }
 .mover .big { font-family: var(--display); font-size: 26px; font-weight: 700; line-height: 1; }
 @media (max-width: 680px) { .mover { grid-template-columns: 22px minmax(0, 1fr); } .mover .tile, .mover .spark { display: none; } }
 .thin-book { grid-column: 1 / -1; margin: 4px 0 0; font-size: 12.5px; color: var(--warn); line-height: 1.4; }
+.ecard footer > span { white-space: nowrap; }
+.ecard footer .when { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ecard .title.long { -webkit-line-clamp: 3; }

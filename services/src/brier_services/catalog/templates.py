@@ -319,7 +319,7 @@ def earthquakes(day: dt.date) -> list[list[dict[str, Any]]]:
         deadline=deadline,
         event={
             "slug": f"earthquake-m6-{day.isoformat()}",
-            "title": f"Magnitude 6+ earthquake anywhere on {_short(day)}?",
+            "title": f"Magnitude 6+ quake on {_short(day)}?",
             "tags": ["daily", "earthquakes"],
             "series": "earthquake-m6-daily",
             "exclusive": False,

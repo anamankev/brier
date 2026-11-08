@@ -50,7 +50,7 @@ export default async function setup(): Promise<void> {
     const { token } = await call<{ token: string }>("POST", "/v1/login", undefined, { username: name, password: PASSWORD });
     users[name] = { token };
   };
-  for (const [name, role] of [["ada", "admin"], ["cyd", "admin"], ["tom", undefined]] as const) await register(name, role);
+  for (const [name, role] of [["ada", "admin"], ["cyd", "admin"], ["tom", undefined], ["lis", "lister"]] as const) await register(name, role);
   for (const name of ["ada", "cyd"]) {
     const { secret } = await call<{ secret: string }>("POST", "/v1/totp/setup", users[name]!.token);
     recordStep(name, currentStep() - 2);
@@ -76,6 +76,28 @@ export default async function setup(): Promise<void> {
     const listed = await call<{ rules_hash: string }>("POST", "/v1/admin/markets", users.ada!.token, { rulebook, reason: "browser tests" });
     markets.push({ market: rulebook.market, title: rulebook.title, rules_hash: listed.rules_hash, release: rulebook.schedule.release, close: rulebook.schedule.close });
   }
-  const state: StackState = { pid: gateway.pid!, clockFile, users, markets };
+  // One day of a recurring series, from the lister's own template (forecast high 60 °F), listed
+  // as the lister service lists it.
+  const event = JSON.parse(
+    execFileSync(
+      "uv",
+      [
+        "run", "--project", "services", "--locked", "python", "-c",
+        "import json, datetime; from brier_services.catalog import templates as t; " +
+          "print(json.dumps(t.temperature(t.CITIES[0], datetime.date(2026, 11, 12), 60)))",
+      ],
+      { cwd: ROOT, encoding: "utf8" },
+    ),
+  ) as { market: number; event: { slug: string; title: string; outcome: string } }[];
+  for (const rulebook of event) {
+    await call("POST", "/v1/admin/markets", users.lis!.token, { rulebook, reason: "browser tests: series listing" });
+  }
+  const state: StackState = {
+    pid: gateway.pid!,
+    clockFile,
+    users,
+    markets,
+    event: { slug: event[0]!.event.slug, title: event[0]!.event.title, markets: event.map((r) => ({ market: r.market, outcome: r.event.outcome })) },
+  };
   writeFileSync(STATE_FILE, JSON.stringify(state, null, 1));
 }

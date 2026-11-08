@@ -58,8 +58,9 @@ test("a newcomer signs up, turns on two-step sign-in, and signs in with a code",
 
 test("the market list shows the launch catalogue, open by schedule", async ({ page }) => {
   await until("the scheduler to open the markets", async () => {
-    const { markets } = await call<{ markets: { state: string }[] }>("GET", "/v1/markets");
-    return markets.length === 5 && markets.every((m) => m.state === "open");
+    const { markets } = await call<{ markets: { market: number; state: string }[] }>("GET", "/v1/markets");
+    const catalogue = state().markets.map((m) => m.market);
+    return catalogue.every((id) => markets.some((m) => m.market === id && m.state === "open"));
   });
   await page.goto("/");
   await accessible(page, "market list");
@@ -93,6 +94,36 @@ test("a trade: buy Yes from the panel, fill against another trader, and cancel a
   await expect(page.getByRole("cell", { name: "Buy No at 20¢" })).toBeVisible();
   await page.getByRole("button", { name: /Cancel order/ }).click();
   await expect(page.getByText("No open orders.")).toBeVisible();
+});
+
+test("an event: browse its category, open it, and buy one outcome by amount", async ({ browser }) => {
+  const { event, users } = state();
+  const range = event.markets.find((m) => m.outcome === "59-60°F")!;
+  await until("the scheduler to open the event", async () => {
+    const e = await call<{ status: string }>("GET", `/v1/events/${event.slug}`);
+    return e.status === "open";
+  });
+  // Another trader offers 20 contracts of one range at 30¢.
+  await call("POST", "/v1/orders", users.tom!.token, { market: range.market, side: "sell", price: 30, qty: 20 });
+  const page = await asNewcomer(browser);
+  await page.goto("/c/weather");
+  await accessible(page, "weather category");
+  await page.getByRole("link", { name: event.title }).click();
+  await expect(page.getByRole("heading", { level: 1, name: event.title })).toBeVisible();
+  await accessible(page, "event page");
+  await page.getByRole("button", { name: /^59-60°F/ }).click();
+  await expect(page.getByText("Live", { exact: true })).toBeVisible();
+  await page.getByRole("spinbutton", { name: "Amount" }).fill("3");
+  // 3 credits buy 10 contracts at 30¢, paying 10 credits if the range is right.
+  await expect(page.getByText("10.00")).toBeVisible();
+  await page.getByRole("button", { name: "Buy Yes · 3.00" }).click();
+  await expect(page.getByText("Bought 10 Yes on “59-60°F”.")).toBeVisible();
+  await page.goto("/portfolio");
+  await expect(page.getByRole("row", { name: /New York high 59-60°F on Nov 12.*10 Yes/ })).toBeVisible();
+  for (const [path, what] of [["/movers", "movers"], ["/new", "new markets"], ["/search?q=new+york", "search"], ["/watchlist", "watchlist"]] as const) {
+    await page.goto(path);
+    await accessible(page, what);
+  }
 });
 
 test("a forecast is recorded, and covered by the next price samples", async ({ browser }) => {

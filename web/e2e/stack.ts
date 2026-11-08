@@ -4,7 +4,7 @@ import { createHmac } from "node:crypto";
 import { readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
-export const GATEWAY_PORT = 18080;
+export const GATEWAY_PORT = 18090; // apart from the local demo exchange (18080)
 export const WEB_PORT = 3100;
 export const GATEWAY = `http://127.0.0.1:${GATEWAY_PORT}`;
 export const PASSWORD = "a long enough password";
@@ -17,6 +17,8 @@ export type StackState = {
   clockFile: string;
   users: Record<string, { token: string; secret?: string }>;
   markets: { market: number; title: string; rules_hash: string; release: string; close: string }[];
+  /** A recurring event (New York's high on 12 November), listed by the lister role. */
+  event: { slug: string; title: string; markets: { market: number; outcome: string }[] };
 };
 
 export function state(): StackState {

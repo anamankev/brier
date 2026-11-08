@@ -9,10 +9,13 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from brier_services import resolve as cli
 from brier_services.resolution import nws
+from brier_services.resolution.evidence import EvidenceStore
 from brier_services.resolution.fetch import Fetcher, Request, Response
 from brier_services.resolution.resolver import Proposal, Wait, resolve
 from brier_services.resolution.sources import MalformedResponseError, Missing
@@ -109,3 +112,80 @@ def test_waits_while_only_preliminary_reports_exist() -> None:
     )
     assert isinstance(result, Wait)
     assert "no final report" in result.reason
+
+
+class VerifyingGateway:
+    """One closed Denver market with automatic review and a live proposal."""
+
+    def __init__(self, rule: Rulebook, proposed_at: str) -> None:
+        self.rule = rule
+        self.proposed_at = proposed_at
+        self.verifications: list[dict[str, Any]] = []
+
+    def markets(self) -> list[dict[str, Any]]:
+        return [{"market": self.rule.market, "state": "closed"}]
+
+    def rules(self, market: int) -> dict[str, Any]:
+        return {
+            "rulebook": self.rule.raw,
+            "rules_hash": self.rule.hash,
+            "journal": {"matches": True},
+        }
+
+    def resolutions(self, market: int) -> list[dict[str, Any]]:
+        return [
+            {
+                "resolution": 9,
+                "state": "proposed",
+                "outcome": "yes",
+                "evidence": {"retrieved_at": self.proposed_at},
+            }
+        ]
+
+    def propose(self, market: int, body: Any) -> dict[str, Any]:  # noqa: ANN401
+        raise AssertionError("already proposed")
+
+    def verify(self, resolution: int, body: Any) -> dict[str, Any]:  # noqa: ANN401
+        self.verifications.append(dict(body))
+        return {
+            "resolution": resolution,
+            "state": "confirmed",
+            "dispute_until": "2026-11-08T13:00:00Z",
+        }
+
+
+def test_a_proposal_with_automatic_review_is_verified_once_by_a_later_fetch(tmp_path: Path) -> None:
+    raw = dict(rule("2026-11-07T15:00:00Z").raw)
+    raw |= {
+        "schema": 2,
+        "review": "automatic",
+        "event": {
+            "slug": "denver-high-2026-11-06",
+            "title": "Denver high?",
+            "tags": [],
+            "exclusive": False,
+            "outcome": "Yes",
+        },
+    }
+    automatic = validate(raw)
+    gw = VerifyingGateway(automatic, "2026-11-08T11:49:00Z")
+    said: list[str] = []
+    store = EvidenceStore(tmp_path)
+    now = "2026-11-08T12:00:00Z"
+    verified: set[int] = set()
+    # Six minutes after the proposal's fetch: too soon, and nothing is fetched.
+    cli.run_once(
+        gw, store, 1_794_138_900, None, fetcher(now), lambda e, **f: said.append(e), verified
+    )
+    assert gw.verifications == []
+    assert "verify_wait" in said
+    # Eleven minutes after: verified by a fresh fetch, once.
+    cli.run_once(
+        gw, store, 1_794_139_200, None, fetcher(now), lambda e, **f: said.append(e), verified
+    )
+    cli.run_once(
+        gw, store, 1_794_139_200, None, fetcher(now), lambda e, **f: said.append(e), verified
+    )
+    assert len(gw.verifications) == 1
+    assert gw.verifications[0]["evidence"]["outcome"] == "yes"
+    assert said.count("verified") == 1

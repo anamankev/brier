@@ -428,6 +428,9 @@ class FakeGateway:
         self.proposals.append((market, dict(body)))
         return {"resolution": len(self.proposals), "evidence_hash": "x"}
 
+    def verify(self, resolution: int, body: Any) -> dict[str, Any]:  # noqa: ANN401
+        raise AssertionError("no market here has automatic review")
+
 
 def test_one_pass_proposes_only_where_it_should(tmp_path: Path) -> None:
     rules = {101: CPI_SEPT, 102: CPI_OCT_2025, 103: TMAX, 104: DGS10}
