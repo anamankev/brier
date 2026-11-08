@@ -1,0 +1,136 @@
+# The G9 live run: the recurring catalogue on a real-time exchange for 72 hours, on GitHub's
+# runners so no laptop has to stay on. Each part is one job of up to 5.25 hours that restores
+# the previous part's state; a part runs even if the one before it failed (it restores the last
+# saved state), and parts after the 72 hours have passed exit at once. Started by hand.
+name: live run (G9)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: live-run
+  cancel-in-progress: false
+
+jobs:
+  part-1:
+    uses: ./.github/workflows/live-part.yml
+    with:
+      part: 1
+      previous: 0
+    secrets: inherit
+  part-2:
+    needs: part-1
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/live-part.yml
+    with:
+      part: 2
+      previous: 1
+    secrets: inherit
+  part-3:
+    needs: part-2
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/live-part.yml
+    with:
+      part: 3
+      previous: 2
+    secrets: inherit
+  part-4:
+    needs: part-3
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/live-part.yml
+    with:
+      part: 4
+      previous: 3
+    secrets: inherit
+  part-5:
+    needs: part-4
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/live-part.yml
+    with:
+      part: 5
+      previous: 4
+    secrets: inherit
+  part-6:
+    needs: part-5
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/live-part.yml
+    with:
+      part: 6
+      previous: 5
+    secrets: inherit
+  part-7:
+    needs: part-6
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/live-part.yml
+    with:
+      part: 7
+      previous: 6
+    secrets: inherit
+  part-8:
+    needs: part-7
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/live-part.yml
+    with:
+      part: 8
+      previous: 7
+    secrets: inherit
+  part-9:
+    needs: part-8
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/live-part.yml
+    with:
+      part: 9
+      previous: 8
+    secrets: inherit
+  part-10:
+    needs: part-9
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/live-part.yml
+    with:
+      part: 10
+      previous: 9
+    secrets: inherit
+  part-11:
+    needs: part-10
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/live-part.yml
+    with:
+      part: 11
+      previous: 10
+    secrets: inherit
+  part-12:
+    needs: part-11
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/live-part.yml
+    with:
+      part: 12
+      previous: 11
+    secrets: inherit
+  part-13:
+    needs: part-12
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/live-part.yml
+    with:
+      part: 13
+      previous: 12
+    secrets: inherit
+  part-14:
+    needs: part-13
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/live-part.yml
+    with:
+      part: 14
+      previous: 13
+    secrets: inherit
+  part-15:
+    needs: part-14
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/live-part.yml
+    with:
+      part: 15
+      previous: 14
+    secrets: inherit

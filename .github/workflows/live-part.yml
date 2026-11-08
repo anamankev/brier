@@ -1,0 +1,101 @@
+# One part of the G9 live run (scripts/live_catalogue.py): restore the previous part's state,
+# run the exchange and its services for up to 5.25 hours, then save the state for the next part.
+# The state holds throwaway credentials of this run's own accounts, so it is encrypted with
+# LIVE_STATE_KEY before it is uploaded (artifacts on a public repository are downloadable).
+name: live run part
+
+on:
+  workflow_call:
+    inputs:
+      part:
+        type: number
+        required: true
+      previous:
+        description: the previous part's number (workflow expressions cannot subtract)
+        type: number
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  part:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    services:
+      postgres:
+        image: postgres:16.15-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
+        env:
+          POSTGRES_USER: brier
+          POSTGRES_PASSWORD: ci-only-not-secret
+          POSTGRES_DB: brier
+        ports:
+          - 55442:5432
+        options: >-
+          --health-cmd "pg_isready -U brier -d brier" --health-interval 2s --health-timeout 3s
+          --health-retries 30
+    env:
+      BRIER_LIVE_DATABASE_URL: postgres://brier:ci-only-not-secret@127.0.0.1:55442/brier
+      PGPASSWORD: ci-only-not-secret
+    steps:
+      - name: The state key must be set
+        env:
+          LIVE_STATE_KEY: ${{ secrets.LIVE_STATE_KEY }}
+        run: |
+          if [ -z "$LIVE_STATE_KEY" ]; then
+            echo "::error::Set the LIVE_STATE_KEY repository secret (any long random string) before the live run."
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.6"
+          working-directory: services
+          enable-cache: true
+      - run: uv sync --locked
+        working-directory: services
+      - name: Download the previous part's state
+        if: inputs.part > 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: live-g9-state-${{ inputs.previous }}
+          path: state
+      - name: Restore it
+        if: inputs.part > 1
+        env:
+          LIVE_STATE_KEY: ${{ secrets.LIVE_STATE_KEY }}
+        run: |
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:LIVE_STATE_KEY -in state/state.tar.gz.enc | tar -xz
+          psql -h 127.0.0.1 -p 55442 -U brier -d brier -q -f var/live-g9/database.sql
+      - name: Run for up to 5.25 hours
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: uv run --project services --locked python scripts/live_catalogue.py run --part-hours 5.25
+      - name: Save the state
+        if: always()
+        env:
+          LIVE_STATE_KEY: ${{ secrets.LIVE_STATE_KEY }}
+        run: |
+          mkdir -p var/live-g9 state
+          pg_dump -h 127.0.0.1 -p 55442 -U brier -d brier --schema=live_g9 --no-owner > var/live-g9/database.sql
+          tar -cz var/live-g9 | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -pass env:LIVE_STATE_KEY -out state/state.tar.gz.enc
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: live-g9-state-${{ inputs.part }}
+          path: state/state.tar.gz.enc
+          retention-days: 7
+      - name: The results so far (no credentials)
+        if: always()
+        run: |
+          mkdir -p results
+          cp var/live-g9/events.jsonl results/ 2>/dev/null || true
+          uv run --project services --locked python scripts/live_catalogue.py summary > results/summary.json || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: live-g9-results-${{ inputs.part }}
+          path: results
+          retention-days: 30

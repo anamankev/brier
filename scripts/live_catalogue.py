@@ -1,7 +1,12 @@
 """The G9 live run: the recurring catalogue on a real-time exchange for 72 hours.
 
-    BRIER_LIVE_DATABASE_URL=$(make -s db-url) uv run --project services python scripts/live_catalogue.py run
+    BRIER_LIVE_DATABASE_URL=$(make -s db-url) uv run --project services python scripts/live_catalogue.py run [--part-hours H]
     uv run --project services python scripts/live_catalogue.py summary
+
+The run lasts 72 hours from its first start and can be split into parts: each part runs at most
+``--part-hours``, stops the gateway cleanly, and the next part (with the database and
+var/live-g9/ restored) continues where it left off. GitHub Actions runs it this way, in
+6-hour jobs (.github/workflows/live-run.yml), so no laptop has to stay on.
 
 A release gateway runs on 127.0.0.1:18100 by the real clock, in its own database schema and
 journal under var/live-g9/. In one process:
@@ -161,26 +166,44 @@ def metrics(s: Session) -> dict[str, Any]:
     return {"open": len(open_markets), "by_category": by_category, "quoted": quoted, "settled": settled}
 
 
-def run(hours: float) -> int:
+def first_start() -> float | None:
+    path = LIVE / "events.jsonl"
+    if not path.exists():
+        return None
+    for line in path.read_text().splitlines():
+        x = json.loads(line)
+        if x["event"] == "start":
+            return dt.datetime.fromisoformat(x["at"]).timestamp()
+    return None
+
+
+def run(hours: float, part_hours: float) -> int:
     db = os.environ.get("BRIER_LIVE_DATABASE_URL")
     if not db:
         print("set BRIER_LIVE_DATABASE_URL (make db-url)", file=sys.stderr)
         return 2
+    if (LIVE / "complete").exists():
+        print("the live run is already complete")
+        return 0
+    resumed = first_start()
     gateway, env = start_gateway(db)
     who = users(env)
-    for path in sorted((ROOT / "markets").glob("*.toml")):  # economics and rates, by admin
-        try:
-            who["ada"].request("POST", "/v1/admin/markets", {"rulebook": load_toml(path).raw, "reason": "G9 live run"})
-        except ApiError as e:
-            log("launch_listing", market=path.stem, error=str(e))
+    if resumed is None:
+        for path in sorted((ROOT / "markets").glob("*.toml")):  # economics and rates, by admin
+            try:
+                who["ada"].request("POST", "/v1/admin/markets", {"rulebook": load_toml(path).raw, "reason": "G9 live run"})
+            except ApiError as e:
+                log("launch_listing", market=path.stem, error=str(e))
     maker = MarketMaker(who["maker"], FairValues(os.environ.get("FRED_API_KEY")), say=lambda *a, **k: None)
     forecasts = Forecasts()
     store = EvidenceStore(LIVE / "evidence")
     verified: set[int] = set()
-    started = time.time()
+    started = resumed if resumed is not None else time.time()
+    part_end = time.time() + part_hours * 3600
+    end = min(started + hours * 3600, part_end)
     last = {"list": 0.0, "resolve": 0.0, "metrics": 0.0}
-    log("start", hours=hours, gateway_pid=gateway.pid)
-    while time.time() - started < hours * 3600:
+    log("resume" if resumed is not None else "start", hours=hours, gateway_pid=gateway.pid)
+    while time.time() < end:
         now = time.time()
         try:
             if now - last["list"] >= 1800:
@@ -198,7 +221,13 @@ def run(hours: float) -> int:
         except (ApiError, OSError) as e:
             log("pass_failed", error=f"{type(e).__name__}: {e}")
         time.sleep(max(0.0, 60 - (time.time() - now)))
-    log("end")
+    gateway.terminate()  # the gateway stops cleanly on SIGTERM; the journal is already durable
+    gateway.wait(timeout=60)
+    if time.time() >= started + hours * 3600:
+        log("end")
+        (LIVE / "complete").write_text("72-hour live run complete\n")
+    else:
+        log("part_end")
     print(json.dumps(summary(), indent=1))
     return 0
 
@@ -217,9 +246,12 @@ def summary() -> dict[str, Any]:
             first_settled.setdefault(m, x["at"])
     start = next((x["at"] for x in lines if x["event"] == "start"), None)
     hours = (dt.datetime.fromisoformat(samples[-1]["at"]) - dt.datetime.fromisoformat(start)).total_seconds() / 3600 if samples and start else 0
+    stamps = [dt.datetime.fromisoformat(x["at"]) for x in samples]
+    gaps = [round((b - a).total_seconds() / 60, 1) for a, b in zip(stamps, stamps[1:], strict=False) if (b - a).total_seconds() > 600]
     coverage = [x["quoted"] / x["open"] for x in samples if x["open"]]
     return {
         "hours_observed": round(hours, 2),
+        "gaps_over_10_minutes": gaps,
         "samples": len(samples),
         "min_open_markets": min((x["open"] for x in samples), default=0),
         "categories_open_throughout": sorted(set.intersection(*(set(x["by_category"]) for x in samples))) if samples else [],
@@ -235,13 +267,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="scripts/live_catalogue.py")
     sub = parser.add_subparsers(dest="command", required=True)
     r = sub.add_parser("run")
-    r.add_argument("--hours", type=float, default=HOURS)
+    r.add_argument("--hours", type=float, default=HOURS, help="the whole run, from its first start")
+    r.add_argument("--part-hours", type=float, default=HOURS, help="this part's longest run")
     sub.add_parser("summary")
     args = parser.parse_args(argv)
     if args.command == "summary":
         print(json.dumps(summary(), indent=1))
         return 0
-    return run(args.hours)
+    return run(args.hours, args.part_hours)
 
 
 if __name__ == "__main__":
