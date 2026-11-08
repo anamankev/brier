@@ -16,6 +16,7 @@ pub mod markets;
 pub mod resolution;
 pub mod routes;
 pub mod scheduler;
+pub mod surveillance;
 pub mod totp;
 pub mod ws;
 
@@ -35,6 +36,7 @@ use axum::routing::{MethodFilter, on};
 use brier_core::CoreHandle;
 use brier_readmodel::{Projector, ReadModelError};
 use serde_json::json;
+use sha2::Digest as _;
 use tokio::sync::watch;
 use tokio_postgres::Client;
 
@@ -57,6 +59,17 @@ pub const DISPUTE_WINDOW: Unix = 24 * 3_600;
 /// The client address, as the gateway saw it, for per-address limits.
 #[derive(Debug, Clone, Copy)]
 pub struct ClientIp(pub IpAddr);
+
+/// The client address to record as a login signal: the address a keyed proxy forwarded, or a
+/// direct client's own address. `None` when only a proxy's address is known (recording it
+/// would link every user behind the proxy), or for loopback and unspecified addresses.
+#[derive(Debug, Clone, Copy)]
+pub struct LoginAddress(pub Option<IpAddr>);
+
+/// Header the web server sends to prove it is the configured proxy (`BRIER_PROXY_KEY`).
+pub const PROXY_KEY_HEADER: &str = "x-brier-proxy-key";
+/// Header carrying the client address the proxy saw, trusted only with a valid proxy key.
+pub const CLIENT_ADDRESS_HEADER: &str = "x-brier-client-address";
 
 /// Everything the handlers share.
 pub struct AppState {
@@ -87,6 +100,9 @@ pub struct AppState {
     /// The key TOTP secrets are encrypted under (`BRIER_TOTP_KEY`); without it, TOTP cannot be
     /// set up and admin actions are unavailable.
     pub totp_key: Option<[u8; 32]>,
+    /// SHA-256 of the shared key that lets the web server forward client addresses
+    /// (`BRIER_PROXY_KEY`); without it, forwarded addresses are never trusted.
+    pub proxy_key: Option<[u8; 32]>,
     /// A hash checked when the username is unknown, so login time does not reveal it.
     dummy_hash: String,
 }
@@ -120,6 +136,7 @@ impl AppState {
             clock: Clock::system(),
             dispute_window: DISPUTE_WINDOW,
             totp_key: None,
+            proxy_key: None,
             dummy_hash: auth::hash_password("timing equalizer, never a real password")?,
         })
     }
@@ -130,6 +147,13 @@ impl AppState {
     #[must_use]
     pub fn with_clock(mut self, clock: Clock) -> Self {
         self.clock = clock;
+        self
+    }
+
+    /// The same state trusting client addresses forwarded with this proxy key.
+    #[must_use]
+    pub fn with_proxy_key(mut self, key: &str) -> Self {
+        self.proxy_key = Some(sha2::Sha256::digest(key.as_bytes()).into());
         self
     }
 
@@ -148,16 +172,62 @@ impl AppState {
     }
 }
 
+enum Forwarded {
+    /// The configured proxy, with the client address it saw.
+    Client(IpAddr),
+    /// The configured proxy, without a client address.
+    ProxyOnly,
+    /// Anything else: forwarded headers, if any, are ignored.
+    Direct,
+}
+
+/// Whether the request comes from the configured proxy, and the client address it forwarded.
+/// Without `BRIER_PROXY_KEY`, or with a wrong key, forwarded headers are ignored: anyone could
+/// send them.
+fn forwarded(s: &AppState, headers: &axum::http::HeaderMap) -> Forwarded {
+    let (Some(expected), Some(given)) = (s.proxy_key, headers.get(PROXY_KEY_HEADER)) else {
+        return Forwarded::Direct;
+    };
+    let given: [u8; 32] = sha2::Sha256::digest(given.as_bytes()).into();
+    // Compare in constant time: the key must not leak through response timing.
+    if expected
+        .iter()
+        .zip(given)
+        .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+        != 0
+    {
+        return Forwarded::Direct;
+    }
+    headers
+        .get(CLIENT_ADDRESS_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.trim().parse::<IpAddr>().ok())
+        .map_or(Forwarded::ProxyOnly, |a| {
+            Forwarded::Client(a.to_canonical())
+        })
+}
+
 /// Per-address limit and request timeout, for every request.
 async fn guard(State(s): State<Arc<AppState>>, mut req: Request, next: Next) -> Response {
-    let ip = req
+    let direct = req
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
-        .map_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED), |c| c.0.ip());
+        .map_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED), |c| {
+            c.0.ip().to_canonical()
+        });
+    let (ip, signal) = match forwarded(&s, req.headers()) {
+        Forwarded::Client(a) => (a, Some(a)),
+        Forwarded::ProxyOnly => (direct, None),
+        Forwarded::Direct => (
+            direct,
+            (!direct.is_loopback() && !direct.is_unspecified()).then_some(direct),
+        ),
+    };
     if !s.address_limits.allow(ip) {
         return ApiError::rate_limited().into_response();
     }
     req.extensions_mut().insert(ClientIp(ip));
+    req.extensions_mut().insert(LoginAddress(signal));
     tokio::time::timeout(REQUEST_TIMEOUT, next.run(req))
         .await
         .unwrap_or_else(|_| {
@@ -222,6 +292,11 @@ endpoints! {
     POST "/v1/admin/disputes/{id}/rule" => resolution::rule,
     GET "/v1/admin/queue" => resolution::queue,
     GET "/v1/admin/audit" => resolution::audit_log,
+    GET "/v1/admin/cases" => surveillance::cases,
+    GET "/v1/admin/cases/{id}" => surveillance::case,
+    POST "/v1/admin/cases/{id}/close" => surveillance::close_case,
+    GET "/v1/surveillance/links" => surveillance::links,
+    POST "/v1/surveillance/cases" => surveillance::open_case,
     POST "/v1/admin/cancel-all" => routes::cancel_all,
     POST "/v1/admin/halt-all" => routes::halt_all,
 }

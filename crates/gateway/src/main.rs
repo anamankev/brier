@@ -4,12 +4,16 @@
 //! brier-gateway [serve]                 run the exchange
 //! brier-gateway promote <user> <reason> give a user the admin role (audit-logged)
 //! brier-gateway role <user> <role> <reason>
-//!                                       set a user's role: trader, admin, or resolver (audit-logged)
+//!                                       set a user's role: trader, admin, resolver, or
+//!                                       surveillance (audit-logged)
 //! ```
 //! Configuration comes from the environment only: `BRIER_DATABASE_URL` (required; never
 //! logged), `BRIER_DATA_DIR` (default `data`), `BRIER_LISTEN` (default `127.0.0.1:8080`),
 //! `BRIER_DISPUTE_WINDOW_SECONDS` (default 86400), `BRIER_TOTP_KEY` (64 hex digits; the key
-//! TOTP secrets are encrypted under; without it TOTP and admin actions are unavailable), and `BRIER_DATABASE_SCHEMA` (optional: keep
+//! TOTP secrets are encrypted under; without it TOTP and admin actions are unavailable),
+//! `BRIER_PROXY_KEY` (optional, at least 32 characters: the web server sends it with each
+//! request so the gateway trusts the client address it forwards; without it forwarded
+//! addresses are ignored), and `BRIER_DATABASE_SCHEMA` (optional: keep
 //! every table in this schema, created if missing, so several exchanges, such as test runs,
 //! can share one database).
 
@@ -85,6 +89,30 @@ async fn shutdown_signal() {
     let _ = interrupt.await;
 }
 
+/// The TOTP key and the proxy key, from the environment.
+fn with_keys(mut state: AppState) -> Result<AppState, String> {
+    match std::env::var("BRIER_TOTP_KEY") {
+        Ok(hex) => {
+            let key = brier_gateway::totp::parse_key(&hex)
+                .ok_or("BRIER_TOTP_KEY must be 64 lowercase hex digits")?;
+            state = state.with_totp_key(key);
+        }
+        Err(_) => info(
+            "no BRIER_TOTP_KEY: TOTP and admin actions are unavailable",
+            &json!({}),
+        ),
+    }
+    match std::env::var("BRIER_PROXY_KEY") {
+        Ok(key) if key.chars().count() >= 32 => state = state.with_proxy_key(&key),
+        Ok(_) => return Err("BRIER_PROXY_KEY must be at least 32 characters".to_owned()),
+        Err(_) => info(
+            "no BRIER_PROXY_KEY: client addresses behind the web server are not known",
+            &json!({}),
+        ),
+    }
+    Ok(state)
+}
+
 async fn serve(url: &str) -> Result<(), String> {
     let data = PathBuf::from(std::env::var("BRIER_DATA_DIR").unwrap_or_else(|_| "data".to_owned()));
     let listen: SocketAddr = std::env::var("BRIER_LISTEN")
@@ -114,17 +142,7 @@ async fn serve(url: &str) -> Result<(), String> {
     let mut state = AppState::new(core.clone(), db)
         .map_err(|e| format!("{e:?}"))?
         .with_dispute_window(dispute_window);
-    match std::env::var("BRIER_TOTP_KEY") {
-        Ok(hex) => {
-            let key = brier_gateway::totp::parse_key(&hex)
-                .ok_or("BRIER_TOTP_KEY must be 64 lowercase hex digits")?;
-            state = state.with_totp_key(key);
-        }
-        Err(_) => info(
-            "no BRIER_TOTP_KEY: TOTP and admin actions are unavailable",
-            &json!({}),
-        ),
-    }
+    state = with_keys(state)?;
     // Test builds only: a looser sign-in limit, for browser tests that sign many users in from
     // one address.
     #[cfg(feature = "test-clock")]
@@ -196,8 +214,8 @@ async fn promote(url: &str, username: &str, reason: &str) -> Result<(), String> 
 }
 
 async fn set_role(url: &str, username: &str, role: &str, reason: &str) -> Result<(), String> {
-    if !["trader", "admin", "resolver"].contains(&role) {
-        return Err("role must be trader, admin, or resolver".to_owned());
+    if !["trader", "admin", "resolver", "surveillance"].contains(&role) {
+        return Err("role must be trader, admin, resolver, or surveillance".to_owned());
     }
     if !(3..=500).contains(&reason.trim().chars().count()) {
         return Err("reason must be 3 to 500 characters".to_owned());

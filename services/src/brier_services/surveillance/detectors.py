@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import statistics
 from collections import Counter, defaultdict
-from collections.abc import Callable, Mapping, Set
+from collections.abc import Callable, Iterator, Mapping, Set
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -275,3 +276,16 @@ def scores(tape: Tape, links: Links) -> list[Alert]:
 def alerts(found: list[Alert], thresholds: Mapping[str, float]) -> list[Alert]:
     """The scores at or above their typology's threshold."""
     return [a for a in found if a.score >= thresholds[a.typology]]
+
+
+@contextmanager
+def configured(values: Mapping[str, float]) -> Iterator[None]:
+    """Run the detectors with some module parameters changed (the exploratory variants, and
+    the rules the live service runs), restoring them afterwards."""
+    module = globals()
+    old = {name: module[name] for name in values}
+    module.update(values)
+    try:
+        yield
+    finally:
+        module.update(old)

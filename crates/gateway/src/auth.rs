@@ -56,6 +56,8 @@ pub enum Role {
     Admin,
     /// Proposes market outcomes, and nothing else: it cannot trade, confirm, or settle.
     Resolver,
+    /// The surveillance service: reads login links and opens cases, and nothing else.
+    Surveillance,
 }
 
 impl Role {
@@ -65,8 +67,16 @@ impl Role {
         match name {
             "admin" => Self::Admin,
             "resolver" => Self::Resolver,
+            "surveillance" => Self::Surveillance,
             _ => Self::Trader,
         }
+    }
+
+    /// Whether the role may trade and forecast. A resolver must not trade on outcomes it
+    /// proposes, and the surveillance service must not trade on what it watches.
+    #[must_use]
+    pub const fn trades(self) -> bool {
+        matches!(self, Self::Trader | Self::Admin)
     }
 }
 

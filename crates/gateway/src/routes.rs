@@ -49,6 +49,9 @@ pub struct Req {
     uri: Uri,
     headers: HeaderMap,
     ip: IpAddr,
+    /// The client address to record as a login signal, if the gateway knows it
+    /// ([`crate::LoginAddress`]).
+    pub(crate) signal: Option<IpAddr>,
     body: Bytes,
 }
 
@@ -65,6 +68,10 @@ impl<S: Send + Sync> FromRequest<S> for Req {
             .extensions()
             .get::<ClientIp>()
             .map_or(IpAddr::from([0, 0, 0, 0]), |c| c.0);
+        let signal = req
+            .extensions()
+            .get::<crate::LoginAddress>()
+            .and_then(|a| a.0);
         let body = Bytes::from_request(req, state).await.map_err(|e| {
             if e.status() == StatusCode::PAYLOAD_TOO_LARGE {
                 ApiError::new(
@@ -81,6 +88,7 @@ impl<S: Send + Sync> FromRequest<S> for Req {
             uri,
             headers,
             ip,
+            signal,
             body,
         })
     }
@@ -109,7 +117,7 @@ impl Req {
             .map_err(|e| ApiError::bad_request(format!("invalid body: {e}")))
     }
 
-    fn query<T: DeserializeOwned>(&self) -> Result<T, ApiError> {
+    pub(crate) fn query<T: DeserializeOwned>(&self) -> Result<T, ApiError> {
         UrlQuery::try_from_uri(&self.uri)
             .map(|q| q.0)
             .map_err(|e| ApiError::bad_request(e.body_text()))
@@ -261,6 +269,7 @@ pub async fn login(State(s): Shared, req: Req) -> ApiResult {
         check_totp(&s, user.id, &stored, &code).await?;
     }
     ensure_account(&s, user).await?;
+    crate::surveillance::record_login(&s, user.id, req.signal).await?;
     let token = auth::new_session(&s.db, user.id, user.mfa).await?;
     let expires = i64::from(auth::SESSION_HOURS).saturating_mul(3_600);
     Ok(
@@ -585,8 +594,7 @@ pub fn decode_order(body: &[u8], account: AccountId) -> Result<Command, ApiError
 
 async fn trader(s: &AppState, req: &Req) -> Result<AccountId, ApiError> {
     let user = req.user(s, true).await?;
-    // A resolver proposes outcomes; it must never also be able to trade on them.
-    if user.role == Role::Resolver {
+    if !user.role.trades() {
         return Err(ApiError::forbidden());
     }
     if !s.order_limits.allow(user.id) {

@@ -56,6 +56,7 @@ tags:
   - name: resolution
   - name: forecasts
   - name: administration
+  - name: surveillance
 paths:
   /v1/health:
     get:
@@ -981,6 +982,139 @@ paths:
                   entries: { type: array, items: { type: object, required: [id, at, actor, action, reason] } }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
+  /v1/admin/cases:
+    get:
+      tags: [surveillance]
+      summary: Surveillance cases, newest first (at most 200; default open)
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, dismissed, actioned, all] } }
+      responses:
+        '200':
+          description: Cases
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cases]
+                properties:
+                  cases: { type: array, items: { $ref: '#/components/schemas/Case' } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+  /v1/admin/cases/{id}:
+    get:
+      tags: [surveillance]
+      summary: One case, with its evidence and the accounts linked to its account by a shared login address
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: The case
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Case' }
+                  - type: object
+                    required: [evidence, linked_accounts]
+                    properties:
+                      evidence: { type: object }
+                      linked_accounts:
+                        type: array
+                        items: { type: object, required: [account, username], properties: { account: { type: integer }, username: { type: string } } }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /v1/admin/cases/{id}/close:
+    post:
+      tags: [surveillance]
+      summary: Close an open case as dismissed or actioned, with a reason (audited)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [outcome, reason]
+              properties:
+                outcome: { type: string, enum: [dismissed, actioned] }
+                reason: { type: string, minLength: 3, maxLength: 500 }
+      responses:
+        '200':
+          description: Closed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [case, status, audit_id]
+                properties:
+                  case: { type: integer }
+                  status: { type: string, enum: [dismissed, actioned] }
+                  audit_id: { type: integer }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /v1/surveillance/links:
+    get:
+      tags: [surveillance]
+      summary: Pairs of accounts that have logged in from a shared address (surveillance role, or admin with TOTP)
+      responses:
+        '200':
+          description: Linked pairs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [links]
+                properties:
+                  links:
+                    type: array
+                    items:
+                      type: object
+                      required: [accounts, shared_addresses]
+                      properties:
+                        accounts: { type: array, items: { type: integer }, minItems: 2, maxItems: 2 }
+                        shared_addresses: { type: integer, minimum: 1 }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+  /v1/surveillance/cases:
+    post:
+      tags: [surveillance]
+      summary: Open a case for a detector alert (surveillance role); a repeat of the same typology, market, and account returns the existing case
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [typology, market, account, score, detector, evidence]
+              properties:
+                typology: { type: string, enum: [wash, spoof, close, insider] }
+                market: { type: integer, minimum: 0 }
+                account: { type: integer, minimum: 0 }
+                score: { type: number, exclusiveMinimum: 0 }
+                detector: { type: string, minLength: 1, maxLength: 100 }
+                evidence: { type: object }
+      responses:
+        '201':
+          description: Opened
+          content:
+            application/json:
+              schema: { type: object, required: [case, opened], properties: { case: { type: integer }, opened: { type: boolean } } }
+        '200':
+          description: Already open (or closed) for this typology, market, and account
+          content:
+            application/json:
+              schema: { type: object, required: [case, opened], properties: { case: { type: integer }, opened: { type: boolean } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
   /v1/admin/cancel-all:
     post:
       tags: [administration]
@@ -1082,6 +1216,23 @@ components:
                 description: Engine events in the wire format (docs/protocol.md §6)
                 items: { type: object }
   schemas:
+    Case:
+      type: object
+      required: [case, typology, market, account, score, detector, status, opened_at]
+      properties:
+        case: { type: integer }
+        typology: { type: string, enum: [wash, spoof, close, insider] }
+        market: { type: integer }
+        market_title: { type: [string, 'null'] }
+        account: { type: integer }
+        username: { type: [string, 'null'] }
+        score: { type: number }
+        detector: { type: string }
+        status: { type: string, enum: [open, dismissed, actioned] }
+        opened_at: { type: string, format: date-time }
+        closed_at: { type: [string, 'null'], format: date-time }
+        closed_by: { type: [string, 'null'] }
+        close_reason: { type: [string, 'null'] }
     Error:
       type: object
       required: [code, message]

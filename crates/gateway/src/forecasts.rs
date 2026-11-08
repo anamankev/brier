@@ -23,7 +23,6 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::AppState;
-use crate::auth::Role;
 use crate::clock::Unix;
 use crate::error::ApiError;
 use crate::markets::{iso, listing, market_state};
@@ -46,9 +45,9 @@ struct ForecastBody {
 pub async fn put(State(s): Shared, Path(raw): Path<String>, req: Req) -> ApiResult {
     let market = MarketId::new(parse_id(&raw, "market")?);
     let user = req.user(&s, true).await?;
-    if user.role == Role::Resolver {
+    if !user.role.trades() {
         return Err(ApiError::forbidden_because(
-            "a resolver proposes outcomes and does not forecast them",
+            "resolver and surveillance accounts do not forecast",
         ));
     }
     if !s.order_limits.allow(user.id) {

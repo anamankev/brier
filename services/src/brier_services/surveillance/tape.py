@@ -38,6 +38,7 @@ class Order:
     filled: int = 0
     rested: bool = False
     cancelled_clock: int | None = None
+    cancel_seq: int | None = None
     cancel_reason: str | None = None
 
 
@@ -177,6 +178,7 @@ class Tape:
                 order = tape.orders.get(int(e["order"]))
                 if order is not None:
                     order.cancelled_clock = tape.clock
+                    order.cancel_seq = seq
                     order.cancel_reason = str(e["reason"])
                 tape.book.pop(int(e["order"]), None)
 

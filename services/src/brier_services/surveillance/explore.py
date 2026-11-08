@@ -12,8 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -33,25 +31,13 @@ VARIANTS: dict[str, tuple[str, dict[str, float]]] = {
 }
 
 
-@contextmanager
-def parameters(values: dict[str, float]) -> Iterator[None]:
-    old = {name: getattr(detectors, name) for name in values}
-    for name, value in values.items():
-        setattr(detectors, name, value)
-    try:
-        yield
-    finally:
-        for name, value in old.items():
-            setattr(detectors, name, value)
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m brier_services.surveillance.explore")
     parser.add_argument("--out", type=Path, default=Path("var/surveillance-study"))
     args = parser.parse_args(argv)
     out: dict[str, Any] = {"fresh_seeds": [FRESH.start, FRESH.stop - 1], "variants": {}}
     for name, (typology, changed) in VARIANTS.items():
-        with parameters(changed):
+        with detectors.configured(changed):
             data = study.collect([*study.TUNING, *FRESH])
         threshold = study.tune(data, typology)
         counts = study.total(study.per_seed(data, typology, threshold, FRESH).values())
