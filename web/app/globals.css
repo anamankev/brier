@@ -269,3 +269,46 @@ details > summary { cursor: pointer; font-weight: 600; font-size: 14px; color: v
 .facts dd { margin: 2px 0 0; }
 tr.flagged td { background: var(--no-soft); }
 tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--no); }
+
+/* ---- event cards (G9) ------------------------------------------------------------------------ */
+.tile.earthquakes { background: #c9a227; color: #2a2003; }
+.tile.space { background: #9b7cf6; color: #170b3a; }
+.ecard { display: flex; flex-direction: column; gap: 14px; padding: 16px 16px 12px; min-height: 196px; transition: border-color .15s, background .15s; }
+.ecard:hover { border-color: var(--line-2); background: color-mix(in srgb, var(--surface) 92%, white 8%); }
+.ecard header { display: flex; gap: 12px; align-items: flex-start; }
+.ecard .title { font-weight: 650; font-size: 15.5px; line-height: 1.3; flex: 1; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ecard .title::after { content: ""; position: absolute; inset: 0; }
+.ecard { position: relative; }
+.ecard a:not(.title), .ecard button { position: relative; z-index: 1; }
+.ecard .outcomes { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ecard .outcomes li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; font-size: 14.5px; }
+.ecard .outcomes .name { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ecard .outcomes .pct { font-weight: 700; font-size: 16px; min-width: 44px; text-align: right; }
+.ecard .mini { display: inline-flex; gap: 6px; }
+.ecard .mini a { font-size: 12.5px; font-weight: 700; padding: 5px 10px; border-radius: 7px; }
+.ecard .mini .yes { background: var(--yes-soft); color: var(--yes); }
+.ecard .mini .no { background: var(--no-soft); color: var(--no); }
+.ecard .mini .yes:hover { background: var(--yes-line); }
+.ecard .mini .no:hover { background: var(--no-line); }
+.ecard .seg.big { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: auto; }
+.ecard .seg.big .px { justify-content: center; height: 44px; font-size: 15px; }
+.ecard .seg.big .px span { opacity: .85; margin-left: 6px; }
+.ecard .state { margin: auto 0 0; font-size: 14px; }
+.ecard footer { margin-top: auto; display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); }
+.ecard footer .cad { display: inline-flex; align-items: center; gap: 5px; }
+.ecard footer .when { margin-left: auto; }
+.gauge { display: grid; justify-items: center; line-height: 1; flex: none; margin-top: -2px; }
+.gauge strong { font-size: 15px; margin-top: -14px; }
+.gauge span { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.icon-btn { background: none; border: 0; color: var(--muted); padding: 4px; border-radius: 6px; cursor: pointer; display: inline-grid; place-items: center; }
+.icon-btn:hover { color: var(--text); background: var(--surface-2); }
+.icon-btn.on { color: var(--warn); }
+.grid-3 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.cats .sep { width: 1px; height: 18px; background: var(--line-2); flex: none; }
+.mchart { display: grid; gap: 8px; }
+.mchart .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13.5px; color: var(--text-2); }
+.mchart .legend span { display: inline-flex; align-items: center; gap: 7px; }
+.mchart .legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.mchart .legend b { color: var(--text); font-weight: 650; }
+.mchart .readout { margin-right: auto; font-size: 12.5px; align-self: center; }
+.chart-empty { display: grid; place-items: center; text-align: center; padding: 0 24px; }

@@ -68,7 +68,8 @@ Read on 7 November 2026. Every resolution source must be free, public, and autho
 ### Open-Meteo (open-meteo.com)
 - **Status:** data under CC BY 4.0. The free API is for non-commercial use: 10,000 calls a day, 5,000 an hour, 600 a minute. Brier is non-commercial (play money, no revenue).
 - **Attribution required:** "Weather data by Open-Meteo.com", linked, on every page that shows these data, with the licence and any changes noted.
-- **Brier's use:** daily highs for cities outside the US, and forecasts as the market maker's input. It is not used as the sole source where a national weather service publishes an official record.
+- **Brier's use:** day-ahead forecasts as the market maker's input for temperature markets, and as the backtest's archived forecasts (`docs/notes/catalog-models.md`). It never settles a market.
+- **Attribution:** in the web app's footer, beside the data sources.
 
 ### Coinbase market data: not usable
 - Coinbase's Market Data Terms (updated 7 August 2026) license the data only for the user's own personal or research use. Without written consent they forbid:

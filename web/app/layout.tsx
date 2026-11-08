@@ -3,7 +3,8 @@ import Link from "next/link";
 import { Barlow_Condensed, Inter } from "next/font/google";
 import { gateway, me } from "@/lib/server";
 import { credits } from "@/lib/format";
-import type { MarketRow, Portfolio } from "@/lib/types";
+import type { Portfolio } from "@/lib/types";
+import { CATEGORIES, listEvents } from "@/lib/events";
 import { Mark, SearchIcon } from "@/components/Icons";
 import { SignOut } from "@/components/SignOut";
 import "./globals.css";
@@ -12,21 +13,15 @@ const display = Barlow_Condensed({ subsets: ["latin"], weight: ["600", "700"], v
 const sans = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: { default: "Brier · Forecast the economy", template: "%s · Brier" },
-  description: "Trade yes/no contracts on economic data, rates, and weather. Every market's rules are pinned and every outcome comes with its evidence.",
+  title: { default: "Brier · Trade what happens next", template: "%s · Brier" },
+  description:
+    "A play-money prediction market on things public data settles: city temperatures, earthquakes, geomagnetic storms, inflation, jobs, and rates. Every market's rules are pinned and every outcome comes with its evidence.",
 };
 
-const CATEGORIES = [
-  ["economics", "Economics"],
-  ["rates", "Rates"],
-  ["weather", "Weather"],
-] as const;
-
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const [user, list] = await Promise.all([me(), gateway<{ markets: MarketRow[] }>("/v1/markets")]);
+  const [user, open] = await Promise.all([me(), listEvents({ status: "open", limit: 0 })]);
   const portfolio = user ? await gateway<Portfolio>("/v1/portfolio") : null;
-  const markets = list.ok ? list.body.markets.filter((m) => m.title) : [];
-  const count = (c: string) => markets.filter((m) => m.category === c).length;
+  const count = (c: string) => open?.categories[c] ?? 0;
   return (
     <html lang="en" className={`${display.variable} ${sans.variable}`}>
       <body>
@@ -41,11 +36,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </Link>
             <nav className="nav" aria-label="Main">
               <Link href="/">Markets</Link>
+              <Link href="/movers">Movers</Link>
               <Link href="/leaderboards">Leaderboards</Link>
               {user && <Link href="/portfolio">Portfolio</Link>}
               {user?.role === "admin" && <Link href="/admin">Admin</Link>}
             </nav>
-            <form className="search" action="/" role="search">
+            <form className="search" action="/search" role="search">
               <SearchIcon />
               <label className="sr-only" htmlFor="q">
                 Search markets
@@ -78,14 +74,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               )}
             </div>
           </div>
-          <nav className="page cats" aria-label="Categories">
-            <Link href="/">All markets</Link>
-            {CATEGORIES.map(([id, name]) => (
-              <Link key={id} href={`/?category=${id}`}>
-                {name}
-                <span className="count">{count(id)}</span>
+          <nav className="page cats" aria-label="Browse">
+            <Link href="/">Trending</Link>
+            <Link href="/new">New</Link>
+            <Link href="/movers">Movers</Link>
+            <span className="sep" aria-hidden="true" />
+            {CATEGORIES.map((c) => (
+              <Link key={c.slug} href={`/c/${c.slug}`}>
+                {c.name}
+                {count(c.slug) > 0 && <span className="count">{count(c.slug)}</span>}
               </Link>
             ))}
+            <span className="sep" aria-hidden="true" />
+            <Link href="/watchlist">Watchlist</Link>
             {user && <Link href="/scorecard">Your scorecard</Link>}
           </nav>
         </header>
@@ -101,7 +102,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   Brier
                 </Link>
                 <p className="muted" style={{ fontSize: 14, maxWidth: 280 }}>
-                  A prediction market for economic data, rates, and weather, scored by the Brier score.
+                  A prediction market on what public data settles, scored by the Brier score. Play money only.
                 </p>
               </div>
               <div>
@@ -135,8 +136,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 sold, withdrawn, or transferred.
               </p>
               <p style={{ margin: 0 }}>
-                Data: U.S. Bureau of Labor Statistics; Federal Reserve Bank of St. Louis (FRED®); NOAA National Centers
-                for Environmental Information. This product uses the FRED® API but is not endorsed or certified by the
+                Data: U.S. Bureau of Labor Statistics; Federal Reserve Bank of St. Louis (FRED®); National Weather
+                Service; U.S. Geological Survey; NOAA Space Weather Prediction Center; NOAA National Centers for
+                Environmental Information. Weather forecasts behind the market maker&apos;s temperature quotes by{" "}
+                <a className="link" href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0). This product uses the FRED® API but is not endorsed or certified by the
                 Federal Reserve Bank of St. Louis. By using FRED® data here you are bound by the{" "}
                 <a href="https://fred.stlouisfed.org/docs/api/terms_of_use.html">FRED® API Terms of Use</a>.
               </p>

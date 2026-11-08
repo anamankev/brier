@@ -37,11 +37,21 @@ class City:
     station: str  # where the official reading is taken
     latitude: float
     longitude: float
+    timezone: str  # IANA zone; NWS climate days are local standard time
 
 
 CITIES = (
-    City(1, "NYC", "nyc", "New York", "Central Park", 40.7789, -73.9692),
-    City(2, "ORD", "chicago", "Chicago", "O'Hare International Airport", 41.9786, -87.9048),
+    City(1, "NYC", "nyc", "New York", "Central Park", 40.7789, -73.9692, "America/New_York"),
+    City(
+        2,
+        "ORD",
+        "chicago",
+        "Chicago",
+        "O'Hare International Airport",
+        41.9786,
+        -87.9048,
+        "America/Chicago",
+    ),
     City(
         3,
         "LAX",
@@ -50,13 +60,48 @@ CITIES = (
         "Los Angeles International Airport",
         33.9382,
         -118.3866,
+        "America/Los_Angeles",
     ),
-    City(4, "MIA", "miami", "Miami", "Miami International Airport", 25.7881, -80.3169),
-    City(5, "BOS", "boston", "Boston", "Logan International Airport", 42.3606, -71.0106),
     City(
-        6, "SEA", "seattle", "Seattle", "Seattle-Tacoma International Airport", 47.4447, -122.3144
+        4,
+        "MIA",
+        "miami",
+        "Miami",
+        "Miami International Airport",
+        25.7881,
+        -80.3169,
+        "America/New_York",
     ),
-    City(7, "DEN", "denver", "Denver", "Denver International Airport", 39.8466, -104.6562),
+    City(
+        5,
+        "BOS",
+        "boston",
+        "Boston",
+        "Logan International Airport",
+        42.3606,
+        -71.0106,
+        "America/New_York",
+    ),
+    City(
+        6,
+        "SEA",
+        "seattle",
+        "Seattle",
+        "Seattle-Tacoma International Airport",
+        47.4447,
+        -122.3144,
+        "America/Los_Angeles",
+    ),
+    City(
+        7,
+        "DEN",
+        "denver",
+        "Denver",
+        "Denver International Airport",
+        39.8466,
+        -104.6562,
+        "America/Denver",
+    ),
     City(
         8,
         "ATL",
@@ -65,16 +110,47 @@ CITIES = (
         "Hartsfield-Jackson International Airport",
         33.6301,
         -84.4418,
-    ),
-    City(9, "PHX", "phoenix", "Phoenix", "Sky Harbor International Airport", 33.4278, -112.0037),
-    City(
-        10, "DCA", "washington-dc", "Washington, DC", "Reagan National Airport", 38.8472, -77.0345
+        "America/New_York",
     ),
     City(
-        11, "AUS", "austin", "Austin", "Austin-Bergstrom International Airport", 30.1830, -97.6799
+        9,
+        "PHX",
+        "phoenix",
+        "Phoenix",
+        "Sky Harbor International Airport",
+        33.4278,
+        -112.0037,
+        "America/Phoenix",
     ),
     City(
-        12, "DFW", "dallas", "Dallas", "Dallas/Fort Worth International Airport", 32.8998, -97.0403
+        10,
+        "DCA",
+        "washington-dc",
+        "Washington, DC",
+        "Reagan National Airport",
+        38.8472,
+        -77.0345,
+        "America/New_York",
+    ),
+    City(
+        11,
+        "AUS",
+        "austin",
+        "Austin",
+        "Austin-Bergstrom International Airport",
+        30.1830,
+        -97.6799,
+        "America/Chicago",
+    ),
+    City(
+        12,
+        "DFW",
+        "dallas",
+        "Dallas",
+        "Dallas/Fort Worth International Airport",
+        32.8998,
+        -97.0403,
+        "America/Chicago",
     ),
 )
 QUAKE_M5_CODE, QUAKE_M6_CODE, KP_CODE = 50, 51, 60

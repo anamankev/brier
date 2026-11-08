@@ -20,6 +20,7 @@ ALLOWED_HOSTS = frozenset(
         "api.weather.gov",
         "earthquake.usgs.gov",
         "services.swpc.noaa.gov",
+        "api.open-meteo.com",
     }
 )
 MAX_BODY_BYTES = 4 * 1024 * 1024

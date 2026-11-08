@@ -26,6 +26,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from brier_services.catalog import models as catalog_models
+from brier_services.marketmaker import catalog_values as cv
 from brier_services.marketmaker import fairvalue as fv
 from brier_services.marketmaker.quoting import Params, quote
 from brier_services.resolution import bls
@@ -37,6 +39,7 @@ STALE = 24 * 3600
 CLOSE_BUFFER = 15 * 60
 CLAMP = (0.02, 0.98)
 GHCN = "https://www.ncei.noaa.gov/pub/data/ghcn/daily/by_station/USW00094728.csv.gz"
+SWPC_3DAY = "https://services.swpc.noaa.gov/text/3-day-geomag-forecast.txt"
 
 
 class Api(Protocol):
@@ -160,8 +163,42 @@ class FairValues:
             tmax = self._get("TMAX", self._ghcn_tmax_f)
             p = fv.climatology_probability(tmax, dt.date.fromisoformat(observation), op, threshold)
         else:
-            return None  # the FOMC market and anything new: no model, no quotes
+            return self._catalog_model(rulebook, op, threshold)
         return p
+
+    def _catalog_model(self, rulebook: dict[str, Any], op: str, threshold: float) -> float | None:
+        """The recurring catalogue's models (docs/notes/catalog-models.md §6), or None."""
+        provider = rulebook["source"]["provider"]
+        series = rulebook["source"]["series"]
+        observation = rulebook["observation"]
+        if provider == "nws":
+            c = cv.city(series.removeprefix("CLI/"))
+            if c is None:
+                return None
+            body = self._get(
+                f"OPEN-METEO {c.location}", lambda: self._body(Request(cv.open_meteo_url(c)))
+            )
+            high = cv.forecast_high(body, observation)
+            return None if high is None else cv.temperature(c, high, op, threshold)
+        if series in {"WORLD/M5", "WORLD/M6"}:
+            today = dt.datetime.fromtimestamp(self.wall(), dt.UTC).date()
+            body = self._get("USGS M5 YEAR", lambda: self._body(Request(_usgs_year(today))))
+            counts = cv.daily_counts(body, 5.0 if series == "WORLD/M5" else 6.0)
+            days = [today - dt.timedelta(days=i) for i in range(1, 366)]
+            return cv.earthquakes(counts, days, op, threshold)
+        if series == "KP/MAX":
+            text = self._get("SWPC 3-DAY", lambda: self._body(Request(SWPC_3DAY)).decode())
+            probs = catalog_models.storm_probabilities(text).get(observation)
+            return None if probs is None else cv.storm(probs, op, f"{threshold:.2f}")
+        return None  # the FOMC market and anything new: no model, no quotes
+
+
+def _usgs_year(today: dt.date) -> str:
+    return (
+        "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&eventtype=earthquake"
+        f"&starttime={(today - dt.timedelta(days=365)).isoformat()}T00:00:00"
+        f"&endtime={today.isoformat()}T00:00:00&minmagnitude=5&orderby=time-asc&limit=20000"
+    )
 
 
 class StaleError(Exception):
