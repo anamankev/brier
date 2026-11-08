@@ -99,8 +99,9 @@ pub async fn mine(State(s): Shared, req: Req) -> ApiResult {
 }
 
 /// The market's price for scoring, in percent: the last trade; before the first trade, the
-/// book midpoint (rounded half up); one side alone if the other is empty; 50 if both are.
-async fn price(s: &AppState, market: MarketId) -> Result<i16, ApiError> {
+/// book midpoint (rounded half up); one side alone if the other is empty. `None` when there is
+/// no trade and no order at all: the market has no price, and none is invented.
+async fn price(s: &AppState, market: MarketId) -> Result<Option<i16>, ApiError> {
     let last =
         s.db.query_opt(
             "SELECT price FROM fills WHERE market = $1 ORDER BY seq DESC, ordinal DESC LIMIT 1",
@@ -108,7 +109,7 @@ async fn price(s: &AppState, market: MarketId) -> Result<i16, ApiError> {
         )
         .await?;
     if let Some(r) = last {
-        return Ok(r.get(0));
+        return Ok(Some(r.get(0)));
     }
     let Answer::Book { bids, asks, .. } = s.core.query(Query::Book(market)).await? else {
         return Err(ApiError::internal(&"book query answered another shape"));
@@ -117,14 +118,14 @@ async fn price(s: &AppState, market: MarketId) -> Result<i16, ApiError> {
         |levels: &[(brier_types::Price, u64)]| levels.first().map(|(p, _)| i16::from(p.ticks()));
     Ok(match (best(&bids), best(&asks)) {
         // bid + ask is at most 197 and at least 3, so the arithmetic cannot overflow.
-        (Some(b), Some(a)) => b.saturating_add(a).saturating_add(1) / 2,
-        (Some(p), None) | (None, Some(p)) => p,
-        (None, None) => 50,
+        (Some(b), Some(a)) => Some(b.saturating_add(a).saturating_add(1) / 2),
+        (Some(p), None) | (None, Some(p)) => Some(p),
+        (None, None) => None,
     })
 }
 
-/// Record this minute's price for every market inside its trading window. Returns how many
-/// samples were written (a minute already sampled is skipped).
+/// Record this minute's price for every market inside its trading window that has one.
+/// Returns how many samples were written (a minute already sampled is skipped).
 pub async fn sample(s: &AppState) -> Result<usize, ApiError> {
     let now = s.clock.now();
     let at = now.saturating_sub(now.rem_euclid(SAMPLE_EVERY));
@@ -145,7 +146,9 @@ pub async fn sample(s: &AppState) -> Result<usize, ApiError> {
         ) {
             continue;
         }
-        let p = price(s, market).await?;
+        let Some(p) = price(s, market).await? else {
+            continue; // no price yet: nothing to record
+        };
         written = written.saturating_add(usize::try_from(
             s.db.execute(
                 "INSERT INTO score_samples (market, at, price, volume) \

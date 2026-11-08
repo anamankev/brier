@@ -5,7 +5,9 @@
 Starts the test-clock gateway on 127.0.0.1:18080 (its clock read from var/demo/clock), lists the
 launch catalogue, and simulates three hours of trading in fast-forward: two market makers quote
 around a random-walk fair value and several traders take liquidity, one simulated minute per
-second, so the price history, books, and trades are real exchange output. Two accounts that
+second, so the price history, books, and trades are real exchange output. The lister lists the
+recurring catalogue (city highs, earthquakes, geomagnetic storms) from today's real forecasts,
+the reference market maker quotes it with its backtested models, and noise traders trade it. Two accounts that
 share a login address wash-trade, and one account spoofs; at the end the surveillance service
 runs once and opens cases for the admin (`ada`). It leaves the gateway running and prints how
 to stop it. Sign in as `demo` with the password below.
@@ -13,6 +15,8 @@ to stop it. Sign in as `demo` with the password below.
 
 from __future__ import annotations
 
+import contextlib
+import datetime as dt
 import json
 import os
 import random
@@ -24,6 +28,9 @@ from pathlib import Path
 
 from brier_services.client import ApiError, RestClient, totp_code
 from brier_services.rules import load_toml
+from brier_services.catalog.forecast import Forecasts
+from brier_services.catalog.lister import run_once as list_catalogue
+from brier_services.marketmaker.service import FairValues, MarketMaker
 from brier_services.surveillance import service
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -112,6 +119,17 @@ def main() -> int:
         admin.request("POST", "/v1/admin/markets", {"rulebook": load_toml(path).raw, "reason": "demo"})
     time.sleep(1.5)  # the scheduler opens them
 
+    # The recurring catalogue, listed as the lister service lists it, and quoted by the reference
+    # market maker with its backtested models (docs/notes/catalog-models.md).
+    lister = user("lister", "lister")
+    listed = list_catalogue(lister, dt.datetime.fromtimestamp(START, dt.UTC), Forecasts().high, lambda *a, **k: None)
+    print(f"listed {len(listed)} catalogue events", flush=True)
+    time.sleep(1.5)
+    fred_key = os.environ.get("FRED_API_KEY")
+    clock_now = [float(START)]
+    maker = MarketMaker(user("brier_maker"), FairValues(fred_key), now=lambda: clock_now[0], say=lambda *a, **k: None)
+    catalogue: list[int] = []
+
     rng = random.Random(7)
     fair = dict(FAIR)
     quotes: dict[int, list[tuple[RestClient, int]]] = {m: [] for m in fair}
@@ -142,7 +160,24 @@ def main() -> int:
                     taker.request("POST", "/v1/orders", {"market": m, "side": side, "price": price, "qty": rng.randint(3, 40), "tif": "ioc"})
                 except ApiError:
                     pass
-        f104, f101 = round(fair[104]), round(fair[101])
+        if minute % 15 == 0:
+            try:
+                decided = maker.run_once()
+            except ApiError as e:
+                decided = {}
+                print(f"\nmaker pass failed: {e}", flush=True)
+            catalogue = [m for m, d in decided.items() if d["bid"] is not None and m >= 10_000_000]
+        for _ in range(8 if catalogue else 0):  # noise traders on the catalogue
+            m = rng.choice(catalogue)
+            book = takers[0].request("GET", f"/v1/markets/{m}/book")
+            side = "buy" if rng.random() < 0.5 else "sell"
+            levels = book["asks"] if side == "buy" else book["bids"]
+            if levels:
+                with contextlib.suppress(ApiError):
+                    rng.choice(takers).request(
+                        "POST", "/v1/orders", {"market": m, "side": side, "price": levels[0][0], "qty": rng.randint(2, 30), "tif": "ioc"}
+                    )
+        f104 = round(fair[104])
         if minute in WASH_MINUTES:  # rest inside the spread, then the linked account takes it
             wes.request("POST", "/v1/orders", {"market": 104, "side": "sell", "price": f104, "qty": 60})
             wyn.request("POST", "/v1/orders", {"market": 104, "side": "buy", "price": f104, "qty": 60, "tif": "ioc"})
@@ -155,6 +190,7 @@ def main() -> int:
                 if big.get("status") == "resting":
                     sam.request("DELETE", f"/v1/orders/{big['order']}")
         clock.write_text(str(START + 60 * (minute + 1)))
+        clock_now[0] = float(START + 60 * (minute + 1))
         time.sleep(1.05)
         print(f"\rminute {minute + 1}/{MINUTES}", end="", flush=True)
 

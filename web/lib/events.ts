@@ -1,6 +1,5 @@
 // Events: markets grouped as the outcomes of one question (GET /v1/events). A market listed on
 // its own arrives as an event of one market, so every page reads one shape.
-import { gateway } from "./server";
 
 export type EventMarket = {
   market: number;
@@ -46,18 +45,6 @@ export type EventQuery = {
   q?: string;
   limit?: number;
 };
-
-export async function listEvents(query: EventQuery = {}): Promise<EventList | null> {
-  const params = new URLSearchParams();
-  for (const [k, v] of Object.entries(query)) if (v !== undefined && v !== "") params.set(k, String(v));
-  const res = await gateway<EventList>(`/v1/events?${params}`);
-  return res.ok ? res.body : null;
-}
-
-export async function getEvent(slug: string): Promise<EventSummary | null> {
-  const res = await gateway<EventSummary>(`/v1/events/${encodeURIComponent(slug)}`);
-  return res.ok ? res.body : null;
-}
 
 /** Outcomes most likely first, for cards that show the top two. */
 export function leading(e: EventSummary): EventMarket[] {
@@ -107,3 +94,29 @@ export function compact(n: number): string {
   if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}K`;
   return `${(n / 1_000_000).toFixed(1)}M`;
 }
+
+/** How a tag reads in a sidebar; tags that only describe the format are not listed. */
+export const TAG_NAMES: Record<string, string> = {
+  nyc: "New York",
+  chicago: "Chicago",
+  "los-angeles": "Los Angeles",
+  miami: "Miami",
+  boston: "Boston",
+  seattle: "Seattle",
+  denver: "Denver",
+  atlanta: "Atlanta",
+  phoenix: "Phoenix",
+  "washington-dc": "Washington, DC",
+  austin: "Austin",
+  dallas: "Dallas",
+  earthquakes: "Earthquakes",
+  "space-weather": "Space weather",
+};
+
+export const SORTS: { slug: NonNullable<EventQuery["sort"]>; name: string }[] = [
+  { slug: "volume_24h", name: "Trending" },
+  { slug: "volume", name: "Volume" },
+  { slug: "closing", name: "Closing soon" },
+  { slug: "newest", name: "New" },
+  { slug: "movers", name: "Movers" },
+];

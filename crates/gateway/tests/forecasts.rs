@@ -158,7 +158,8 @@ async fn forecasts_are_scored_against_the_market_and_ranked() {
         "not open yet"
     );
 
-    // Minute 0: the scheduler opens the markets, then samples an empty book (50).
+    // Minute 0: the scheduler opens the markets. The book is empty, so the market has no price
+    // and the minute is not sampled (no price is invented).
     w.at(t0).await;
     w.clock.set(t0 + 5);
     for m in MARKETS {
@@ -224,12 +225,11 @@ async fn forecasts_are_scored_against_the_market_and_ranked() {
         .iter()
         .map(|r| r.get(0))
         .collect();
-    assert_eq!(prices, [50, 50, 70, 70]);
+    assert_eq!(prices, [50, 70, 70]);
     let (_, history) = call(&w.app, Method::GET, "/v1/markets/21/prices", None, None).await;
     assert_eq!(
         history["points"],
         json!([
-            ["2026-09-01T13:30:00Z", 50],
             ["2026-09-01T13:31:00Z", 50],
             ["2026-09-01T13:32:00Z", 70],
             ["2026-09-01T13:33:00Z", 70]
@@ -278,14 +278,13 @@ async fn forecasts_are_scored_against_the_market_and_ranked() {
         .get(0);
     assert_eq!(scored, 10);
 
-    // By hand, per market (outcome YES, so Brier = (p - 100)^2):
-    //   market: 2500, 2500, 900, 900                      -> average 1700
-    //   Ann (80 from minute 1): 0, 2100, 500, 500         -> skill 3100/4 = 775, Brier 400
-    //   Cal (60 from minute 1, 95 from minute 2): 0, 900, 875, 875
-    //                                                     -> skill 2650/4 = 662.5 -> 663, Brier 550
-    //   Ben (30 from minute 3): 0, 0, 0, 900 - 4900       -> skill -4000/4 = -1000, Brier 4900
+    // By hand, per market (outcome YES, so Brier = (p - 100)^2), over minutes 1-3:
+    //   market: 2500, 900, 900                           -> average 4300/3 = 1433.3 -> 1433
+    //   Ann (80 throughout): 2100, 500, 500              -> skill 3100/3 = 1033.3 -> 1033, Brier 400
+    //   Cal (60, then 95 from minute 2): 900, 875, 875   -> skill 2650/3 = 883.3 -> 883, Brier 550
+    //   Ben (30 from minute 3): 0, 0, 900 - 4900         -> skill -4000/3 = -1333.3 -> -1333, Brier 4900
     //   Dave forecast after the last sample: not scored.
-    for (token, skill, brier) in [(&ann, 775, 400), (&cal, 663, 550), (&ben, -1000, 4900)] {
+    for (token, skill, brier) in [(&ann, 1033, 400), (&cal, 883, 550), (&ben, -1333, 4900)] {
         let (_, card) = call(&w.app, Method::GET, "/v1/scorecard", Some(token), None).await;
         let first = &card["markets"][0];
         assert_eq!(
@@ -294,7 +293,7 @@ async fn forecasts_are_scored_against_the_market_and_ranked() {
                 first["brier"].as_i64(),
                 first["market_brier"].as_i64()
             ),
-            (Some(skill), Some(brier), Some(1700)),
+            (Some(skill), Some(brier), Some(1433)),
             "{card}"
         );
         assert_eq!(card["markets"].as_array().unwrap().len(), 10);

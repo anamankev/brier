@@ -1312,7 +1312,7 @@ components:
               outcome: { type: [string, 'null'] }
               state: { type: [string, 'null'] }
               chance: { type: [integer, 'null'], description: Last trade price, else the middle of the book }
-              change_24h: { type: [integer, 'null'] }
+              change_24h: { type: [integer, 'null'], description: Change in the chance since the minute sample nearest before 24 hours ago, or since the first sample if the market is younger }
               last_price: { type: [integer, 'null'] }
               best_bid: { type: [integer, 'null'] }
               best_ask: { type: [integer, 'null'] }

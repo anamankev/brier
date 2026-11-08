@@ -5,7 +5,9 @@
 //! slug `market-{id}`, so clients read one shape for everything.
 //!
 //! Journal commands carry no wall-clock time, so 24-hour figures come from the minute samples
-//! (`score_samples`): the price and cumulative volume recorded nearest before 24 hours ago.
+//! (`score_samples`): the price and cumulative volume recorded nearest before 24 hours ago. A
+//! market younger than a day is measured from its first sampled price, and all its volume is
+//! within the day.
 #![allow(clippy::missing_errors_doc)] // handler errors are the documented API responses
 
 use std::collections::{BTreeMap, HashMap};
@@ -60,11 +62,13 @@ async fn market_rows(s: &AppState) -> Result<Vec<MarketRow>, ApiError> {
                     extract(epoch FROM b.listed_at)::bigint, \
                     (SELECT f.price FROM fills f WHERE f.market = b.market ORDER BY f.seq DESC, f.ordinal DESC LIMIT 1), \
                     (SELECT coalesce(sum(f.qty), 0)::bigint FROM fills f WHERE f.market = b.market), \
-                    d.price, d.volume \
+                    coalesce(d.price, f.price), d.volume \
              FROM rulebooks b LEFT JOIN LATERAL ( \
                  SELECT price, volume FROM score_samples ss \
                  WHERE ss.market = b.market AND ss.at <= to_timestamp($1::bigint) ORDER BY ss.at DESC LIMIT 1 \
-             ) d ON true",
+             ) d ON true LEFT JOIN LATERAL ( \
+                 SELECT price FROM score_samples ss WHERE ss.market = b.market ORDER BY ss.at LIMIT 1 \
+             ) f ON true",
             &[&day_ago],
         )
         .await?;
