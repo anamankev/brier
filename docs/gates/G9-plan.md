@@ -56,6 +56,8 @@ The rule (`docs/data-licenses.md`): free, public, authoritative, and terms that 
    - A rulebook may say `review: automatic`. Its resolution is confirmed by the gateway when an independent second fetch (by the settler, at least 10 minutes after the proposal) computes the same outcome.
    - The dispute window scales with the market's length: 1 hour for a daily market, 24 hours for anything a week or longer.
    - A disagreement, a dispute, or a void condition goes to the admin queue, with four eyes as before.
+   - Brier keeps its rule that a market on a value that can be watched as it forms (a temperature, a yield) closes before the period starts. Polymarket trades a city's high during the day itself; Brier does not, because traders watching the thermometer would trade on a known answer.
+   - So a daily market lists about two days ahead, closes at the start of its day, and settles the next morning, roughly 30 hours after listing.
 4. **Market statistics.** The read models gain per-market 24-hour volume, 24-hour price change, last price, and open interest, for cards, Breaking, and sorting.
 5. **Quotes everywhere.**
    - The reference maker gains models for each series: temperature from the NWS forecast with an error spread fitted on past forecasts; earthquakes as a Poisson process on the catalog's rate; geomagnetic storms from the SWPC 3-day forecast.
@@ -71,7 +73,7 @@ The rule (`docs/data-licenses.md`): free, public, authoritative, and terms that 
 - At any moment of a 72-hour live run on a real gateway (sped up by the test clock where the source allows it):
   - at least 40 markets are open;
   - they span at least 5 categories;
-  - at least 20 settle within 24 hours of listing.
+  - at least 20 settle within 48 hours of listing.
 - Every market settled in that run has an evidence record, and the recomputed outcome matches.
 - The maker quotes at least 90% of open markets for at least 95% of the run.
 - Playwright flows: browse a category, open an event, buy an outcome with a market order, see it in the portfolio, and watch it settle. Axe passes on every new page.

@@ -41,6 +41,39 @@ Read on 7 November 2026. Every resolution source must be free, public, and autho
 - **The key** lives only in `.env` (git-ignored, mode 600). It is stripped from every evidence record and log line.
 - **The web app (G6)** shows the FRED notice and a link to the terms wherever FRED data appear.
 
+## Sources added for G9 (read on 8 November 2026)
+
+### National Weather Service API (api.weather.gov)
+- **Status:** free; NWS describes the data as "free to use for any purpose", and as a U.S. government work it carries no U.S. copyright.
+- **Requirements:** a `User-Agent` identifying the application (Brier sends `brier-exchange (resolver)`, with no personal contact). Rate limits exist but are not published: back off and retry after about 5 seconds.
+- **Limits:** observations are kept for 7 days only, so evidence must be fetched and stored within the dispute window.
+- **Brier's use:** the daily maximum of a station's observed temperatures, for daily high-temperature brackets. GHCN-Daily (above) is the slower, quality-controlled record; a disagreement between the two is a void condition for the admin queue, not an automatic outcome.
+
+### USGS Earthquake Catalog (earthquake.usgs.gov/fdsnws/event/1)
+- **Status:** U.S. government work, public domain. USGS asks to be credited.
+- **Access:** `count` and `query` methods, GeoJSON. Time and area limits are not enforced yet, and automated clients are asked to prefer the real-time feeds.
+- **Revisions:** magnitudes and event lists are revised after the fact. Each rulebook fixes when the catalog is read (for example, 48 hours after the period ends), and the evidence records what it said then.
+- **Brier's use:** counts of events at or above a magnitude in a period.
+
+### NOAA Space Weather Prediction Center (services.swpc.noaa.gov)
+- **Status:** U.S. government work, public domain.
+- **Brier's use:** the planetary K-index (`products/noaa-planetary-k-index.json`), for whether a geomagnetic storm (Kp of 5 or more) occurs on a day. Estimated values are revised; each rulebook fixes the reading time, as for USGS.
+
+### Open-Meteo (open-meteo.com)
+- **Status:** data under CC BY 4.0. The free API is for non-commercial use: 10,000 calls a day, 5,000 an hour, 600 a minute. Brier is non-commercial (play money, no revenue).
+- **Attribution required:** "Weather data by Open-Meteo.com", linked, on every page that shows these data, with the licence and any changes noted.
+- **Brier's use:** daily highs for cities outside the US, and forecasts as the market maker's input. It is not used as the sole source where a national weather service publishes an official record.
+
+### Coinbase market data: not usable
+- Coinbase's Market Data Terms (updated 7 August 2026) license the data only for the user's own personal or research use. Without written consent they forbid:
+  - redistributing or displaying the data or anything derived from it to third parties;
+  - using it to determine amounts payable under a financial contract.
+- Brier would do both. **There are no crypto markets until a source's terms allow settlement.** Candidates to read next: on-chain oracle feeds, and exchanges whose terms permit display.
+
+### Wikimedia Analytics API: not yet decided
+- Wikimedia's API guidelines require an identifying User-Agent and honouring throttling. The pageview dataset's own licence was not found in the pages read.
+- Culture and tech markets on page views wait until it is confirmed.
+
 ## Consequences for the rest of the spec
 - **O6 (new):** markets on licensed indexes such as the S&P 500 need a source whose terms allow this use. Until one is found:
   - there are no index markets;

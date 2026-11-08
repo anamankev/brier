@@ -92,10 +92,19 @@ Updated at every gate review (SPEC §13). Each entry gives the threat, its mitig
 | Markets with no model | Quoting a price the maker cannot defend | The FOMC market is not quoted at all (no free, licensed futures or OIS data) | `test_marketmaker_service.py` | That market's liquidity depends on traders alone |
 | Simulated activity | Simulated orders mixing with real users' markets | M1-M3 run on in-process copies of the reference engine; M4 and the demo run a separate test-clock gateway with its own database schema and journal | `sim/market.py`; `live_study.py` | Nothing technical stops someone from pointing the service at a real exchange with a test account; that is a policy (SPEC §10) |
 
+## Components that exist (G8)
+
+| Asset | Threat | Mitigation | Evidence | Gap |
+|---|---|---|---|---|
+| Login addresses | Linking accounts reveals or stores where users connect from | Only an HMAC-SHA-256 of the address is kept, under a key derived from `BRIER_TOTP_KEY` with its own label; the address itself is never stored or logged | `surveillance.rs`; the gateway test checks the stored bytes | Anyone holding the key and the table can test a guessed address against it; the address space is small, so the hash protects against casual reading, not a determined insider with the key |
+| Forwarded client addresses | A client forging its address to evade linking or per-address limits, or to frame another user | Forwarded headers are trusted only with the shared `BRIER_PROXY_KEY`, compared in constant time; the web server forwards only a header an edge proxy overwrites, never a browser's `x-forwarded-for`; without the key, loopback and unspecified addresses are not recorded | `lib.rs` `forwarded`; the gateway test logs in with a wrong key | Without an edge proxy that sets a trusted header, web logins record no address, so linking sees only direct API clients |
+| Cases | A detector alert treated as a finding; a case closed without a record | Cases open only from the `surveillance` role, which cannot trade, forecast, or close cases; closing needs an admin signed in with TOTP and a reason, and is audited; the UI says an alert is not a finding | gateway surveillance test; `app/admin/cases` | No second-admin review of a closure; an admin can dismiss a case about a linked account of their own |
+| Detectors | Manipulation that the detectors miss, or innocent trading flagged | Four detectors measured against injected manipulators and innocent look-alikes, with thresholds tuned on separate seeds (`docs/notes/surveillance.md`) | registered results: wash and insider-like supported; spoofing and marking the close not | Marking the close catches about 70% at precision 0.54; wash trading through unlinked accounts is invisible; the evaluation is in simulation, by the same author as the detectors |
+| The journal export | Surveillance reading or altering the live journal | `brier-core export` opens the journal read-only and decodes it with the same checks as recovery; the service never writes to it | `crates/core/tests/export.rs` | The export reads up to the last whole record, which can include a batch not yet synced; such a command could vanish in a crash after surveillance saw it |
+
 ## Components to come (from SPEC §13), owned by their gates
 
 | Gate | Threat | Planned mitigation |
 |---|---|---|
 | G1-G2 | Engine or ledger bug that creates or destroys credits | Invariants I1-I5 checked after every event; differential tests against the reference engine; halt on violation |
 | G3 | Acknowledged order lost in a crash; corrupt journal | Sync before acknowledgment (F_FULLFSYNC on macOS); CRC32C per record; SIGKILL crash harness |
-| G8 | Multi-accounting and collusion | Account-linkage signals in surveillance; credits have no value, which limits the incentive |

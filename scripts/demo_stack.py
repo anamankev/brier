@@ -5,8 +5,10 @@
 Starts the test-clock gateway on 127.0.0.1:18080 (its clock read from var/demo/clock), lists the
 launch catalogue, and simulates three hours of trading in fast-forward: two market makers quote
 around a random-walk fair value and several traders take liquidity, one simulated minute per
-second, so the price history, books, and trades are real exchange output. It leaves the gateway
-running and prints how to stop it. Sign in as `demo` with the password below.
+second, so the price history, books, and trades are real exchange output. Two accounts that
+share a login address wash-trade, and one account spoofs; at the end the surveillance service
+runs once and opens cases for the admin (`ada`). It leaves the gateway running and prints how
+to stop it. Sign in as `demo` with the password below.
 """
 
 from __future__ import annotations
@@ -17,10 +19,12 @@ import random
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 from brier_services.client import ApiError, RestClient, totp_code
 from brier_services.rules import load_toml
+from brier_services.surveillance import service
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = ROOT / "var" / "demo"
@@ -30,6 +34,9 @@ PASSWORD = "a long enough password"  # noqa: S105 - local demo accounts
 START = 1_794_234_600  # 2026-11-09T14:30:00Z, when the launch markets open
 MINUTES = 120
 FAIR = {101: 55, 102: 42, 103: 31, 104: 63, 105: 48}
+PROXY_KEY = "demo proxy key, at least thirty-two characters"
+WASH_MINUTES = {20, 45, 70, 95}  # market 104
+SPOOF_MINUTES = {30, 60, 90}  # market 101
 
 
 def main() -> int:
@@ -40,6 +47,10 @@ def main() -> int:
     target = ROOT / "target" / "test-clock"
     subprocess.run(  # noqa: S603 - fixed arguments
         ["cargo", "build", "--release", "--locked", "-p", "brier-gateway", "--features", "test-clock", "--target-dir", str(target)],
+        cwd=ROOT, check=True,
+    )  # fmt: skip
+    subprocess.run(  # noqa: S603 - fixed arguments
+        ["cargo", "build", "--release", "--locked", "-p", "brier-core", "--target-dir", str(target)],
         cwd=ROOT, check=True,
     )  # fmt: skip
     binary = str(target / "release" / "brier-gateway")
@@ -55,6 +66,7 @@ def main() -> int:
         "BRIER_TOTP_KEY": "42" * 32,
         "BRIER_DISPUTE_WINDOW_SECONDS": "3600",
         "BRIER_TEST_AUTH_PER_MINUTE": "10000",
+        "BRIER_PROXY_KEY": PROXY_KEY,
     }
     log = (DEMO / "gateway.log").open("w")
     gateway = subprocess.Popen([binary, "serve"], env=env, stderr=log, start_new_session=True)  # noqa: S603
@@ -74,12 +86,28 @@ def main() -> int:
         c.login(name, PASSWORD)
         return c
 
+    def from_address(name: str, address: str) -> RestClient:
+        """Sign in as the web server would, forwarding the client's address."""
+        RestClient(BASE).request("POST", "/v1/register", {"username": name, "password": PASSWORD})
+        req = urllib.request.Request(  # noqa: S310 - the local demo gateway
+            f"{BASE}/v1/login",
+            data=json.dumps({"username": name, "password": PASSWORD}).encode(),
+            method="POST",
+            headers={"content-type": "application/json", "x-brier-proxy-key": PROXY_KEY, "x-brier-client-address": address},
+        )
+        with urllib.request.urlopen(req, timeout=5) as res:  # noqa: S310
+            c = RestClient(BASE)
+            c.token = json.loads(res.read())["token"]
+        return c
+
     admin = user("ada", "admin")
     secret, step = admin.enable_totp()
     admin.login("ada", PASSWORD, totp_code(secret, step + 1))
     makers = [user("maker_one"), user("maker_two")]  # each starts with 10,000 credits
     takers = [user(n) for n in ("ana", "ben", "chloe", "dev", "emil")]
     demo = user("demo")
+    wes, wyn = from_address("wes", "198.51.100.23"), from_address("wyn", "198.51.100.23")  # one household
+    sam = user("sam")
     for path in sorted((ROOT / "markets").glob("*.toml")):
         admin.request("POST", "/v1/admin/markets", {"rulebook": load_toml(path).raw, "reason": "demo"})
     time.sleep(1.5)  # the scheduler opens them
@@ -114,6 +142,15 @@ def main() -> int:
                     taker.request("POST", "/v1/orders", {"market": m, "side": side, "price": price, "qty": rng.randint(3, 40), "tif": "ioc"})
                 except ApiError:
                     pass
+        f104, f101 = round(fair[104]), round(fair[101])
+        if minute in WASH_MINUTES:  # rest inside the spread, then the linked account takes it
+            wes.request("POST", "/v1/orders", {"market": 104, "side": "sell", "price": f104, "qty": 60})
+            wyn.request("POST", "/v1/orders", {"market": 104, "side": "buy", "price": f104, "qty": 60, "tif": "ioc"})
+        if minute in SPOOF_MINUTES:  # a large bid behind the touch, a sale into the bid, then pull
+            big = sam.request("POST", "/v1/orders", {"market": 101, "side": "buy", "price": f101 - 2, "qty": 300})
+            sam.request("POST", "/v1/orders", {"market": 101, "side": "sell", "price": f101 - 1, "qty": 15, "tif": "ioc"})
+            if big.get("status") == "resting":
+                sam.request("DELETE", f"/v1/orders/{big['order']}")
         clock.write_text(str(START + 60 * (minute + 1)))
         time.sleep(1.05)
         print(f"\rminute {minute + 1}/{MINUTES}", end="", flush=True)
@@ -122,7 +159,10 @@ def main() -> int:
         demo.request("POST", "/v1/orders", {"market": m, "side": "buy", "price": round(fair[m]) + 1, "qty": 25, "tif": "ioc"})
         demo.request("PUT", f"/v1/markets/{m}/forecast", {"probability": min(95, round(fair[m]) + 8)})
     demo.request("POST", "/v1/orders", {"market": 102, "side": "buy", "price": round(fair[102]) - 6, "qty": 40})
-    info = {"web": "BRIER_GATEWAY_URL=http://127.0.0.1:18080 BRIER_WS_URL=ws://127.0.0.1:18080/v1/ws", "admin": "ada", "admin_totp_secret": secret, "user": "demo", "password": PASSWORD}
+    watch = user("watch", "surveillance")
+    commands = service.export(target / "release" / "brier-core", Path(env["BRIER_DATA_DIR"]))
+    service.run_once(watch, commands)
+    info = {"web": f"BRIER_GATEWAY_URL=http://127.0.0.1:18080 BRIER_WS_URL=ws://127.0.0.1:18080/v1/ws BRIER_PROXY_KEY='{PROXY_KEY}'", "admin": "ada", "admin_totp_secret": secret, "user": "demo", "password": PASSWORD}
     (DEMO / "info.json").write_text(json.dumps(info, indent=1))
     print(f"\nexchange running (pid {gateway.pid}); sign in as demo / {PASSWORD}; stop with: kill {gateway.pid}")
     return 0

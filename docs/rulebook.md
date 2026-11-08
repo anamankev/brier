@@ -69,3 +69,32 @@ A series published only after its period ends must also have its release time af
 | NOAA | `USW00094728/TMAX` Central Park daily maximum | day | `level` (0), °F | yes |
 
 Adding a series means reading its terms (`docs/data-licenses.md`), writing its resolver, and adding it to both registries and `registry.json`. Tests fail if the three disagree.
+
+## Schema 2 (G9, in progress)
+Schema 1 rulebooks stay valid and keep their hashes. Schema 2 adds three things, and each is covered by the rules hash.
+
+### Events
+An `[event]` table groups markets the way Polymarket's events do:
+
+```toml
+[event]
+slug = "nyc-high-2026-11-12"
+title = "Highest temperature in New York on November 12?"
+category = "weather"
+tags = ["new-york", "daily"]
+series = "nyc-daily-high"   # a recurring series; date tabs link its events
+exclusive = true            # exactly one market in the event resolves YES
+outcome = "54-55°F"         # this market's label inside the event
+```
+
+- Every market of an event has the same `event` table apart from `outcome`.
+- For an exclusive event, the conditions must partition the line: the gateway refuses a listing whose ranges overlap or leave a gap with the event's other markets.
+
+### Ranges
+`condition.op = "between"` takes `threshold` and `upper`, both inclusive. It is used for the inner brackets; the outer ones keep `<=` and `>=`. A temperature event is then `<= 51`, `52-53`, ..., `>= 60`.
+
+### Review
+- `review = "automatic"` applies only to series the registry marks `machine_checkable`.
+- It lets the scheduler confirm a resolution when an independent re-fetch, at least 10 minutes after the proposal, computes the same outcome.
+- The dispute window is 1 hour for markets that trade a week or less, and 24 hours for longer ones.
+- `review = "manual"` (the schema 1 behaviour, and the default) keeps the four-eyes confirmation.
