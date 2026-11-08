@@ -359,9 +359,9 @@
   "error": "malformed"
  },
  {
-  "name": "schema_2",
+  "name": "schema_3",
   "input": {
-   "schema": 2,
+   "schema": 3,
    "market": 101,
    "title": "CPI inflation above 3.0% in September 2026",
    "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
@@ -389,6 +389,1102 @@
    ]
   },
   "error": "unsupported_schema"
+ },
+ {
+  "name": "schema_0",
+  "input": {
+   "schema": 0,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ]
+  },
+  "error": "unsupported_schema"
+ },
+ {
+  "name": "v2_bracket_valid",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": null,
+  "canonical": "{\"condition\":{\"op\":\"between\",\"threshold\":\"88\",\"transform\":\"level\",\"upper\":\"89\"},\"event\":{\"exclusive\":true,\"outcome\":\"88-89 °F\",\"series\":\"nyc-daily-high\",\"slug\":\"nyc-high-2027-07-04\",\"tags\":[\"daily\",\"new-york\"],\"title\":\"Highest temperature in New York on 4 July 2027?\"},\"market\":2001,\"observation\":\"2027-07-04\",\"question\":\"Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?\",\"review\":\"automatic\",\"revision\":\"first_release\",\"schedule\":{\"close\":\"2027-07-03T23:59:00Z\",\"deadline\":\"2027-08-05T00:00:00Z\",\"open\":\"2027-06-01T12:00:00Z\",\"release\":\"2027-07-06T00:00:00Z\"},\"schema\":2,\"source\":{\"provider\":\"noaa\",\"series\":\"USW00094728/TMAX\",\"url\":\"https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX\"},\"title\":\"Central Park high 88-89 °F on 4 July 2027\",\"void\":[\"no_value_by_deadline\"]}",
+  "sha256": "62826cbb435cdbccb4abbbbcf2f5865cc56b6bd41a7f21af3b8e644f4d4eda35"
+ },
+ {
+  "name": "v2_outer_bracket_valid_no_series",
+  "input": {
+   "schema": 2,
+   "market": 2002,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": ">=",
+    "threshold": "90"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "exclusive": true,
+    "outcome": "90 °F or higher"
+   },
+   "review": "manual"
+  },
+  "error": null,
+  "canonical": "{\"condition\":{\"op\":\">=\",\"threshold\":\"90\",\"transform\":\"level\"},\"event\":{\"exclusive\":true,\"outcome\":\"90 °F or higher\",\"slug\":\"nyc-high-2027-07-04\",\"tags\":[\"daily\",\"new-york\"],\"title\":\"Highest temperature in New York on 4 July 2027?\"},\"market\":2002,\"observation\":\"2027-07-04\",\"question\":\"Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?\",\"review\":\"manual\",\"revision\":\"first_release\",\"schedule\":{\"close\":\"2027-07-03T23:59:00Z\",\"deadline\":\"2027-08-05T00:00:00Z\",\"open\":\"2027-06-01T12:00:00Z\",\"release\":\"2027-07-06T00:00:00Z\"},\"schema\":2,\"source\":{\"provider\":\"noaa\",\"series\":\"USW00094728/TMAX\",\"url\":\"https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX\"},\"title\":\"Central Park high 88-89 °F on 4 July 2027\",\"void\":[\"no_value_by_deadline\"]}",
+  "sha256": "1595e8228c2b16233e338bc1732993eefa8749626efcc68eebed40f1686b62ac"
+ },
+ {
+  "name": "v1_explicit_nulls_valid",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ],
+   "event": null,
+   "review": null
+  },
+  "error": null,
+  "canonical": "{\"condition\":{\"op\":\">\",\"threshold\":\"3.0\",\"transform\":\"pct_change_12m\"},\"market\":101,\"observation\":\"2026-09\",\"question\":\"Will the 12-month change in CPI-U for September 2026 be above 3.0%?\",\"revision\":\"first_release\",\"schedule\":{\"close\":\"2026-10-15T12:00:00Z\",\"deadline\":\"2026-12-15T12:30:00Z\",\"open\":\"2026-09-01T13:30:00Z\",\"release\":\"2026-10-15T12:30:00Z\"},\"schema\":1,\"source\":{\"provider\":\"bls\",\"series\":\"CUUR0000SA0\",\"url\":\"https://data.bls.gov/timeseries/CUUR0000SA0\"},\"title\":\"CPI inflation above 3.0% in September 2026\",\"void\":[\"no_value_by_deadline\",\"source_discontinued\"]}",
+  "sha256": "c78849a4dfb0c6012ebdd5fb46a9c16c18f5d0924d5577f268c5eec7e666c9da"
+ },
+ {
+  "name": "v1_with_event",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   }
+  },
+  "error": "schema_fields"
+ },
+ {
+  "name": "v1_with_review",
+  "input": {
+   "schema": 1,
+   "market": 101,
+   "title": "CPI inflation above 3.0% in September 2026",
+   "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
+   "source": {
+    "provider": "bls",
+    "series": "CUUR0000SA0",
+    "url": "https://data.bls.gov/timeseries/CUUR0000SA0"
+   },
+   "observation": "2026-09",
+   "condition": {
+    "transform": "pct_change_12m",
+    "op": ">",
+    "threshold": "3.0"
+   },
+   "schedule": {
+    "open": "2026-09-01T13:30:00Z",
+    "close": "2026-10-15T12:00:00Z",
+    "release": "2026-10-15T12:30:00Z",
+    "deadline": "2026-12-15T12:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline",
+    "source_discontinued"
+   ],
+   "review": "manual"
+  },
+  "error": "schema_fields"
+ },
+ {
+  "name": "v1_between",
+  "input": {
+   "schema": 1,
+   "market": 105,
+   "title": "Central Park reaches 90 °F on 4 July 2027 ✓",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be at least 90 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ]
+  },
+  "error": "schema_fields"
+ },
+ {
+  "name": "v2_missing_event",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "review": "automatic"
+  },
+  "error": "schema_fields"
+ },
+ {
+  "name": "v2_missing_review",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   }
+  },
+  "error": "schema_fields"
+ },
+ {
+  "name": "v2_unknown_review",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "auto"
+  },
+  "error": "malformed"
+ },
+ {
+  "name": "v2_event_unknown_field",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F",
+    "category": "weather"
+   },
+   "review": "automatic"
+  },
+  "error": "malformed"
+ },
+ {
+  "name": "v2_exclusive_not_bool",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": "yes",
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": "malformed"
+ },
+ {
+  "name": "v2_between_without_upper",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": "range"
+ },
+ {
+  "name": "v2_upper_not_above",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "88"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": "range"
+ },
+ {
+  "name": "v2_upper_below",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "87"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": "range"
+ },
+ {
+  "name": "v2_upper_too_precise",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89.5"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": "range"
+ },
+ {
+  "name": "v2_upper_with_gt",
+  "input": {
+   "schema": 2,
+   "market": 2002,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": ">=",
+    "threshold": "90",
+    "upper": "95"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "exclusive": true,
+    "outcome": "90 °F or higher"
+   },
+   "review": "manual"
+  },
+  "error": "range"
+ },
+ {
+  "name": "v2_slug_uppercase",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "NYC-high",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": "event"
+ },
+ {
+  "name": "v2_slug_double_hyphen",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc--high",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": "event"
+ },
+ {
+  "name": "v2_slug_trailing_hyphen",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": "event"
+ },
+ {
+  "name": "v2_tags_unsorted",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "new-york",
+     "daily"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": "event"
+ },
+ {
+  "name": "v2_tags_repeated",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "daily"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": "event"
+ },
+ {
+  "name": "v2_too_many_tags",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "t0",
+     "t1",
+     "t2",
+     "t3",
+     "t4",
+     "t5",
+     "t6",
+     "t7",
+     "t8"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": "event"
+ },
+ {
+  "name": "v2_outcome_too_long",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   },
+   "review": "automatic"
+  },
+  "error": "event"
+ },
+ {
+  "name": "v2_event_title_empty",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": "event"
+ },
+ {
+  "name": "v2_series_bad_slug",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "NYC daily",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": "event"
  },
  {
   "name": "market_zero",

@@ -45,12 +45,18 @@ def format_decimal(x: Fraction, places: int) -> str:
     return f"{sign}{digits[:-places]}.{digits[-places:]}"
 
 
-def holds(value: Fraction, op: Op, threshold: str) -> bool:
-    """Whether ``value op threshold`` is true."""
+def holds(value: Fraction, op: Op, threshold: str, upper: str | None = None) -> bool:
+    """Whether ``value op threshold`` is true; ``between`` is ``threshold <= value <= upper``."""
     t = parse_decimal(threshold)
     if t is None:
         msg = f"threshold {threshold!r} is not a decimal"
         raise ValueError(msg)
+    if op is Op.BETWEEN:
+        u = parse_decimal(upper or "")
+        if u is None:
+            msg = f"upper {upper!r} is not a decimal"
+            raise ValueError(msg)
+        return t <= value <= u
     if op is Op.ABOVE:
         return value > t
     if op is Op.AT_LEAST:

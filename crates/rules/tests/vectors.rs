@@ -124,8 +124,22 @@ fn registry_file_matches_the_code() {
                 "category": s.category,
                 "live": s.live,
                 "released_after_period": s.released_after_period,
+                "machine_checkable": s.machine_checkable,
             })
         })
         .collect();
     assert_eq!(file, Value::Array(code));
+}
+
+#[test]
+fn describe_states_a_range_with_its_inclusive_ends() {
+    let bracket = vectors()
+        .into_iter()
+        .find(|v| v["name"] == "v2_bracket_valid")
+        .unwrap();
+    let text = validate(&bracket["input"]).unwrap().describe();
+    assert!(
+        text.contains("is between 88 and 89 (inclusive), °F."),
+        "{text}"
+    );
 }

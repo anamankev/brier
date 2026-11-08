@@ -21,8 +21,17 @@ use sha2::{Digest, Sha256};
 
 use crate::time::{DAY, PeriodKind, Unix};
 
-/// The rulebook schema version this code reads.
-pub const SCHEMA: u32 = 1;
+/// The newest rulebook schema version this code reads. Schema 1 rulebooks stay valid, with
+/// the same canonical form and hash.
+pub const SCHEMA: u32 = 2;
+/// The oldest schema version this code reads.
+pub const MIN_SCHEMA: u32 = 1;
+/// The longest event slug, series slug, and tag, in characters.
+pub const MAX_SLUG_CHARS: usize = 80;
+/// The most tags an event may have.
+pub const MAX_TAGS: usize = 8;
+/// The longest outcome label, in characters.
+pub const MAX_OUTCOME_CHARS: usize = 40;
 /// The longest title, in characters.
 pub const MAX_TITLE_CHARS: usize = 120;
 /// The longest question, in characters.
@@ -72,6 +81,40 @@ pub enum Op {
     /// At or below.
     #[serde(rename = "<=")]
     AtMost,
+    /// Between `threshold` and `upper`, both inclusive (schema 2).
+    #[serde(rename = "between")]
+    Between,
+}
+
+/// Who confirms a proposed resolution (schema 2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Review {
+    /// An admin other than the proposer, as in schema 1.
+    Manual,
+    /// The gateway, when an independent re-fetch computes the same outcome; for registry
+    /// series marked machine-checkable only.
+    Automatic,
+}
+
+/// The event a market belongs to (schema 2): markets sharing a slug are shown together, as
+/// the outcomes of one question.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Event {
+    /// URL-safe identifier shared by the event's markets.
+    pub slug: String,
+    /// The event's question, such as "Highest temperature in New York on November 12?".
+    pub title: String,
+    /// Search and grouping tags: sorted, without repeats, each a slug.
+    pub tags: Vec<String>,
+    /// The recurring series the event belongs to, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub series: Option<String>,
+    /// Exactly one of the event's markets resolves YES.
+    pub exclusive: bool,
+    /// This market's label inside the event, such as "54-55°F".
+    pub outcome: String,
 }
 
 /// The revision policy. Only one exists: the first published value counts.
@@ -115,6 +158,9 @@ pub struct Condition {
     pub op: Op,
     /// A decimal string, with at most the series' precision in decimal places.
     pub threshold: String,
+    /// The inclusive upper end, for `between` only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upper: Option<String>,
 }
 
 /// The market's times, as UTC instants (`YYYY-MM-DDTHH:MM:SSZ`).
@@ -131,8 +177,9 @@ pub struct Schedule {
     pub deadline: String,
 }
 
-/// A market's rulebook entry (schema version 1). Every field is required, so a rulebook has
-/// exactly one JSON form.
+/// A market's rulebook entry. In schema 1 every field below is required except `event` and
+/// `review`, which must be absent; in schema 2 those two are required too. Either way a
+/// rulebook has exactly one JSON form.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Rulebook {
@@ -156,6 +203,12 @@ pub struct Rulebook {
     pub revision: Revision,
     /// Void conditions, sorted, without repeats, including `no_value_by_deadline`.
     pub void: Vec<VoidCondition>,
+    /// The event (schema 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event: Option<Event>,
+    /// Who confirms the resolution (schema 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<Review>,
 }
 
 /// One transform a series allows, with the precision and unit of the resulting value.
@@ -193,6 +246,9 @@ pub struct Series {
     /// The source publishes only after the period ends, so a release time inside the period
     /// is a mistake. False for the FOMC target, announced before its effective date.
     pub released_after_period: bool,
+    /// The resolver computes the outcome from the source without judgement, so a second fetch
+    /// can confirm it and `review = "automatic"` is allowed.
+    pub machine_checkable: bool,
 }
 
 const PERCENT_1DP: Measure = Measure {
@@ -229,6 +285,7 @@ pub const REGISTRY: &[Series] = &[
         category: "economics",
         live: false,
         released_after_period: true,
+        machine_checkable: true,
     },
     Series {
         provider: Provider::Bls,
@@ -240,6 +297,7 @@ pub const REGISTRY: &[Series] = &[
         category: "economics",
         live: false,
         released_after_period: true,
+        machine_checkable: true,
     },
     Series {
         provider: Provider::Fred,
@@ -251,6 +309,7 @@ pub const REGISTRY: &[Series] = &[
         category: "rates",
         live: false,
         released_after_period: false,
+        machine_checkable: true,
     },
     Series {
         provider: Provider::Fred,
@@ -262,6 +321,7 @@ pub const REGISTRY: &[Series] = &[
         category: "rates",
         live: true,
         released_after_period: true,
+        machine_checkable: true,
     },
     Series {
         provider: Provider::Noaa,
@@ -277,6 +337,7 @@ pub const REGISTRY: &[Series] = &[
         category: "weather",
         live: true,
         released_after_period: true,
+        machine_checkable: true,
     },
 ];
 
@@ -287,6 +348,8 @@ pub enum RuleError {
     Malformed(String),
     /// A schema version this code does not read.
     UnsupportedSchema,
+    /// A schema 1 rulebook with schema 2 fields, or a schema 2 rulebook without them.
+    SchemaFields,
     /// Market ID zero.
     MarketId,
     /// Title empty, too long, padded with spaces, or containing control characters.
@@ -301,6 +364,8 @@ pub enum RuleError {
     Transform,
     /// The threshold is not a canonical decimal within the series' precision.
     Threshold,
+    /// `between` without an `upper` above its threshold, or `upper` with another comparison.
+    Range,
     /// The observation is not a valid period of the series' kind.
     Observation,
     /// A time is not of the form `YYYY-MM-DDTHH:MM:SSZ` within 2000-2100.
@@ -315,6 +380,10 @@ pub enum RuleError {
     DeadlineTooFar,
     /// The void conditions are unsorted, repeated, or lack `no_value_by_deadline`.
     VoidConditions,
+    /// The event's slug, title, tags, series, or outcome label is not well formed.
+    Event,
+    /// Automatic review for a series that is not machine-checkable.
+    Review,
     /// The rulebook has no canonical JSON form (cannot happen for a parsed rulebook).
     Canonical,
 }
@@ -326,6 +395,7 @@ impl RuleError {
         match self {
             Self::Malformed(_) => "malformed",
             Self::UnsupportedSchema => "unsupported_schema",
+            Self::SchemaFields => "schema_fields",
             Self::MarketId => "market_id",
             Self::Title => "title",
             Self::Question => "question",
@@ -333,6 +403,7 @@ impl RuleError {
             Self::SourceUrl => "source_url",
             Self::Transform => "transform",
             Self::Threshold => "threshold",
+            Self::Range => "range",
             Self::Observation => "observation",
             Self::Time => "time",
             Self::ScheduleOrder => "schedule_order",
@@ -340,6 +411,8 @@ impl RuleError {
             Self::ReleaseBeforePeriodEnd => "release_before_period_end",
             Self::DeadlineTooFar => "deadline_too_far",
             Self::VoidConditions => "void_conditions",
+            Self::Event => "event",
+            Self::Review => "review",
             Self::Canonical => "canonical",
         }
     }
@@ -427,6 +500,47 @@ fn threshold_ok(s: &str, precision: usize) -> bool {
     int_ok && frac_ok && !(s.starts_with('-') && zero)
 }
 
+/// A slug: lowercase ASCII letters, digits, and single hyphens inside, at most
+/// [`MAX_SLUG_CHARS`].
+fn slug_ok(s: &str) -> bool {
+    (1..=MAX_SLUG_CHARS).contains(&s.len())
+        && s.bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        && !s.starts_with('-')
+        && !s.ends_with('-')
+        && !s.contains("--")
+}
+
+fn event_ok(e: &Event) -> bool {
+    slug_ok(&e.slug)
+        && text_ok(&e.title, MAX_TITLE_CHARS)
+        && text_ok(&e.outcome, MAX_OUTCOME_CHARS)
+        && e.tags.len() <= MAX_TAGS
+        && e.tags.iter().all(|t| slug_ok(t))
+        && e.tags.windows(2).all(|w| matches!(w, [a, b] if a < b))
+        && e.series.as_deref().is_none_or(slug_ok)
+}
+
+/// Whether canonical decimal `a` is less than canonical decimal `b` (both pass
+/// [`threshold_ok`]), compared exactly as digit strings.
+fn decimal_lt(a: &str, b: &str) -> bool {
+    fn parts(s: &str) -> (bool, String, String) {
+        let (neg, body) = s.strip_prefix('-').map_or((false, s), |r| (true, r));
+        let (int, frac) = body.split_once('.').unwrap_or((body, ""));
+        (neg, int.to_owned(), frac.to_owned())
+    }
+    let ((na, ia, fa), (nb, ib, fb)) = (parts(a), parts(b));
+    let width = fa.len().max(fb.len());
+    let key = |int: &str, frac: &str| (int.len(), format!("{int}{frac:0<width$}"));
+    let (ka, kb) = (key(&ia, &fa), key(&ib, &fb));
+    match (na, nb) {
+        (false, false) => ka < kb,
+        (true, true) => kb < ka,
+        (true, false) => true,
+        (false, true) => false,
+    }
+}
+
 /// Find a series in the registry.
 #[must_use]
 pub fn series(provider: Provider, id: &str) -> Option<Series> {
@@ -452,8 +566,17 @@ impl Rulebook {
     /// # Errors
     /// The first rule broken, in the order the checks are listed in [`RuleError`].
     pub fn check(self) -> Result<Validated, RuleError> {
-        if self.schema != SCHEMA {
+        if !(MIN_SCHEMA..=SCHEMA).contains(&self.schema) {
             return Err(RuleError::UnsupportedSchema);
+        }
+        let v2_fields = [self.event.is_some(), self.review.is_some()];
+        let fields_ok = if self.schema == 1 {
+            v2_fields == [false, false] && self.condition.op != Op::Between
+        } else {
+            v2_fields == [true, true]
+        };
+        if !fields_ok {
+            return Err(RuleError::SchemaFields);
         }
         if self.market == 0 {
             return Err(RuleError::MarketId);
@@ -477,6 +600,13 @@ impl Rulebook {
             .ok_or(RuleError::Transform)?;
         if !threshold_ok(&self.condition.threshold, measure.precision) {
             return Err(RuleError::Threshold);
+        }
+        match (&self.condition.op, &self.condition.upper) {
+            (Op::Between, Some(upper))
+                if threshold_ok(upper, measure.precision)
+                    && decimal_lt(&self.condition.threshold, upper) => {}
+            (Op::Between, _) | (_, Some(_)) => return Err(RuleError::Range),
+            _ => {}
         }
         let (period_start, period_end) =
             time::period(series.kind, &self.observation).ok_or(RuleError::Observation)?;
@@ -509,6 +639,14 @@ impl Rulebook {
         let sorted_unique = self.void.windows(2).all(|w| matches!(w, [a, b] if a < b));
         if !sorted_unique || !self.void.contains(&VoidCondition::NoValueByDeadline) {
             return Err(RuleError::VoidConditions);
+        }
+        if let Some(event) = &self.event
+            && !event_ok(event)
+        {
+            return Err(RuleError::Event);
+        }
+        if self.review == Some(Review::Automatic) && !series.machine_checkable {
+            return Err(RuleError::Review);
         }
         let value = serde_json::to_value(&self).map_err(|_| RuleError::Canonical)?;
         let canonical = canonical::canonical(&value).map_err(|_| RuleError::Canonical)?;
@@ -544,6 +682,7 @@ impl Validated {
             Op::AtLeast => "at or above",
             Op::Below => "below",
             Op::AtMost => "at or below",
+            Op::Between => "between",
         };
         let period = match self.series.kind {
             PeriodKind::Month => "the month",
@@ -557,7 +696,13 @@ impl Validated {
         format!(
             "Resolves YES if {what}, for {period} {}, as first published by the source, is {op} {} {}. \
              Resolves NO if it is published and is not. Voided if no value is published by {}{discontinued}.",
-            r.observation, r.condition.threshold, self.measure.unit, r.schedule.deadline
+            r.observation,
+            r.condition.upper.as_ref().map_or_else(
+                || r.condition.threshold.clone(),
+                |u| format!("{} and {u} (inclusive),", r.condition.threshold)
+            ),
+            self.measure.unit,
+            r.schedule.deadline
         )
     }
 }

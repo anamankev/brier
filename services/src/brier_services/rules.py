@@ -23,11 +23,16 @@ import re
 import tomllib
 import unicodedata
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-SCHEMA = 1
+SCHEMA = 2  # the newest schema read; schema 1 rulebooks stay valid with the same hash
+MIN_SCHEMA = 1
+MAX_SLUG_CHARS = 80
+MAX_TAGS = 8
+MAX_OUTCOME_CHARS = 40
 MAX_TITLE_CHARS = 120
 MAX_QUESTION_CHARS = 500
 DAY = 86_400
@@ -61,6 +66,12 @@ class Op(StrEnum):
     AT_LEAST = ">="
     BELOW = "<"
     AT_MOST = "<="
+    BETWEEN = "between"
+
+
+class Review(StrEnum):
+    MANUAL = "manual"
+    AUTOMATIC = "automatic"
 
 
 class PeriodKind(StrEnum):
@@ -89,6 +100,7 @@ class Series:
     category: str
     live: bool
     released_after_period: bool
+    machine_checkable: bool = True
 
 
 _NOAA_URL = (
@@ -205,16 +217,38 @@ def _malformed(detail: str) -> RuleError:
     return RuleError("malformed", detail)
 
 
-def _object(value: object, fields: tuple[str, ...], where: str) -> dict[str, Any]:
+def _object(
+    value: object, fields: tuple[str, ...], where: str, optional: tuple[str, ...] = ()
+) -> dict[str, Any]:
+    """The object, with its optional fields dropped when absent or null (serde reads a null
+    ``Option`` as absent, and the canonical form omits it)."""
     if not isinstance(value, dict):
         raise _malformed(f"{where} must be an object")
     for key in value:
-        if key not in fields:
+        if key not in fields and key not in optional:
             raise _malformed(f"unknown field {where}.{key}")
     for key in fields:
         if key not in value:
             raise _malformed(f"missing field {where}.{key}")
+    return {k: v for k, v in value.items() if not (k in optional and v is None)}
+
+
+def _bool(value: object, where: str) -> bool:
+    if not isinstance(value, bool):
+        raise _malformed(f"{where} must be a boolean")
     return value
+
+
+_SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+
+
+def _slug_ok(s: str) -> bool:
+    return len(s) <= MAX_SLUG_CHARS and _SLUG.fullmatch(s) is not None
+
+
+def _decimal_lt(a: str, b: str) -> bool:
+    """Exact comparison of two canonical decimals."""
+    return Decimal(a) < Decimal(b)
 
 
 def _str(value: object, where: str) -> str:
@@ -331,6 +365,9 @@ class Rulebook:
     observation: str
     op: Op
     threshold: str
+    upper: str | None
+    event: dict[str, Any] | None
+    review: Review | None
     times: Times
     void: tuple[str, ...]
     canonical: str
@@ -354,6 +391,7 @@ def validate(value: object) -> Rulebook:
             "void",
         ),
         "rulebook",
+        optional=("event", "review"),
     )
     schema = _u32(top["schema"], "schema")
     market = _u32(top["market"], "market")
@@ -364,10 +402,14 @@ def validate(value: object) -> Rulebook:
     series_id = _str(source["series"], "source.series")
     url = _str(source["url"], "source.url")
     observation = _str(top["observation"], "observation")
-    condition = _object(top["condition"], ("transform", "op", "threshold"), "condition")
+    condition = _object(
+        top["condition"], ("transform", "op", "threshold"), "condition", optional=("upper",)
+    )
+    top = {**top, "condition": condition}
     transform = _enum(Transform, condition["transform"], "condition.transform")
     op = _enum(Op, condition["op"], "condition.op")
     threshold = _str(condition["threshold"], "condition.threshold")
+    upper = _str(condition["upper"], "condition.upper") if "upper" in condition else None
     schedule = _object(top["schedule"], ("open", "close", "release", "deadline"), "schedule")
     times_raw = [
         _str(schedule[k], f"schedule.{k}") for k in ("open", "close", "release", "deadline")
@@ -381,9 +423,30 @@ def validate(value: object) -> Rulebook:
     for v in void:
         if v not in VOID_CONDITIONS:
             raise _malformed(f"unknown variant for void: {v!r}")
+    event = None
+    if "event" in top:
+        event = _object(
+            top["event"], ("slug", "title", "tags", "exclusive", "outcome"), "event", ("series",)
+        )
+        top = {**top, "event": event}
+        for k in ("slug", "title", "outcome"):
+            _str(event[k], f"event.{k}")
+        if "series" in event:
+            _str(event["series"], "event.series")
+        if not isinstance(event["tags"], list):
+            raise _malformed("event.tags must be an array")
+        for t in event["tags"]:
+            _str(t, "event.tags[]")
+        _bool(event["exclusive"], "event.exclusive")
+    review = _enum(Review, top["review"], "review") if "review" in top else None
 
-    if schema != SCHEMA:
+    if not MIN_SCHEMA <= schema <= SCHEMA:
         raise RuleError("unsupported_schema")
+    has_v2 = (event is not None, review is not None)
+    if (schema == 1 and (has_v2 != (False, False) or op is Op.BETWEEN)) or (
+        schema == 2 and has_v2 != (True, True)
+    ):
+        raise RuleError("schema_fields")
     if market == 0:
         raise RuleError("market_id")
     if not _text_ok(title, MAX_TITLE_CHARS):
@@ -400,6 +463,15 @@ def validate(value: object) -> Rulebook:
         raise RuleError("transform")
     if not _threshold_ok(threshold, measure.precision):
         raise RuleError("threshold")
+    if op is Op.BETWEEN:
+        if not (
+            upper is not None
+            and _threshold_ok(upper, measure.precision)
+            and _decimal_lt(threshold, upper)
+        ):
+            raise RuleError("range")
+    elif upper is not None:
+        raise RuleError("range")
     bounds = period(series.kind, observation)
     if bounds is None:
         raise RuleError("observation")
@@ -419,6 +491,18 @@ def validate(value: object) -> Rulebook:
     order = [VOID_CONDITIONS.index(v) for v in void]
     if any(a >= b for a, b in itertools.pairwise(order)) or ("no_value_by_deadline" not in void):
         raise RuleError("void_conditions")
+    if event is not None and not (
+        _slug_ok(event["slug"])
+        and _text_ok(event["title"], MAX_TITLE_CHARS)
+        and _text_ok(event["outcome"], MAX_OUTCOME_CHARS)
+        and len(event["tags"]) <= MAX_TAGS
+        and all(_slug_ok(t) for t in event["tags"])
+        and all(a < b for a, b in itertools.pairwise(event["tags"]))
+        and ("series" not in event or _slug_ok(event["series"]))
+    ):
+        raise RuleError("event")
+    if review is Review.AUTOMATIC and not series.machine_checkable:
+        raise RuleError("review")
     text = canonical(top)
     return Rulebook(
         raw=top,
@@ -429,6 +513,9 @@ def validate(value: object) -> Rulebook:
         observation=observation,
         op=op,
         threshold=threshold,
+        upper=upper,
+        event=event,
+        review=review,
         times=times,
         void=void,
         canonical=text,

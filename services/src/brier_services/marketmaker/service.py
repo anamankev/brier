@@ -125,9 +125,24 @@ class FairValues:
 
     def probability(self, rulebook: dict[str, Any]) -> float | None:
         """P(YES) for a rulebook, or None if Brier has no model for its series."""
+        condition = rulebook["condition"]
+        if condition["op"] == "between":
+            # P(t <= X <= u) = P(X >= t) - P(X > u)
+            at_least = self._model(rulebook, ">=", float(condition["threshold"]))
+            above = self._model(rulebook, ">", float(condition["upper"]))
+            if at_least is None or above is None:
+                return None
+            p = at_least - above
+        else:
+            model = self._model(rulebook, condition["op"], float(condition["threshold"]))
+            if model is None:
+                return None
+            p = model
+        return min(CLAMP[1], max(CLAMP[0], p))
+
+    def _model(self, rulebook: dict[str, Any], op: str, threshold: float) -> float | None:
+        """P(value op threshold) from the series' model, or None without one."""
         series = rulebook["source"]["series"]
-        op = rulebook["condition"]["op"]
-        threshold = float(rulebook["condition"]["threshold"])
         observation = rulebook["observation"]
         if series == "DGS10":
             history = self._get("DGS10", lambda: self._fred_daily("DGS10"))
@@ -146,7 +161,7 @@ class FairValues:
             p = fv.climatology_probability(tmax, dt.date.fromisoformat(observation), op, threshold)
         else:
             return None  # the FOMC market and anything new: no model, no quotes
-        return min(CLAMP[1], max(CLAMP[0], p))
+        return p
 
 
 class StaleError(Exception):

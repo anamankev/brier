@@ -58,7 +58,7 @@ def decide(
             return "void", "no_value_by_deadline", None
         return None
     value = round_half_up(reading, rule.measure.precision)
-    outcome = "yes" if holds(value, rule.op, rule.threshold) else "no"
+    outcome = "yes" if holds(value, rule.op, rule.threshold, rule.upper) else "no"
     return outcome, None, format_decimal(value, rule.measure.precision)
 
 
@@ -71,7 +71,7 @@ def evidence_record(
     """The record the gateway checks (market, rules hash, outcome, retrieval time) and what a
     reader needs to check the decision: the request, the raw body's SHA-256, the value."""
     outcome, void_condition, value = decided
-    return {
+    record = {
         "market": rule.market,
         "rules_hash": rule.hash,
         "outcome": outcome,
@@ -92,6 +92,9 @@ def evidence_record(
         "body_bytes": len(response.body),
         "resolver": RESOLVER_VERSION,
     }
+    if rule.upper is not None:  # schema 2 ranges; earlier records keep their exact shape
+        record["upper"] = rule.upper
+    return record
 
 
 def resolve(

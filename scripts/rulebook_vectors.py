@@ -48,6 +48,35 @@ tmax = {**copy.deepcopy(cpi), "market": 105, "title": "Central Park reaches 90 �
                      "release": "2027-07-06T00:00:00Z", "deadline": "2027-08-05T00:00:00Z"},
         "void": ["no_value_by_deadline"]}
 
+# Schema 2: one bracket of an exclusive temperature event, confirmed automatically.
+bracket = {**copy.deepcopy(tmax), "schema": 2, "market": 2001,
+           "title": "Central Park high 88-89 °F on 4 July 2027",
+           "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+           "condition": {"transform": "level", "op": "between", "threshold": "88", "upper": "89"},
+           "event": {"slug": "nyc-high-2027-07-04", "title": "Highest temperature in New York on 4 July 2027?",
+                     "tags": ["daily", "new-york"], "series": "nyc-daily-high", "exclusive": True, "outcome": "88-89 °F"},
+           "review": "automatic"}
+outer = {**copy.deepcopy(bracket), "market": 2002, "condition": {"transform": "level", "op": ">=", "threshold": "90"},
+         "event": {**bracket["event"], "outcome": "90 °F or higher"}, "review": "manual"}
+outer["event"].pop("series")
+
+OPTIONAL = {(): ("event", "review"), ("condition",): ("upper",), ("event",): ("series",)}
+
+
+def without_nulls(rb):
+    """The form serde serializes: optional fields that are null are left out."""
+    r = copy.deepcopy(rb)
+    for path, keys in OPTIONAL.items():
+        node = r
+        for k in path:
+            node = node.get(k) if isinstance(node, dict) else None
+        if isinstance(node, dict):
+            for k in keys:
+                if k in node and node[k] is None:
+                    del node[k]
+    return r
+
+
 def mut(base, path, value, delete=False):
     r = copy.deepcopy(base); node = r
     for k in path[:-1]:
@@ -67,7 +96,33 @@ cases = [
     ("threshold_as_number", mut(cpi, ["condition", "threshold"], 3), "malformed"),
     ("unknown_op", mut(cpi, ["condition", "op"], "=="), "malformed"),
     ("unknown_provider", mut(cpi, ["source", "provider"], "yahoo"), "malformed"),
-    ("schema_2", mut(cpi, ["schema"], 2), "unsupported_schema"),
+    ("schema_3", mut(cpi, ["schema"], 3), "unsupported_schema"),
+    ("schema_0", mut(cpi, ["schema"], 0), "unsupported_schema"),
+    ("v2_bracket_valid", bracket, None),
+    ("v2_outer_bracket_valid_no_series", outer, None),
+    ("v1_explicit_nulls_valid", {**copy.deepcopy(cpi), "event": None, "review": None}, None),
+    ("v1_with_event", {**copy.deepcopy(cpi), "event": bracket["event"]}, "schema_fields"),
+    ("v1_with_review", {**copy.deepcopy(cpi), "review": "manual"}, "schema_fields"),
+    ("v1_between", mut(tmax, ["condition"], bracket["condition"]), "schema_fields"),
+    ("v2_missing_event", mut(bracket, ["event"], None, delete=True), "schema_fields"),
+    ("v2_missing_review", mut(bracket, ["review"], None, delete=True), "schema_fields"),
+    ("v2_unknown_review", mut(bracket, ["review"], "auto"), "malformed"),
+    ("v2_event_unknown_field", mut(bracket, ["event", "category"], "weather"), "malformed"),
+    ("v2_exclusive_not_bool", mut(bracket, ["event", "exclusive"], "yes"), "malformed"),
+    ("v2_between_without_upper", mut(bracket, ["condition", "upper"], None, delete=True), "range"),
+    ("v2_upper_not_above", mut(bracket, ["condition", "upper"], "88"), "range"),
+    ("v2_upper_below", mut(bracket, ["condition", "upper"], "87"), "range"),
+    ("v2_upper_too_precise", mut(bracket, ["condition", "upper"], "89.5"), "range"),
+    ("v2_upper_with_gt", mut(outer, ["condition", "upper"], "95"), "range"),
+    ("v2_slug_uppercase", mut(bracket, ["event", "slug"], "NYC-high"), "event"),
+    ("v2_slug_double_hyphen", mut(bracket, ["event", "slug"], "nyc--high"), "event"),
+    ("v2_slug_trailing_hyphen", mut(bracket, ["event", "slug"], "nyc-"), "event"),
+    ("v2_tags_unsorted", mut(bracket, ["event", "tags"], ["new-york", "daily"]), "event"),
+    ("v2_tags_repeated", mut(bracket, ["event", "tags"], ["daily", "daily"]), "event"),
+    ("v2_too_many_tags", mut(bracket, ["event", "tags"], [f"t{i}" for i in range(9)]), "event"),
+    ("v2_outcome_too_long", mut(bracket, ["event", "outcome"], "x" * 41), "event"),
+    ("v2_event_title_empty", mut(bracket, ["event", "title"], ""), "event"),
+    ("v2_series_bad_slug", mut(bracket, ["event", "series"], "NYC daily"), "event"),
     ("market_zero", mut(cpi, ["market"], 0), "market_id"),
     ("title_padded", mut(cpi, ["title"], " CPI"), "title"),
     ("title_too_long", mut(cpi, ["title"], "x" * 121), "title"),
@@ -100,7 +155,7 @@ out = []
 for name, rb, err in cases:
     v = {"name": name, "input": rb, "error": err}
     if err is None:
-        c = json.dumps(rb, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        c = json.dumps(without_nulls(rb), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         v["canonical"] = c
         v["sha256"] = hashlib.sha256(c.encode()).hexdigest()
     out.append(v)

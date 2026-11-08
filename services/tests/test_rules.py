@@ -50,6 +50,7 @@ def test_registry_file_matches_the_code() -> None:
             "category": s.category,
             "live": s.live,
             "released_after_period": s.released_after_period,
+            "machine_checkable": s.machine_checkable,
         }
         for s in rules.REGISTRY
     ]
