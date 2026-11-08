@@ -171,6 +171,25 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
         '503': { $ref: '#/components/responses/Error' }
+  /v1/me:
+    get:
+      tags: [identity]
+      summary: Who the caller is
+      responses:
+        '200':
+          description: The caller
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user_id, username, role, totp, signed_in_with_totp]
+                properties:
+                  user_id: { type: integer }
+                  username: { type: string }
+                  role: { enum: [trader, admin, resolver] }
+                  totp: { type: boolean, description: 'TOTP is on for this account' }
+                  signed_in_with_totp: { type: boolean, description: 'This request carries the second factor (needed for admin actions)' }
+        '401': { $ref: '#/components/responses/Error' }
   /v1/logout:
     post:
       tags: [identity]

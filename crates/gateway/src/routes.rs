@@ -368,6 +368,22 @@ pub async fn totp_enable(State(s): Shared, req: Req) -> ApiResult {
     Ok(Json(json!({ "totp": "on" })).into_response())
 }
 
+/// `GET /v1/me`: who the caller is: username, role, and whether TOTP is on and was used.
+pub async fn me(State(s): Shared, req: Req) -> ApiResult {
+    let user = req.user(&s, true).await?;
+    let row =
+        s.db.query_one(
+            "SELECT username, role, totp_enabled FROM users WHERE id = $1",
+            &[&user.id],
+        )
+        .await?;
+    Ok(Json(json!({
+        "user_id": user.id, "username": row.get::<_, &str>(0), "role": row.get::<_, &str>(1),
+        "totp": row.get::<_, bool>(2), "signed_in_with_totp": user.mfa,
+    }))
+    .into_response())
+}
+
 /// `POST /v1/logout`: end the session.
 pub async fn logout(State(s): Shared, req: Req) -> ApiResult {
     req.user(&s, false).await?;

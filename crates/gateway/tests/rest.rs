@@ -149,6 +149,15 @@ async fn the_rest_api_end_to_end() {
         "an admin without TOTP: {body}"
     );
     let alice = common::with_totp(&app, &alice, "alice", pw).await;
+    let (_, me) = call(&app, Method::GET, "/v1/me", Some(&alice), None).await;
+    assert_eq!(
+        (
+            me["username"].as_str(),
+            me["role"].as_str(),
+            me["signed_in_with_totp"].as_bool()
+        ),
+        (Some("alice"), Some("admin"), Some(true))
+    );
     let (status, body) = call(
         &app,
         Method::POST,

@@ -188,6 +188,7 @@ endpoints! {
     POST "/v1/register" => routes::register,
     POST "/v1/login" => routes::login,
     POST "/v1/logout" => routes::logout,
+    GET "/v1/me" => routes::me,
     POST "/v1/totp/setup" => routes::totp_setup,
     POST "/v1/totp/enable" => routes::totp_enable,
     POST "/v1/keys" => routes::add_key,
