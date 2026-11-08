@@ -195,3 +195,21 @@ def test_insider_needs_a_position_on_the_side_that_won() -> None:
 def test_alerts_apply_each_typology_threshold() -> None:
     found = [d.Alert("wash", 1, 1, 0.5), d.Alert("wash", 1, 2, 0.2), d.Alert("close", 1, 1, 3.0)]
     assert d.alerts(found, {"wash": 0.5, "close": 4.0}) == [found[0]]
+
+
+def test_taker_only_pairing_ignores_passive_fills_on_the_other_side(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(d, "SPOOF_UNPAIRED_WEIGHT", 0.0)
+    monkeypatch.setattr(d, "SPOOF_AGAINST_AS_TAKER_ONLY", True)
+    s = Stream()
+    for _ in range(4):
+        s.order(3, "buy", 48, 25)
+    s.order(1, "sell", 52, 10)  # account 1's resting sell...
+    big = s.order(1, "buy", 47, 150)
+    s.order(2, "buy", 52, 10, tif="ioc")  # ...is hit: a passive fill on the other side
+    s.cancel(1, big)
+    assert d.spoof(s.finish(), {}) == []
+    s = Stream()
+    spoof_episode(s, trade_against=True)  # it sells as the taker
+    assert by_account(d.spoof(s.finish(), {}), "spoof") == {1: 1.0}

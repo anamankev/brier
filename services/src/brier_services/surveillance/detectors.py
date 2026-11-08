@@ -22,8 +22,10 @@ SPOOF_SIZE_MULTIPLE = 4
 SPOOF_TOUCH_TICKS = 2
 SPOOF_WINDOW = 30
 SPOOF_UNPAIRED_WEIGHT = 0.25
+SPOOF_AGAINST_AS_TAKER_ONLY = False  # count only opposite trades the account initiated
 CLOSE_WINDOW = 60
 INSIDER_WINDOW = 180
+INSIDER_NEW_WEIGHT = 1  # added to the weight when the account opened after the market
 
 Links = Mapping[int, Set[int]]
 
@@ -119,7 +121,9 @@ def spoof(tape: Tape, links: Links) -> list[Alert]:
             against = [
                 f.seq
                 for f in fills_of[o.account]
-                if _is_on_side(f, o.account, other) and abs(f.clock - cancelled) <= SPOOF_WINDOW
+                if _is_on_side(f, o.account, other)
+                and abs(f.clock - cancelled) <= SPOOF_WINDOW
+                and (f.taker == o.account or not SPOOF_AGAINST_AS_TAKER_ONLY)
             ]
             score[o.account] += 1.0 if against else SPOOF_UNPAIRED_WEIGHT
             orders[o.account].append(
@@ -133,6 +137,8 @@ def spoof(tape: Tape, links: Links) -> list[Alert]:
                 }
             )
         for account, s in score.items():
+            if not s:
+                continue
             out.append(
                 Alert(
                     "spoof",
@@ -234,7 +240,7 @@ def insider(tape: Tape, links: Links) -> list[Alert]:
                 continue
             new = tape.account_opened.get(account, 0) > (m.open_seq or 0)
             linked = bool(links.get(account))
-            weight = 1 + int(new) + int(linked)
+            weight = 1 + INSIDER_NEW_WEIGHT * int(new) + int(linked)
             out.append(
                 Alert(
                     "insider",

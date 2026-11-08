@@ -1,6 +1,6 @@
 # Surveillance: how often are the detectors right? (G8)
 
-Status: REGISTERED. Written before any detector code exists. The registering commit is the first commit that contains this file. Nothing below changes after results are seen; a change would be a new, dated section.
+Status: COMPLETE. V1 and V4 supported; V2 and V3 not supported (§4). Registered before any detector code existed. The registering commit is the first commit that contains this file. Nothing below changes after results are seen; a change would be a new, dated section.
 
 ## 1. Questions
 For each typology in SPEC §9 (wash trading, spoofing and layering, marking the close, insider-like trading): at a threshold chosen in advance on separate data, what share of the detector's alerts are real manipulation (precision), and what share of real manipulation does it catch (recall)?
@@ -103,4 +103,55 @@ Writing the agents settled four more details. Nothing in §2 or §3a's detector 
 4. **The closer's early position.** At a step uniform in 20-100, it sends one immediate-or-cancel buy of 20-60 contracts priced 2 ticks above the best ask.
 
 ## 4. Results
-Not yet run.
+Run on 7 November 2026, with the code at commit `bc10435`, the first commit with the simulation and the evaluation runner:
+
+    python -m brier_services.surveillance.study
+
+The run took 4.2 seconds for 300 markets. The test seeds are 101-300; the thresholds were chosen on seeds 1-100.
+
+| | Typology | Threshold | TP | FP | FN | Precision (95% CI) | Recall (95% CI) | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| V1 | Wash trading | 0.299 | 190 | 0 | 4 | 1.000 (1.000-1.000) | 0.979 (0.951-1.000) | **Supported** |
+| V2 | Spoofing and layering | 1.25 | 84 | 200 | 6 | 0.296 (0.262-0.331) | 0.933 (0.880-0.979) | **Not supported**: precision far below 0.70 |
+| V3 | Marking the close | 2.489 | 68 | 59 | 29 | 0.535 (0.455-0.609) | 0.701 (0.606-0.793) | **Not supported**: precision below 0.70. Recall meets 0.70 only just, and 0.70 is inside its interval |
+| V4 | Insider-like trading | 194 | 102 | 0 | 1 | 1.000 (1.000-1.000) | 0.990 (0.964-1.000) | **Supported** |
+
+### Where the false positives came from (test seeds)
+- **Spoofing:** all 200 were the large passive trader, one in every test market. It rests large orders near the touch and pulls them unfilled, so under the registered score its 0.25-weighted cancels add up past the spoofer's paired ones. The registered score counts the cancels when it should be asking what the cancels were for.
+- **Marking the close:** 30 from the late informed trader, 18 from the insider, 11 from noise traders. A trader who is right late and trades aggressively moves the last price as much as a manipulator does, and this score cannot tell the two apart.
+- **Wash trading and insider-like trading:** none. No chance meeting of the linked noise pair came close to the threshold.
+
+### What the passes do and do not show
+- **Wash trading** is detected well because the simulated wash pair is linked. Wash traders who use unlinked accounts (different networks) are invisible to this detector, by construction.
+- **The insider result leans on the new-account weight.** The simulated insider always opens its account late. §5 measures the detector without that weight.
+
+## 5. Exploratory follow-ups (not registered)
+These were chosen after §4's results were seen, so they test no hypothesis. To keep them honest they are measured on fresh seeds 301-500, which nothing had used. Thresholds are tuned on seeds 1-100 as before.
+
+    python -m brier_services.surveillance.explore
+
+| Variant | Threshold | TP | FP | FN | Precision | Recall |
+|---|---|---|---|---|---|---|
+| Spoofing, registered | 1.25 | 100 | 200 | 6 | 0.333 | 0.943 |
+| Spoofing, unpaired cancels weigh 0 | 2.0 | 93 | 149 | 13 | 0.384 | 0.877 |
+| Spoofing, only orders paired with an opposite trade **the account initiated** | 1.0 | 105 | 0 | 1 | 1.000 | 0.991 |
+| Insider-like, registered | 194 | 100 | 0 | 1 | 1.000 | 0.990 |
+| Insider-like, no weight for a new account | 108 | 99 | 5 | 2 | 0.952 | 0.980 |
+
+### Spoofing
+Dropping the unpaired cancels alone does little. The large passive trader's resting orders on the other side sometimes fill near one of its cancels, and that counts as "trading the other way". The spoofer is different: it trades the other way as the taker. Counting only opposite trades the account initiated separates the two almost perfectly.
+
+Two caveats:
+- The simulated look-alike never takes liquidity, so this rule fits the simulation's construction. A real market maker who pulls a large quote and then hits the other side would be flagged.
+- The rule is new, and the gateway runs it as such: live surveillance uses this variant with the threshold tuned here (1.0), and the registered score is kept only in the evaluation.
+
+### Insider-like trading
+Without the new-account weight, precision falls to 0.95. The detector mainly measures concentration on the winning side late in the market, and the weight adds a little.
+
+### Marking the close
+Not explored. The likely fix is to use what happens after the push: a manipulator buys the close up whatever the outcome, while an informed late trader is right. That needs a new registration, not a variant of this one.
+
+## 6. What this measures, and what it does not
+- **This is an evaluation in simulation.** The manipulators were written by the same person as the detectors, and to a specification published in advance. Real manipulators adapt.
+- **The numbers rank the detectors against these specific look-alikes.** They are not field accuracy.
+- **What carries over to the live exchange** is the code: the detectors read the same command stream from a live journal (`brier-core export`) as from the simulation.
