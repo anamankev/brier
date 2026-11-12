@@ -75,6 +75,12 @@ pub const PROXY_KEY_HEADER: &str = "x-brier-proxy-key";
 /// Header carrying the client address the proxy saw, trusted only with a valid proxy key.
 pub const CLIENT_ADDRESS_HEADER: &str = "x-brier-client-address";
 
+/// The built events list and when it was built ([`AppState::events_ttl`]).
+pub(crate) type EventsCache = Option<(
+    std::time::Instant,
+    Arc<Vec<(serde_json::Value, events::EventKeys)>>,
+)>;
+
 /// Everything the handlers share.
 pub struct AppState {
     /// The running core.
@@ -107,12 +113,11 @@ pub struct AppState {
     /// SHA-256 of the shared key that lets the web server forward client addresses
     /// (`BRIER_PROXY_KEY`); without it, forwarded addresses are never trusted.
     pub proxy_key: Option<[u8; 32]>,
-    /// How long the events list's market rows may be reused (zero: never). A burst of visitors
-    /// then shares one database read instead of queueing on the one connection.
+    /// How long the built events list may be reused (zero: never). A burst of visitors then
+    /// shares one build instead of queueing on the one database connection.
     pub events_ttl: std::time::Duration,
-    /// The market rows last read for the events list, and when.
-    pub(crate) events_cache:
-        tokio::sync::Mutex<Option<(std::time::Instant, Arc<Vec<events::MarketRow>>)>>,
+    /// The events list last built, and when.
+    pub(crate) events_cache: tokio::sync::Mutex<EventsCache>,
     /// A hash checked when the username is unknown, so login time does not reveal it.
     dummy_hash: String,
 }

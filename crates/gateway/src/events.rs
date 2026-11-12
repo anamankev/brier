@@ -36,7 +36,7 @@ const STANDALONE_PREFIX: &str = "market-";
 
 /// One market's row for event pages and cards.
 #[derive(Debug, Clone)]
-pub(crate) struct MarketRow {
+struct MarketRow {
     market: i64,
     title: String,
     event: Option<String>,
@@ -51,22 +51,6 @@ pub(crate) struct MarketRow {
     price_day_ago: Option<i16>,
     volume_day_ago: Option<i64>,
     range_start: Option<i128>,
-}
-
-/// The market rows, reused for `events_ttl` after a read so that concurrent requests share it.
-async fn cached_rows(s: &AppState) -> Result<Arc<Vec<MarketRow>>, ApiError> {
-    if s.events_ttl.is_zero() {
-        return Ok(Arc::new(market_rows(s).await?));
-    }
-    let mut cache = s.events_cache.lock().await;
-    if let Some((at, rows)) = cache.as_ref()
-        && at.elapsed() < s.events_ttl
-    {
-        return Ok(Arc::clone(rows));
-    }
-    let rows = Arc::new(market_rows(s).await?);
-    *cache = Some((std::time::Instant::now(), Arc::clone(&rows)));
-    Ok(rows)
 }
 
 async fn market_rows(s: &AppState) -> Result<Vec<MarketRow>, ApiError> {
@@ -190,11 +174,29 @@ async fn event_info(s: &AppState) -> Result<HashMap<String, EventInfo>, ApiError
         .collect())
 }
 
-/// Every event, each with its markets in range order, as JSON with sort keys.
+/// Every event with its sort keys, reused for `events_ttl` after it is built, so a burst of
+/// visitors shares one build (a database read and a book query per market) instead of
+/// queueing on the one database connection.
 async fn all_events(s: &AppState) -> Result<Vec<(Value, EventKeys)>, ApiError> {
+    if s.events_ttl.is_zero() {
+        return build_events(s).await;
+    }
+    let mut cache = s.events_cache.lock().await;
+    if let Some((at, built)) = cache.as_ref()
+        && at.elapsed() < s.events_ttl
+    {
+        return Ok(built.as_ref().clone());
+    }
+    let built = build_events(s).await?;
+    *cache = Some((std::time::Instant::now(), Arc::new(built.clone())));
+    Ok(built)
+}
+
+/// Every event, each with its markets in range order, as JSON with sort keys.
+async fn build_events(s: &AppState) -> Result<Vec<(Value, EventKeys)>, ApiError> {
     let info = event_info(s).await?;
     let mut groups: BTreeMap<String, Vec<MarketRow>> = BTreeMap::new();
-    for m in cached_rows(s).await?.iter().cloned() {
+    for m in market_rows(s).await? {
         let slug = m
             .event
             .clone()
@@ -256,7 +258,8 @@ async fn all_events(s: &AppState) -> Result<Vec<(Value, EventKeys)>, ApiError> {
     Ok(out)
 }
 
-struct EventKeys {
+#[derive(Debug, Clone)]
+pub(crate) struct EventKeys {
     title: String,
     category: Option<&'static str>,
     tags: Vec<String>,
