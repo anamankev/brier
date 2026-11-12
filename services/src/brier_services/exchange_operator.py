@@ -147,7 +147,9 @@ def main(argv: list[str] | None = None) -> int:
         try:
             if now - last["list"] >= EVERY["list"]:
                 at = dt.datetime.now(dt.UTC)
-                listed = list_catalogue(who["lister"], at, forecasts.high, lambda *a, **k: None)
+                listed = list_catalogue(
+                    who["lister"], at, forecasts.high, lambda *a, **k: None, forecasts.low
+                )
                 log("listed", slugs=listed)
                 if fred:
                     log("economy_listed", slugs=economy.run_once(who["lister"], at, fred, log))

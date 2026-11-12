@@ -181,14 +181,15 @@ class FairValues:
         series = rulebook["source"]["series"]
         observation = rulebook["observation"]
         if provider == "nws":
-            c = cv.city(series.removeprefix("CLI/"))
+            low = series.endswith("/MIN")
+            c = cv.city(series.removeprefix("CLI/").removesuffix("/MIN"))
             if c is None:
                 return None
             body = self._get(
                 f"OPEN-METEO {c.location}", lambda: self._body(Request(cv.open_meteo_url(c)))
             )
-            high = cv.forecast_high(body, observation)
-            return None if high is None else cv.temperature(c, high, op, threshold)
+            value = (cv.forecast_low if low else cv.forecast_high)(body, observation)
+            return None if value is None else cv.temperature(c, value, op, threshold, low=low)
         if series in {"WORLD/M5", "WORLD/M6"}:
             today = dt.datetime.fromtimestamp(self.wall(), dt.UTC).date()
             body = self._get("USGS M5 YEAR", lambda: self._body(Request(_usgs_year(today))))

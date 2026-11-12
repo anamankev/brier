@@ -35,9 +35,23 @@ def forecast_high(body: bytes, day: dt.date) -> int | None:
     return None
 
 
+def forecast_low(body: bytes, day: dt.date) -> int | None:
+    """The forecast low in °F for the local date ``day``: the overnight period that starts on
+    the evening before, which covers the early hours when the day's low usually falls."""
+    periods = json_field(json_field(strict_json(body), "properties", dict), "periods", list)
+    for p in periods:
+        start = dt.datetime.fromisoformat(json_field(p, "startTime", str))
+        if not json_field(p, "isDaytime", bool) and start.date() == day - dt.timedelta(days=1):
+            if json_field(p, "temperatureUnit", str) != "F":
+                msg = "expected a forecast in °F"
+                raise MalformedResponseError(msg)
+            return int(json_field(p, "temperature", int))
+    return None
+
+
 @dataclass
 class Forecasts:
-    """Forecast highs by city, with each city's forecast URL looked up once."""
+    """Forecast highs and lows by city, with each city's forecast URL looked up once."""
 
     fetcher: Fetcher = fetch
     urls: dict[str, str] = field(default_factory=dict)
@@ -49,7 +63,8 @@ class Forecasts:
             raise MalformedResponseError(msg)
         return response.body
 
-    def high(self, city: City, day: dt.date) -> int | None:
+    def _url(self, city: City) -> str:
+        """The forecast URL for the city's grid square, looked up once."""
         if city.location not in self.urls:
             points = strict_json(
                 self._body(f"https://api.weather.gov/points/{city.latitude},{city.longitude}")
@@ -57,7 +72,13 @@ class Forecasts:
             self.urls[city.location] = json_field(
                 json_field(points, "properties", dict), "forecast", str
             )
-        return forecast_high(self._body(self.urls[city.location]), day)
+        return self.urls[city.location]
+
+    def high(self, city: City, day: dt.date) -> int | None:
+        return forecast_high(self._body(self._url(city)), day)
+
+    def low(self, city: City, day: dt.date) -> int | None:
+        return forecast_low(self._body(self._url(city)), day)
 
 
 ForecastHigh = Callable[[City, dt.date], int | None]

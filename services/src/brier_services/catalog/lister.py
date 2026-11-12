@@ -34,9 +34,12 @@ def _log(event: str, **fields: Any) -> None:  # noqa: ANN401 - JSON fields
 
 
 def events_for(
-    day: dt.date, forecast: ForecastHigh, say: Callable[..., None]
+    day: dt.date,
+    forecast: ForecastHigh,
+    say: Callable[..., None],
+    low: ForecastHigh | None = None,
 ) -> list[list[dict[str, Any]]]:
-    """Every series' event for the day, as lists of rulebooks."""
+    """Every series' event for the day, as lists of rulebooks (daily lows only with ``low``)."""
     out: list[list[dict[str, Any]]] = []
     for city in templates.CITIES:
         try:
@@ -53,6 +56,14 @@ def events_for(
             )
             continue
         out.append(templates.temperature(city, day, high))
+        if low is not None:
+            try:
+                forecast_low = low(city, day)
+            except (FetchError, MalformedResponseError, OSError) as e:
+                say("forecast_unavailable", city=city.slug, day=day.isoformat(), error=str(e))
+                forecast_low = None
+            if forecast_low is not None:
+                out.append(templates.temperature(city, day, forecast_low, low=True))
     out += templates.earthquakes(day)
     out.append(templates.geomagnetic(day))
     return out
@@ -69,14 +80,18 @@ def _exists(api: Api, slug: str) -> bool:
 
 
 def run_once(
-    api: Api, now: dt.datetime, forecast: ForecastHigh, say: Callable[..., None] = _log
+    api: Api,
+    now: dt.datetime,
+    forecast: ForecastHigh,
+    say: Callable[..., None] = _log,
+    low: ForecastHigh | None = None,
 ) -> list[str]:
     """One pass; returns the slugs of the events it listed."""
     listed: list[str] = []
     today = now.astimezone(dt.UTC).date()
     for ahead in DAYS_AHEAD:
         day = today + dt.timedelta(days=ahead)
-        for event in events_for(day, forecast, say):
+        for event in events_for(day, forecast, say, low):
             slug = event[0]["event"]["slug"]
             try:
                 if _exists(api, slug):

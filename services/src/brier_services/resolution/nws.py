@@ -49,6 +49,10 @@ MONTHS = [
 ]
 _SUMMARY = re.compile(r"CLIMATE SUMMARY FOR ([A-Z]+) (\d{1,2}) (\d{4})")
 _FINAL_MAX = re.compile(r"TEMPERATURE \(F\)[ \t]*\n[ \t]*YESTERDAY[ \t]*\n[ \t]*MAXIMUM[ \t]+(\S+)")
+# The minimum is the line after the maximum in the same YESTERDAY block.
+_FINAL_MIN = re.compile(
+    r"TEMPERATURE \(F\)[ \t]*\n[ \t]*YESTERDAY[ \t]*\n[ \t]*MAXIMUM[^\n]*\n[ \t]*MINIMUM[ \t]+(\S+)"
+)
 
 
 class SourceError(Exception):
@@ -76,20 +80,21 @@ def _day_words(observation: str) -> tuple[str, str, str]:
     return MONTHS[int(month) - 1], str(int(day)), year
 
 
-def report_maximum(text: str, observation: str) -> Reading | None:
-    """The day's maximum from a final report of ``observation``; None if the text is not one
-    (a preliminary report, or another day's)."""
+def report_maximum(text: str, observation: str, *, minimum: bool = False) -> Reading | None:
+    """The day's maximum (or, with ``minimum``, minimum) from a final report of
+    ``observation``; None if the text is not one (a preliminary report, or another day's)."""
     summary = _SUMMARY.search(text)
     if summary is None or summary.groups() != _day_words(observation):
         return None
-    found = _FINAL_MAX.search(text)
+    found = (_FINAL_MIN if minimum else _FINAL_MAX).search(text)
     if found is None:
         return None  # a "TODAY" report: preliminary
     raw = found.group(1).removesuffix("R")  # R marks a record
     if raw == "M":
-        return Missing(f"the {observation} report gives the maximum as missing")
+        which = "minimum" if minimum else "maximum"
+        return Missing(f"the {observation} report gives the {which} as missing")
     if not re.fullmatch(r"-?\d{1,3}", raw):
-        msg = f"unreadable maximum {found.group(1)!r}"
+        msg = f"unreadable {'minimum' if minimum else 'maximum'} {found.group(1)!r}"
         raise MalformedResponseError(msg)
     return Fraction(int(raw))
 
@@ -118,7 +123,7 @@ def read(rule: Rulebook, fetcher: Fetcher, now: str) -> Read:
             raise MalformedResponseError(msg)
         response = _get(fetcher, f"https://{HOST}/products/{report_id}")
         text = field(strict_json(response.body), "productText", str)
-        reading = report_maximum(text, rule.observation)
+        reading = report_maximum(text, rule.observation, minimum=rule.series.id.endswith("/MIN"))
         if reading is not None:
             return Read(response, reading, index.url, digest, index.body)
     return Read(

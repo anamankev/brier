@@ -29,6 +29,22 @@ TEMPERATURE_FIT: dict[str, tuple[float, float]] = {
     "seattle": (1.60, 2.93),
     "washington-dc": (0.13, 3.52),
 }
+# The same for daily lows, fitted on the same period (docs/notes/daily-lows.md;
+# var/catalog-backtest/lows.json).
+TEMPERATURE_LOW_FIT: dict[str, tuple[float, float]] = {
+    "atlanta": (1.71, 2.10),
+    "austin": (-2.49, 4.24),
+    "boston": (2.88, 3.49),
+    "chicago": (1.22, 3.06),
+    "dallas": (0.93, 2.31),
+    "denver": (-2.41, 3.72),
+    "los-angeles": (2.57, 2.08),
+    "miami": (2.93, 2.34),
+    "nyc": (4.38, 4.13),
+    "phoenix": (4.97, 2.18),
+    "seattle": (0.38, 2.90),
+    "washington-dc": (2.58, 4.06),
+}
 STORM_LEVELS = ("4.67", "5.67", "6.67")  # G1, G2, G3 lower edges in Kp
 
 
@@ -58,9 +74,22 @@ def forecast_high(body: bytes, day: str) -> float | None:
     return float(max(values))
 
 
-def temperature(c: City, forecast: float, op: str, threshold: float) -> float:
-    """P(official whole-degree high op threshold) under Normal(forecast + bias, sd)."""
-    bias, sd = TEMPERATURE_FIT[c.slug]
+def forecast_low(body: bytes, day: str) -> float | None:
+    """The day's forecast low (°F) from an Open-Meteo hourly forecast, if all 24 hours exist."""
+    hourly = json.loads(body)["hourly"]
+    values = [
+        v
+        for t, v in zip(hourly["time"], hourly["temperature_2m"], strict=True)
+        if t.startswith(day)
+    ]
+    if len(values) < 24 or any(v is None for v in values):
+        return None
+    return float(min(values))
+
+
+def temperature(c: City, forecast: float, op: str, threshold: float, *, low: bool = False) -> float:
+    """P(official whole-degree high (or low) op threshold) under Normal(forecast + bias, sd)."""
+    bias, sd = (TEMPERATURE_LOW_FIT if low else TEMPERATURE_FIT)[c.slug]
     mean = forecast + bias
     below = {
         ">=": threshold - 0.5,

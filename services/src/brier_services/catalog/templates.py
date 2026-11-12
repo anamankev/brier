@@ -219,10 +219,16 @@ def _rulebook(
     }
 
 
-def temperature(city: City, day: dt.date, forecast_high: int) -> list[dict[str, Any]]:
-    """Seven ranges for the city's official high, the middle one holding the forecast."""
-    low = forecast_high - TEMPERATURE_WIDTH * (TEMPERATURE_INNER // 2) - 2  # middle: [f - 1, f]
-    edges = [low + TEMPERATURE_WIDTH * i for i in range(TEMPERATURE_INNER + 1)]
+LOW_CODE_OFFSET = 20  # daily-low series codes: the city's code + 20 (21-32)
+
+
+def temperature(
+    city: City, day: dt.date, forecast_high: int, *, low: bool = False
+) -> list[dict[str, Any]]:
+    """Seven ranges for the city's official high (or, with ``low``, low), the middle one holding
+    the forecast."""
+    bottom = forecast_high - TEMPERATURE_WIDTH * (TEMPERATURE_INNER // 2) - 2  # middle: [f - 1, f]
+    edges = [bottom + TEMPERATURE_WIDTH * i for i in range(TEMPERATURE_INNER + 1)]
     # Outcomes: <= edges[0], then [edges[i] + 1, edges[i + 1]], then >= edges[-1] + 1.
     outcomes: list[tuple[str, dict[str, str], str]] = [
         (
@@ -243,23 +249,24 @@ def temperature(city: City, day: dt.date, forecast_high: int) -> list[dict[str, 
     outcomes.append(
         (f"{top}°F or above", {"op": ">=", "threshold": str(top)}, f"{top} °F or higher")
     )
+    kind, word = ("low", "Lowest") if low else ("high", "Highest")
     event = {
-        "slug": f"{city.slug}-high-{day.isoformat()}",
-        "title": f"Highest temperature in {city.name} on {_short(day)}?",
+        "slug": f"{city.slug}-{kind}-{day.isoformat()}",
+        "title": f"{word} temperature in {city.name} on {_short(day)}?",
         "tags": sorted(["daily", city.slug, "temperature"]),
-        "series": f"{city.slug}-daily-high",
+        "series": f"{city.slug}-daily-{kind}",
         "exclusive": True,
     }
     return [
         _rulebook(
-            market=market_id(day, city.code, i),
-            title=f"{city.name} high {label} on {_short(day)}",
+            market=market_id(day, city.code + (LOW_CODE_OFFSET if low else 0), i),
+            title=f"{city.name} {kind} {label} on {_short(day)}",
             question=(
-                f"Will the official high temperature at {city.station} ({city.name}) on "
+                f"Will the official {kind} temperature at {city.station} ({city.name}) on "
                 f"{_long(day)} be {words}, as reported in the National Weather Service's daily "
                 "climate report?"
             ),
-            source=_source(Provider.NWS, f"CLI/{city.location}"),
+            source=_source(Provider.NWS, f"CLI/{city.location}" + ("/MIN" if low else "")),
             day=day,
             condition=condition,
             release=_iso(day + dt.timedelta(days=1), 15),
