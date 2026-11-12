@@ -4,9 +4,14 @@
 // codes are accepted once each, so a second sign-in waits for an unused code.
 import AxeBuilder from "@axe-core/playwright";
 import { devices, expect, test, type Browser, type Page } from "@playwright/test";
-import { NEWCOMER_SESSION, PASSWORD, WEB_PORT, call, currentStep, freshTotp, instant, iso, now, recordStep, setClock, state, until } from "./stack";
+import { NEWCOMER_SESSION, PASSWORD, WEB_PORT, call, consented, currentStep, freshTotp, instant, iso, now, recordStep, setClock, state, until } from "./stack";
 
 test.describe.configure({ mode: "serial" });
+
+// The cookie banner has its own test (security.spec.ts); here the choice is already made.
+test.beforeEach(async ({ context }) => {
+  await consented(context);
+});
 
 const NEWCOMER = `newcomer${Date.now() % 100000}`;
 const CPI = 101;
@@ -36,7 +41,7 @@ async function signOut(page: Page) {
 
 /** A page signed in as the newcomer, from the session saved by the first test. */
 async function asNewcomer(browser: Browser): Promise<Page> {
-  const context = await browser.newContext({ storageState: NEWCOMER_SESSION, baseURL: `http://127.0.0.1:${WEB_PORT}` });
+  const context = await consented(await browser.newContext({ storageState: NEWCOMER_SESSION, baseURL: `http://127.0.0.1:${WEB_PORT}` }));
   return context.newPage();
 }
 
@@ -47,7 +52,7 @@ test("a newcomer signs up, turns on two-step sign-in, and signs in with a code",
   await page.getByLabel(/Password/).fill(PASSWORD);
   await expect(page.getByRole("button", { name: "Create account" })).toBeDisabled();
   await page.getByLabel("I am 18 or older").check();
-  await page.getByLabel(/I agree to the terms of use/).check();
+  await page.getByLabel(/I agree to the terms of service/).check();
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("heading", { name: "Save your recovery codes" })).toBeVisible();
   await expect(page.getByRole("list", { name: "Recovery codes" }).getByRole("listitem")).toHaveCount(10);
@@ -77,7 +82,7 @@ async function publicAccount(page: Page, name: string) {
   await page.getByLabel(/Username/).fill(name);
   await page.getByLabel(/Password/).fill(PASSWORD);
   await page.getByLabel("I am 18 or older").check();
-  await page.getByLabel(/I agree to the terms of use/).check();
+  await page.getByLabel(/I agree to the terms of service/).check();
   await page.getByRole("button", { name: "Create account" }).click();
   const first = page.getByRole("list", { name: "Recovery codes" }).getByRole("listitem").first();
   const code = ((await first.textContent()) ?? "").trim();
@@ -138,7 +143,7 @@ test("a public account: claims the daily credits, resets a lost password with a 
 });
 
 test("the same public account flow on a phone", async ({ browser }) => {
-  const context = await browser.newContext({ ...devices["Pixel 7"], baseURL: `http://127.0.0.1:${WEB_PORT}` });
+  const context = await consented(await browser.newContext({ ...devices["Pixel 7"], baseURL: `http://127.0.0.1:${WEB_PORT}` }));
   await publicAccount(await context.newPage(), `pubph_${Date.now() % 1_000_000}`);
   await context.close();
 });
@@ -146,8 +151,9 @@ test("the same public account flow on a phone", async ({ browser }) => {
 test("the legal pages are reachable from every page", async ({ page }) => {
   await page.goto("/");
   for (const [link, heading] of [
-    ["Terms of use", "Terms of use"],
-    ["Privacy", "Privacy notice"],
+    ["Terms of service", "Terms of service"],
+    ["Privacy policy", "Privacy policy"],
+    ["Cookie policy", "Cookie policy"],
     ["House rules", "House rules"],
   ] as const) {
     await page.getByRole("contentinfo").getByRole("link", { name: link, exact: true }).click();
@@ -228,7 +234,7 @@ test("an event: browse its category, open it, and buy one outcome by amount", as
 
 test("on a phone: a stranger signs up, claims the daily credits, and buys an outcome", async ({ browser }) => {
   const { event } = state();
-  const context = await browser.newContext({ ...devices["Pixel 7"], baseURL: `http://127.0.0.1:${WEB_PORT}` });
+  const context = await consented(await browser.newContext({ ...devices["Pixel 7"], baseURL: `http://127.0.0.1:${WEB_PORT}` }));
   const page = await context.newPage();
   const name = `phone_${Date.now() % 1_000_000}`;
   await page.goto("/register");
@@ -236,7 +242,7 @@ test("on a phone: a stranger signs up, claims the daily credits, and buys an out
   await page.getByLabel(/Username/).fill(name);
   await page.getByLabel(/Password/).fill(PASSWORD);
   await page.getByLabel("I am 18 or older").check();
-  await page.getByLabel(/I agree to the terms of use/).check();
+  await page.getByLabel(/I agree to the terms of service/).check();
   await page.getByRole("button", { name: "Create account" }).click();
   await page.getByLabel("I have saved my recovery codes").check();
   await page.getByRole("button", { name: "Start trading" }).click();

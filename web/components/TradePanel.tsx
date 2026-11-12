@@ -9,6 +9,7 @@ type Result = { status: string; filled: number; remaining: number; cancel_reason
 type Quotes = { buyYes: number | null; buyNo: number | null; sellYes: number | null; sellNo: number | null };
 
 const REASONS: Record<string, string> = {
+  terms_required: "The terms of service changed. Accept the new terms (top of the page) to trade.",
   insufficient_collateral: "Not enough available cash for this order.",
   market_not_open: "The market is not open for trading.",
   invalid_price: "Prices are 1¢ to 99¢.",

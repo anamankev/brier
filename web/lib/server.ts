@@ -58,7 +58,15 @@ export async function gateway<T>(path: string, init: RequestInit = {}, token?: s
     : { ok: false, status: res.status, body: (body ?? {}) as ApiErrorBody };
 }
 
-export type Me = { user_id: number; username: string; role: "trader" | "admin" | "resolver" | "surveillance"; totp: boolean; signed_in_with_totp: boolean };
+export type Me = {
+  user_id: number;
+  username: string;
+  role: "trader" | "admin" | "resolver" | "surveillance";
+  totp: boolean;
+  signed_in_with_totp: boolean;
+  /** False when the terms changed since the user accepted them; orders are refused until then. */
+  terms_current?: boolean;
+};
 
 export async function me(): Promise<Me | null> {
   if (!(await sessionToken())) return null;

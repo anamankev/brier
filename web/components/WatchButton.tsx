@@ -1,14 +1,34 @@
 "use client";
 import { useSyncExternalStore } from "react";
+import { readConsent } from "@/lib/consent";
 import { Star } from "./Icons";
 
-// The watchlist lives in this browser only (localStorage): a convenience, not account data.
+// The watchlist lives in this browser only, never on the server. With the "preferences" cookie
+// choice it is kept on this device (localStorage); without it, only for this browsing session
+// (sessionStorage), which starring a market is an explicit request for.
 const KEY = "brier.watchlist";
 const listeners = new Set<() => void>();
 
+function store(): Storage {
+  return readConsent()?.preferences ? window.localStorage : window.sessionStorage;
+}
+
+/** Move the list to where the current choice keeps it (called when the choice changes). */
+export function rehomeWatchlist() {
+  try {
+    const list = read();
+    window.localStorage.removeItem(KEY);
+    window.sessionStorage.removeItem(KEY);
+    if (list.length) store().setItem(KEY, JSON.stringify(list));
+  } catch {
+    // storage blocked
+  }
+  listeners.forEach((l) => l());
+}
+
 function read(): string[] {
   try {
-    const raw = window.localStorage.getItem(KEY);
+    const raw = window.localStorage.getItem(KEY) ?? window.sessionStorage.getItem(KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === "string") : [];
   } catch {
@@ -41,7 +61,7 @@ export function toggleWatch(slug: string) {
   const list = read();
   const next = list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug];
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(next));
+    store().setItem(KEY, JSON.stringify(next));
   } catch {
     // storage blocked: the star simply does not stick
   }

@@ -45,7 +45,7 @@ export default async function setup(): Promise<void> {
 
   const users: StackState["users"] = {};
   const register = async (name: string, role?: string) => {
-    await call("POST", "/v1/register", undefined, { username: name, password: PASSWORD, adult: true, terms: "2026-11-08" });
+    await call("POST", "/v1/register", undefined, { username: name, password: PASSWORD, adult: true, terms: "2026-11-12" });
     if (role) execFileSync(binary, ["role", name, role, "browser test role"], { env, stdio: "ignore" });
     const { token } = await call<{ token: string }>("POST", "/v1/login", undefined, { username: name, password: PASSWORD });
     users[name] = { token };

@@ -8,6 +8,8 @@ import { CATEGORIES} from "@/lib/events";
 import { listEvents } from "@/lib/events-server";
 import { Mark, SearchIcon } from "@/components/Icons";
 import { UserMenu } from "@/components/UserMenu";
+import { TermsUpdate } from "@/components/TermsUpdate";
+import { CookieBanner, CookieSettingsLink } from "@/components/CookieBanner";
 import { DailyCredits } from "@/components/DailyCredits";
 import { Bell } from "@/components/Bell";
 import { SITE_URL } from "@/lib/site";
@@ -103,6 +105,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </nav>
         </header>
         <main id="main" className="page">
+          {user && user.terms_current === false && <TermsUpdate />}
           {children}
         </main>
         <footer className="site-footer">
@@ -137,8 +140,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <div>
                 <h2>Legal</h2>
                 <ul>
-                  <li><Link href="/terms">Terms of use</Link></li>
-                  <li><Link href="/privacy">Privacy</Link></li>
+                  <li><Link href="/terms">Terms of service</Link></li>
+                  <li><Link href="/privacy">Privacy policy</Link></li>
+                  <li><Link href="/cookies">Cookie policy</Link></li>
+                  <li><CookieSettingsLink /></li>
                   <li><Link href="/credits">Photo credits</Link></li>
                   <li><a href="https://github.com/anamankev/brier/security/policy">Security</a></li>
                 </ul>
@@ -167,6 +172,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </div>
           </div>
         </footer>
+        <CookieBanner />
       </body>
     </html>
   );

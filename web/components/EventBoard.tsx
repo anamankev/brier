@@ -25,6 +25,7 @@ export type Outcome = {
 };
 
 const REASONS: Record<string, string> = {
+  terms_required: "The terms of service changed. Accept the new terms (top of the page) to trade.",
   insufficient_collateral: "Not enough available cash for this order.",
   market_not_open: "This market is not open for trading.",
   rate_limited: "Too many orders at once; try again in a moment.",

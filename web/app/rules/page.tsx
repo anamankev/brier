@@ -46,8 +46,8 @@ export default function Rules() {
       <p>Usernames that impersonate others, or that are hateful or obscene, may be closed.</p>
 
       <p style={{ marginTop: 20 }}>
-        See also the <Link className="link" href="/terms">terms of use</Link> and the{" "}
-        <Link className="link" href="/privacy">privacy notice</Link>.
+        See also the <Link className="link" href="/terms">terms of service</Link> and the{" "}
+        <Link className="link" href="/privacy">privacy policy</Link>.
       </p>
     </article>
   );

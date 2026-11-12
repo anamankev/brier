@@ -505,7 +505,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--no); }
 .codes { list-style: none; margin: 0; padding: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 8px 16px; background: var(--surface-2); border-radius: var(--r-sm); border: 1px solid var(--line); }
 .codes code { font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 13.5px; white-space: nowrap; color: var(--text); }
 .danger-zone { border-color: var(--no-line); }
-.legal { max-width: 720px; display: grid; gap: 6px; }
+.legal { max-width: 720px; display: grid; gap: 6px; margin-top: 24px; }
 .legal h1 { margin-bottom: 4px; }
 .legal h2 { font-size: 19px; margin: 22px 0 4px; }
 .legal p, .legal li { line-height: 1.65; color: var(--text-2); }
@@ -581,3 +581,41 @@ a.note:hover { background: var(--surface-2); }
 .totp-setup { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
 .qr { border-radius: 10px; flex: none; }
 .totp-key { font-size: 15px; letter-spacing: 0.06em; word-break: break-all; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm); max-width: 320px; }
+
+/* Cookie banner: a card in the corner, never covering the whole page. */
+.cookie-banner { position: fixed; z-index: 60; left: 16px; bottom: 16px; width: min(440px, calc(100vw - 32px)); padding: 18px 20px; display: grid; gap: 12px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55); border-color: var(--line-2); }
+.cookie-banner h2 { font-size: 16px; margin: 0; }
+.cookie-banner p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text-2); }
+.cookie-banner a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.cookie-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cookie-actions .btn { height: 36px; padding: 0 14px; font-size: 14px; }
+.btn.ghost { border-color: transparent; color: var(--text-2); }
+.btn.ghost:hover { color: var(--text); border-color: var(--line-2); }
+.cookie-choices { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.cookie-choices li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.cookie-choices li:last-child { border-bottom: 0; }
+.cookie-choices li div { display: grid; gap: 2px; }
+.cookie-choices b { font-size: 14px; }
+.cookie-choices span { font-size: 13px; color: var(--muted); line-height: 1.45; }
+.switch { position: relative; flex: none; width: 40px; height: 22px; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.switch input:disabled { cursor: not-allowed; }
+.switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--surface-3); border: 1px solid var(--line-2); transition: background 0.15s; pointer-events: none; }
+.switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--text-2); transition: transform 0.15s; }
+.switch input:checked + span { background: var(--yes); border-color: var(--yes); }
+.switch input:checked + span::after { transform: translateX(18px); background: #0b0d10; }
+.switch input:disabled + span { opacity: 0.6; }
+.switch input:focus-visible + span { outline: 2px solid var(--text); outline-offset: 2px; }
+.link-button { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.link-button:hover { color: var(--text); }
+/* The updated-terms notice. */
+.terms-update { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 16px 0 0; padding: 12px 16px; border: 1px solid var(--line-2); border-radius: var(--r-lg); background: var(--surface); font-size: 14px; color: var(--text-2); }
+.terms-update a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.terms-update .btn { height: 34px; margin-left: auto; }
+.cookie-table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 6px 0; }
+.cookie-table th, .cookie-table td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.cookie-table th { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 650; }
+.cookie-table td { color: var(--text-2); line-height: 1.5; }
+.cookie-table code { font-size: 13px; color: var(--text); white-space: nowrap; }
+.legal h3 { margin: 12px 0 2px; }
+.legal .link-button { text-decoration: underline; text-underline-offset: 3px; color: var(--text); }

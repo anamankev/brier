@@ -82,7 +82,7 @@ export function RegisterForm() {
         <span>
           I agree to the{" "}
           <Link className="link" href="/terms" target="_blank">
-            terms of use
+            terms of service
           </Link>{" "}
           and{" "}
           <Link className="link" href="/rules" target="_blank">
@@ -90,7 +90,7 @@ export function RegisterForm() {
           </Link>
           , and have read the{" "}
           <Link className="link" href="/privacy" target="_blank">
-            privacy notice
+            privacy policy
           </Link>
         </span>
       </label>

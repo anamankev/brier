@@ -118,3 +118,9 @@ export async function until(what: string, check: () => Promise<boolean>, ms = 15
     await new Promise((r) => setTimeout(r, 200));
   }
 }
+
+/** The cookie-banner choice, made in advance for flows that are not about cookies. */
+export async function consented(context: import("@playwright/test").BrowserContext, preferences = true) {
+  await context.addCookies([{ name: "brier_consent", value: `v1.p${preferences ? 1 : 0}`, domain: "127.0.0.1", path: "/" }]);
+  return context;
+}
