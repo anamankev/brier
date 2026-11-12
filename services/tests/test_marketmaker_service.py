@@ -38,6 +38,11 @@ class FakeApi:
             }
         if path.endswith("/rules"):
             return {"rulebook": RULE if "/104/" in path else FOMC}
+        if path == "/v1/allowance":
+            if method == "POST":
+                self.claimed = True
+                return {"granted": 10_000}
+            return {"claimed_today": getattr(self, "claimed", False)}
         if path == "/v1/portfolio":
             return {"positions": [], "open_orders": list(self.orders.values())}
         if method == "POST" and path == "/v1/orders":
@@ -130,3 +135,45 @@ def test_stale_inputs_pull_quotes() -> None:
     )
     assert "inputs unavailable" in str(m.run_once()[104]["pulled"])
     assert not api.orders
+
+
+def test_quote_size_shrinks_to_fit_cash() -> None:
+    api = FakeApi()
+    real = api.request
+
+    def poor(method: str, path: str, body: dict[str, Any] | None = None) -> Any:  # noqa: ANN401
+        out = real(method, path, body)
+        return {**out, "cash": 1_000} if path == "/v1/portfolio" else out
+
+    api.request = poor  # type: ignore[method-assign]
+    decided = maker(api).run_once()
+    assert decided[104]["size"] == 10, "1,000 credit-cents fit one two-sided quote of 10"
+    assert {o["remaining"] for o in api.orders.values()} == {10}
+
+
+def test_a_refused_quote_skips_that_side_and_the_pass_goes_on() -> None:
+    from brier_services.client import ApiError
+
+    api = FakeApi()
+    real = api.request
+    said: list[str] = []
+
+    def refuse_buys(method: str, path: str, body: dict[str, Any] | None = None) -> Any:  # noqa: ANN401
+        if method == "POST" and body is not None and body["side"] == "buy":
+            raise ApiError(422, {"error": {"code": "insufficient_collateral"}})
+        return real(method, path, body)
+
+    api.request = refuse_buys  # type: ignore[method-assign]
+    m = maker(api)
+    m.say = lambda event, **_: said.append(event)
+    m.run_once()
+    assert "quote_refused" in said
+    assert [o["side"] for o in api.orders.values()] == ["sell"]
+
+
+def test_the_maker_claims_the_daily_allowance_once() -> None:
+    api = FakeApi()
+    m = maker(api)
+    m.run_once()
+    m.run_once()
+    assert api.calls.count(("POST", "/v1/allowance")) == 1

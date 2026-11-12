@@ -11,6 +11,11 @@ Each pass, for every open market with a fair-value model:
    size, is cancelled and replaced; quotes are pulled when fair value is stale, the market is not
    open, or its close is less than 15 minutes away.
 
+Quote size is the registered size at most, scaled down so that every quoted market fits in the
+maker's cash (it claims the daily allowance like anyone): a two-sided quote of n contracts
+reserves n * 100 credit-cents. An order the exchange refuses (``insufficient_collateral``) is
+logged and that side skipped; the pass goes on.
+
 A user with no special role runs it, with the same limits as anyone. It logs one JSON line per
 action and appends one metrics line per market per pass.
 """
@@ -22,11 +27,12 @@ import gzip
 import json
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Protocol
 
 from brier_services.catalog import models as catalog_models
+from brier_services.client import ApiError
 from brier_services.marketmaker import catalog_values as cv
 from brier_services.marketmaker import fairvalue as fv
 from brier_services.marketmaker.quoting import Params, quote
@@ -244,13 +250,14 @@ class MarketMaker:
     def run_once(self) -> dict[int, dict[str, Any]]:
         """One pass over every market; returns what was decided per market."""
         markets = self.api.request("GET", "/v1/markets")["markets"]
+        self._claim_allowance()
         portfolio = self.api.request("GET", "/v1/portfolio")
         positions = {p["market"]: p["position"] for p in portfolio["positions"]}
         orders: dict[int, list[dict[str, Any]]] = {}
         for o in portfolio["open_orders"]:
             orders.setdefault(o["market"], []).append(o)
         now = self.now()
-        decided: dict[int, dict[str, Any]] = {}
+        plans: list[tuple[int, float | None, str | None, int, float]] = []
         for m in markets:
             if not m.get("title"):
                 continue
@@ -270,18 +277,22 @@ class MarketMaker:
                     why = str(e)
                 if p is None and why is None:
                     why = "no model"
+            tau = (close_at - now) / max(1, close_at - open_at)
+            plans.append((market, p, why, positions.get(market, 0), tau))
+        params = self._sized(portfolio, sum(1 for _, p, why, _, _ in plans if why is None and p))
+        decided: dict[int, dict[str, Any]] = {}
+        for market, p, why, inventory, tau in plans:
             target: dict[str, int | None] = {"buy": None, "sell": None}
-            inventory = positions.get(market, 0)
             if p is not None and why is None:
-                tau = (close_at - now) / max(1, close_at - open_at)
-                q = quote(p, inventory, tau, self.params)
+                q = quote(p, inventory, tau, params)
                 target = {"buy": q.bid, "sell": q.ask}
-            self._reconcile(market, target, orders.get(market, []))
+            self._reconcile(market, target, orders.get(market, []), params.size)
             decided[market] = {
                 "fair": p,
                 "inventory": inventory,
                 "bid": target["buy"],
                 "ask": target["sell"],
+                "size": params.size,
                 "pulled": why,
             }
             if self.metrics is not None:
@@ -289,8 +300,30 @@ class MarketMaker:
                     f.write(json.dumps({"t": now, "market": market, **decided[market]}) + "\n")
         return decided
 
+    def _claim_allowance(self) -> None:
+        """Claim the daily allowance, which any account may; the maker is no exception."""
+        try:
+            if not self.api.request("GET", "/v1/allowance").get("claimed_today", True):
+                r = self.api.request("POST", "/v1/allowance")
+                self.say("allowance", granted=r.get("granted"))
+        except ApiError as e:
+            self.say("allowance_failed", code=e.code)
+
+    def _sized(self, portfolio: dict[str, Any], quoted: int) -> Params:
+        """The registered parameters, with the size cut so ``quoted`` two-sided quotes fit in cash
+        (reserved credits are the maker's own resting orders, which this pass may replace)."""
+        cash = portfolio.get("cash")
+        if cash is None or quoted == 0:
+            return self.params
+        fit = int(cash) // (100 * quoted)
+        return replace(self.params, size=max(1, min(self.params.size, fit)))
+
     def _reconcile(
-        self, market: int, target: dict[str, int | None], resting: list[dict[str, Any]]
+        self,
+        market: int,
+        target: dict[str, int | None],
+        resting: list[dict[str, Any]],
+        size: int,
     ) -> None:
         for side in ("buy", "sell"):
             mine = [o for o in resting if o["side"] == side]
@@ -301,7 +334,8 @@ class MarketMaker:
                     keep is None
                     and target[side] is not None
                     and o["price"] == target[side]
-                    and o["remaining"] * 2 >= self.params.size
+                    and size <= o["remaining"] * 2
+                    and o["remaining"] <= size
                 ):
                     keep = o
                     continue
@@ -309,9 +343,15 @@ class MarketMaker:
                 self.say("cancel", market=market, order=o["order"], side=side)
             price = target[side]
             if keep is None and price is not None:
-                r = self.api.request(
-                    "POST",
-                    "/v1/orders",
-                    {"market": market, "side": side, "price": price, "qty": self.params.size},
-                )
+                try:
+                    r = self.api.request(
+                        "POST",
+                        "/v1/orders",
+                        {"market": market, "side": side, "price": price, "qty": size},
+                    )
+                except ApiError as e:
+                    if e.code != "insufficient_collateral":
+                        raise
+                    self.say("quote_refused", market=market, side=side, price=price, code=e.code)
+                    continue
                 self.say("quote", market=market, side=side, price=price, status=r.get("status"))

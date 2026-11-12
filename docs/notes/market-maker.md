@@ -80,3 +80,7 @@ The FOMC market (103) was not quoted, as planned.
 - **It shows availability, not trading skill.** No other trader was present, so the maker's quotes were never hit; P&L on real flow is not measured.
 - **Fair values did not move during the run.** Each model measures from its latest real observation, not from the test clock, and the inputs were fetched once (real time stayed within the 6-hour refresh). So requoting on a fair-value change was exercised only by the unit tests, not here.
 - **Pacing.** The first attempt failed on day 1: the study loop sent more than the gateway's per-address limit of 500 requests a second and got 429 answers. The rerun paces itself (30 ms a minute) and retries any 429; none occurred. The registered design did not specify pacing; this is the only change.
+
+## Capital (G10 addendum, 2026-11-12)
+
+With about 380 public markets the maker's sign-up grant no longer covered a 25-contract two-sided quote everywhere, and the first refused order stopped each pass, so later markets went unquoted. From this date the registered size (25) is a ceiling: each pass uses the largest size up to 25 at which every quoted market fits in cash (a two-sided quote of n contracts reserves n × 100 credit-cents), with a floor of 1. A refused order is logged as `quote_refused` and only that side is skipped. The maker claims the daily allowance like any account. It gets no grants beyond what any user gets. The spread, skew and limit parameters are unchanged.
