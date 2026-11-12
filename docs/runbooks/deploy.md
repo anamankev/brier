@@ -70,6 +70,38 @@ All these files are mode 600 or 640, and every secret was generated on the serve
 4. Replace `/var/lib/brier/journal` with the one from `journal.tar`.
 5. Start the gateway, then the operator. The gateway replays the journal and the projector catches up; `/v1/health` shows both sequence numbers.
 
+## Rotate secrets
+Generate every new value on the server, for example `openssl rand -hex 32`, and never paste one into chat, a commit or a log.
+- **Proxy key:**
+  1. Replace `BRIER_PROXY_KEY` in brier-db `/etc/brier/gateway.env`.
+  2. Restart the gateway:
+     ```bash
+     ssh brier-db sudo systemctl restart brier-gateway
+     ```
+  3. Redeploy the web side with `deploy/deploy.sh <run-id> web`. It rewrites `web.env` and `caddy.env` from the gateway's key.
+- **Data-source keys** (FRED, balldontlie, football-data):
+  1. Make a new key on the provider's site and revoke the old one.
+  2. Replace the key in `/etc/brier/operator.env`.
+  3. Restart the operator:
+     ```bash
+     ssh brier-db sudo systemctl restart brier-operator
+     ```
+- **Database password:**
+  1. Run `ALTER ROLE brier PASSWORD '...'` as `postgres`.
+  2. Update the URL in both `gateway.env` and `operator.env`.
+  3. Restart the gateway, then the operator.
+- **Backup key:**
+  1. Write a new `/etc/brier/backup.key`.
+  2. Keep the old key beside the old backups until they age out (30 days), or they cannot be restored.
+  3. Update the copy on the owner's Mac.
+- **TOTP key:** rotate only if it leaks. Every TOTP secret is encrypted under it, so after a change every user with two-step sign-in, admins included, must turn it off with a recovery code and enrol again.
+
+## Uptime alert
+The `uptime` workflow runs on GitHub Actions every 15 minutes. It fails when the site, the exchange's health check, or the events list does not answer, or when the projector falls more than 100 commands behind the journal. A failed scheduled run emails the repository owner. Run it by hand with:
+```bash
+gh workflow run uptime.yml
+```
+
 ## Halt trading
 - **From the admin console:** an admin signed in with TOTP uses the kill switches (halt all, cancel all).
 - **Or on the server:**

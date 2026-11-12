@@ -1,0 +1,24 @@
+# Is the public site up? A failed scheduled run emails the repository owner (docs/runbooks/deploy.md).
+name: uptime
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SITE: https://132-145-162-222.sslip.io
+    steps:
+      - name: The site, the exchange and the events list answer
+        run: |
+          set -euo pipefail
+          get() { curl -fsS --retry 3 --retry-delay 20 --retry-all-errors -m 30 "$SITE$1"; }
+          get / > /dev/null
+          health=$(get /v1/health)
+          echo "health: $health"
+          echo "$health" | jq -e '.durable_seq - .projected_seq <= 100' > /dev/null
+          get "/v1/events?status=open&limit=1" | jq -e '.events | length == 1' > /dev/null
