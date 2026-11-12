@@ -33,5 +33,11 @@ if [ "$WHICH" != db ]; then
   detached brier-web "set -a; . /tmp/web-install.env; set +a; rm -f /tmp/web-install.env; bash /tmp/install-web.sh /tmp/brier-release.tar.gz" /tmp/install-web.log
 fi
 for path in /v1/health / /photos/nyc.webp; do
-  printf '%s %s\n' "$path" "$(curl -s -o /dev/null -m 30 -w '%{http_code}' "$SITE$path")"
+  code=000
+  for _ in $(seq 1 30); do  # the web app takes a few seconds to start
+    code=$(curl -s -o /dev/null -m 30 -w '%{http_code}' "$SITE$path")
+    [ "$code" = 200 ] && break
+    sleep 2
+  done
+  printf '%s %s\n' "$path" "$code"
 done
