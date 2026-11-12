@@ -8,7 +8,7 @@ Brier is a play-money exchange, but its accounts, sessions and order path are bu
 - You will get an answer within 7 days.
 
 ## Scope
-- In scope: the live site at https://132-145-162-222.sslip.io and the code in this repository.
+- In scope: the live site at https://playbrier.duckdns.org and the code in this repository.
 - Out of scope: denial-of-service testing, social engineering, and attacks on Oracle Cloud, GitHub or the data providers.
 
 ## Testing safely

@@ -1,7 +1,7 @@
 """Load the public site the way browsing visitors do, at rising concurrency, and report
 throughput, latency percentiles and errors (docs/notes/load-test.md).
 
-    python3 scripts/load_test.py https://132-145-162-222.sslip.io [--seconds 30] [--levels 5,20,50]
+    python3 scripts/load_test.py https://playbrier.duckdns.org [--seconds 30] [--levels 5,20,50]
 
 Each simulated visitor loops over a mix of what people open: the home page, a category page,
 an event page, the events API through the web app, and the gateway's public API. Standard

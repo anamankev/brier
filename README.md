@@ -2,7 +2,7 @@
 
 A prediction-market exchange, named after the Brier score (Brier, 1950), the standard measure of how good probability forecasts are. It is built to the engineering standard of a regulated venue, and run with play money.
 
-**Live at https://132-145-162-222.sslip.io** (18+, play money).
+**Live at https://playbrier.duckdns.org** (18+, play money).
 
 Traders buy and sell yes/no contracts on things public data settles:
 - weather: tomorrow's high and low in twelve US cities

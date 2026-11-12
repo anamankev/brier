@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       site:
-        description: "The public origin, e.g. https://132-145-162-222.sslip.io"
+        description: "The public origin, e.g. https://playbrier.duckdns.org"
         required: true
 
 permissions:

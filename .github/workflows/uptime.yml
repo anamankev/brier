@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      SITE: https://132-145-162-222.sslip.io
+      SITE: https://playbrier.duckdns.org
     steps:
       - name: The site, the exchange and the events list answer
         run: |

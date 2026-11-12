@@ -8,7 +8,9 @@ Two Oracle Cloud Always Free micro servers (VM.Standard.E2.1.Micro: 1 GB of memo
 | **brier-db** | 10.0.0.138 | PostgreSQL 16, `brier-gateway`, and `brier-operator` (the lister, market maker, resolver and surveillance) |
 | **brier-web** | 10.0.0.175 | `brier-web` (Next.js) behind Caddy |
 
-- **Public address:** `https://132-145-162-222.sslip.io`. sslip.io maps the name to brier-web's public IP, so there is no domain to buy; Caddy gets a certificate from Let's Encrypt.
+- **Public address:** `https://playbrier.duckdns.org`, a free DuckDNS name that points to brier-web's public IP (set on duckdns.org by the owner). Caddy gets the certificate from Let's Encrypt.
+- **Former address:** `https://132-145-162-222.sslip.io` (sslip.io maps the name to the IP) forwards there permanently, path and query kept, so old links keep working. Former addresses are listed in `deploy/old-hosts`.
+- **Planned address:** `brier.eu.org`, requested at nic.eu.org. When it is approved, build the release with it as the site and add `playbrier.duckdns.org` to `deploy/old-hosts`.
 - **Caddy routing:** `/v1/*` (the REST API and the WebSocket) goes to the gateway, carrying the proxy key and the client's address; everything else goes to the web app.
 - **Firewall:** Oracle's security list admits 22, 80 and 443 from anywhere, and everything inside 10.0.0.0/16. The gateway (8080) is reachable only on the private network.
 
@@ -33,7 +35,7 @@ All these files are mode 600 or 640, and every secret was generated on the serve
 1. Push to main and wait for `check` to pass.
 2. Build the release:
    ```bash
-   gh workflow run release.yml -f site=https://132-145-162-222.sslip.io
+   gh workflow run release.yml -f site=https://playbrier.duckdns.org
    ```
 3. Note the run ID:
    ```bash
@@ -118,7 +120,7 @@ ssh brier-db sudo journalctl -u brier-gateway -u brier-operator -f
 ssh brier-web sudo journalctl -u brier-web -u caddy -f
 ```
 ```bash
-curl https://132-145-162-222.sslip.io/v1/health
+curl https://playbrier.duckdns.org/v1/health
 ```
 
 ## Drill record

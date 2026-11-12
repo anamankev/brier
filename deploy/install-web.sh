@@ -77,8 +77,11 @@ chown root:caddy /etc/brier/caddy.env && chmod 640 /etc/brier/caddy.env
 install -d /etc/systemd/system/caddy.service.d
 printf '[Service]\nEnvironmentFile=/etc/brier/caddy.env\n' > /etc/systemd/system/caddy.service.d/brier.conf
 install -m 644 "$STAGE"/deploy/Caddyfile /etc/caddy/Caddyfile
-# Addresses the site used to have (space-separated) answer with a permanent redirect.
+# Addresses the site used to have (deploy/old-hosts, or BRIER_OLD_HOSTS) answer with a
+# permanent redirect to the current one.
 rm -rf /etc/caddy/brier-redirects && install -d /etc/caddy/brier-redirects
+BRIER_OLD_HOSTS=${BRIER_OLD_HOSTS:-$(grep -v '^#' "$STAGE"/deploy/old-hosts 2>/dev/null | grep -vx "$BRIER_HOST" | tr '\n' ' ')}
+BRIER_OLD_HOSTS=$(echo $BRIER_OLD_HOSTS)
 if [ -n "${BRIER_OLD_HOSTS:-}" ]; then
   printf '%s {\n\tredir https://%s{uri} permanent\n}\n' "$(echo $BRIER_OLD_HOSTS | sed 's/ /, /g')" "$BRIER_HOST" \
     > /etc/caddy/brier-redirects/old-hosts.caddy
