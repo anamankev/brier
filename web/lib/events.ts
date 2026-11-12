@@ -105,6 +105,10 @@ export const TAG_NAMES: Record<string, string> = {
   dallas: "Dallas",
   earthquakes: "Earthquakes",
   "space-weather": "Space weather",
+  inflation: "Inflation",
+  jobs: "Jobs",
+  fed: "Fed decisions",
+  treasury: "Treasury yields",
   nba: "NBA",
   nfl: "NFL",
   "premier-league": "Premier League",
@@ -121,7 +125,15 @@ const LEAGUE_BLURBS: Record<string, string> = {
 };
 
 /** What a topic page under a category covers. */
+const ECONOMY_BLURBS: Record<string, string> = {
+  inflation: "The next CPI report's 12-month change, in ranges, settled from the BLS release.",
+  jobs: "The next jobs report's unemployment rate, settled from the BLS release.",
+  fed: "What the Fed does at its next meeting, settled from the target range the next day.",
+  treasury: "The 10-year Treasury yield at the end of next week, from the Fed's H.15 via FRED.",
+};
+
 export function tagBlurb(tag: string): string | null {
+  if (ECONOMY_BLURBS[tag]) return ECONOMY_BLURBS[tag]!;
   if (LEAGUE_BLURBS[tag]) return LEAGUE_BLURBS[tag]!;
   if (["premier-league", "la-liga", "serie-a", "bundesliga", "ligue-1"].includes(tag))
     return `Every ${TAG_NAMES[tag]} match: home win, draw or away win after 90 minutes, until kickoff.`;

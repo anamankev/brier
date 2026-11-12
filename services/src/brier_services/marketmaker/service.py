@@ -132,6 +132,12 @@ class FairValues:
     def probability(self, rulebook: dict[str, Any]) -> float | None:
         """P(YES) for a rulebook, or None if Brier has no model for its series."""
         condition = rulebook["condition"]
+        if condition["op"] == "==" and rulebook["source"]["provider"] not in {
+            "balldontlie",
+            "football_data",
+        }:
+            # P(X == t) = P(X >= t) - P(X > t), from any model that answers the two tails.
+            condition = {**condition, "op": "between", "upper": condition["threshold"]}
         if condition["op"] == "between":
             # P(t <= X <= u) = P(X >= t) - P(X > u)
             at_least = self._model(rulebook, ">=", float(condition["threshold"]))

@@ -83,6 +83,10 @@ const LEAGUE_SPORT: Record<string, PhotoKey> = {
   "serie-a": "soccer",
   bundesliga: "soccer",
   "ligue-1": "soccer",
+  inflation: "cpi",
+  jobs: "jobs",
+  fed: "fed",
+  treasury: "treasury",
 };
 
 /** The photo for an event, market or topic: its tags first (a city, earthquakes, space

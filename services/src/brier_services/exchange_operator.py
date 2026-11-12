@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from brier_services import resolve
-from brier_services.catalog import sports_catalog
+from brier_services.catalog import economy, sports_catalog
 from brier_services.catalog.forecast import Forecasts
 from brier_services.catalog.lister import run_once as list_catalogue
 from brier_services.client import ApiError, RestClient
@@ -149,6 +149,8 @@ def main(argv: list[str] | None = None) -> int:
                 at = dt.datetime.now(dt.UTC)
                 listed = list_catalogue(who["lister"], at, forecasts.high, lambda *a, **k: None)
                 log("listed", slugs=listed)
+                if fred:
+                    log("economy_listed", slugs=economy.run_once(who["lister"], at, fred, log))
                 last["list"] = now
             if sports_on and now - last["sports"] >= EVERY["sports"]:
                 at = dt.datetime.now(dt.UTC)
