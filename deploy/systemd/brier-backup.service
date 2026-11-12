@@ -1,0 +1,7 @@
+[Unit]
+Description=Brier nightly backup (encrypted, to brier-web)
+After=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/brier-backup
