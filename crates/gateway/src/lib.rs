@@ -39,7 +39,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{MethodFilter, on};
 use brier_core::CoreHandle;
 use brier_readmodel::{Projector, ReadModelError};
-use serde_json::json;
+use serde_json::{Value, json};
 use sha2::Digest as _;
 use tokio::sync::watch;
 use tokio_postgres::Client;
@@ -96,6 +96,11 @@ pub struct AppState {
     pub address_limits: Limiter<IpAddr>,
     /// Login and registration attempts per client address.
     pub auth_limits: Limiter<IpAddr>,
+    /// TOTP codes checked per account, so a stolen password cannot be paired with a code by
+    /// guessing from many addresses.
+    pub totp_limits: Limiter<i64>,
+    /// Security log lines per client address, so an attacker cannot flood the log.
+    pub security_log_limits: Limiter<IpAddr>,
     /// The last sequence number reflected in the read models.
     pub projected: Arc<AtomicU64>,
     /// The market-data publisher.
@@ -146,6 +151,14 @@ impl AppState {
             auth_limits: Limiter::per_minute(
                 limits::ADDRESS_AUTH_PER_MINUTE,
                 limits::ADDRESS_AUTH_BURST,
+            ),
+            totp_limits: Limiter::per_minute(
+                limits::ACCOUNT_TOTP_PER_MINUTE,
+                limits::ACCOUNT_TOTP_BURST,
+            ),
+            security_log_limits: Limiter::per_minute(
+                SECURITY_LOG_PER_MINUTE,
+                SECURITY_LOG_PER_MINUTE,
             ),
             projected: Arc::new(AtomicU64::new(0)),
             clock: Clock::system(),
@@ -240,12 +253,16 @@ async fn guard(State(s): State<Arc<AppState>>, mut req: Request, next: Next) -> 
             (!direct.is_loopback() && !direct.is_unspecified()).then_some(direct),
         ),
     };
+    let method = req.method().clone();
+    let path = req.uri().path().to_owned();
     if !s.address_limits.allow(ip) {
-        return ApiError::rate_limited().into_response();
+        let res = ApiError::rate_limited().into_response();
+        security_event(&s, ip, &method, &path, res.status());
+        return res;
     }
     req.extensions_mut().insert(ClientIp(ip));
     req.extensions_mut().insert(LoginAddress(signal));
-    tokio::time::timeout(REQUEST_TIMEOUT, next.run(req))
+    let res = tokio::time::timeout(REQUEST_TIMEOUT, next.run(req))
         .await
         .unwrap_or_else(|_| {
             ApiError::new(
@@ -254,7 +271,61 @@ async fn guard(State(s): State<Arc<AppState>>, mut req: Request, next: Next) -> 
                 "the request timed out; an order retried with the same client_order_id is safe",
             )
             .into_response()
-        })
+        });
+    security_event(&s, ip, &method, &path, res.status());
+    res
+}
+
+/// Security log lines allowed per client address per minute; the rest are dropped.
+pub const SECURITY_LOG_PER_MINUTE: u32 = 30;
+
+/// The log line for a refused request: a failed sign-in or TOTP code, a bad signature or
+/// replay, a forbidden admin call, or a rate limit. `None` for every other response. The
+/// client is named by the first 8 bytes of its keyed address hash, never its address.
+#[must_use]
+pub fn security_line(
+    status: StatusCode,
+    method: &axum::http::Method,
+    path: &str,
+    address: Option<[u8; 32]>,
+) -> Option<Value> {
+    let kind = match status {
+        StatusCode::UNAUTHORIZED => "unauthorized",
+        StatusCode::FORBIDDEN => "forbidden",
+        StatusCode::TOO_MANY_REQUESTS => "rate_limited",
+        _ => return None,
+    };
+    let client = address.map_or_else(
+        || "unknown".to_owned(),
+        |h| {
+            h[..8].iter().fold(String::with_capacity(16), |mut out, b| {
+                use std::fmt::Write as _;
+                let _ = write!(out, "{b:02x}");
+                out
+            })
+        },
+    );
+    Some(json!({
+        "level": "warn", "msg": "security", "kind": kind, "status": status.as_u16(),
+        "method": method.as_str(), "path": path, "client": client,
+    }))
+}
+
+fn security_event(
+    s: &AppState,
+    ip: IpAddr,
+    method: &axum::http::Method,
+    path: &str,
+    status: StatusCode,
+) {
+    let address = s
+        .totp_key
+        .and_then(|k| surveillance::address_hash(&k, ip).ok());
+    if let Some(line) = security_line(status, method, path, address)
+        && s.security_log_limits.allow(ip)
+    {
+        eprintln!("{line}");
+    }
 }
 
 /// Declares every endpoint once: the router is built from this table, and [`ENDPOINTS`] lists
@@ -394,6 +465,60 @@ async fn follow(
         }
         if durable.changed().await.is_err() {
             return Ok(()); // the core stopped
+        }
+    }
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::security_line;
+    use axum::http::{Method, StatusCode};
+
+    #[test]
+    fn refusals_are_logged_without_the_address() {
+        let line = security_line(
+            StatusCode::UNAUTHORIZED,
+            &Method::POST,
+            "/v1/login",
+            Some([0xab; 32]),
+        )
+        .expect("a failed sign-in is logged");
+        assert_eq!(line["kind"], "unauthorized");
+        assert_eq!(
+            line["client"], "abababababababab",
+            "8 bytes of the keyed hash, not the address"
+        );
+        assert_eq!(line["path"], "/v1/login");
+        let admin =
+            security_line(StatusCode::FORBIDDEN, &Method::GET, "/v1/admin/audit", None).unwrap();
+        assert_eq!(
+            (admin["kind"].as_str(), admin["client"].as_str()),
+            (Some("forbidden"), Some("unknown"))
+        );
+        assert_eq!(
+            security_line(
+                StatusCode::TOO_MANY_REQUESTS,
+                &Method::GET,
+                "/v1/events",
+                None
+            )
+            .unwrap()["kind"],
+            "rate_limited"
+        );
+    }
+
+    #[test]
+    fn ordinary_answers_are_not_logged() {
+        for status in [
+            StatusCode::OK,
+            StatusCode::NOT_FOUND,
+            StatusCode::BAD_REQUEST,
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ] {
+            assert!(
+                security_line(status, &Method::GET, "/v1/events", None).is_none(),
+                "{status}"
+            );
         }
     }
 }

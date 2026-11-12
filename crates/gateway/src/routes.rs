@@ -302,6 +302,9 @@ pub(crate) async fn check_totp(
     stored: &[u8],
     code: &str,
 ) -> Result<(), ApiError> {
+    if !s.totp_limits.allow(user) {
+        return Err(ApiError::rate_limited());
+    }
     let key = totp_key(s)?;
     let secret = totp::open_secret(&key, stored)?;
     let now_step = totp::step(auth::now_ms() / 1_000);
@@ -964,6 +967,7 @@ struct StateBody {
 
 /// `POST /v1/admin/markets/{id}/state`: move a market through its lifecycle.
 pub async fn set_state(State(s): Shared, Path(raw): Path<String>, req: Req) -> ApiResult {
+    admin_user(&s, &req).await?; // before reading the request: refuse non-admins first
     let market: u32 = parse_id(&raw, "market")?;
     let b: StateBody = req.json()?;
     let state =
@@ -996,6 +1000,7 @@ struct CancelAllBody {
 
 /// `POST /v1/admin/cancel-all`: kill switch; cancel resting orders by account and/or market.
 pub async fn cancel_all(State(s): Shared, req: Req) -> ApiResult {
+    admin_user(&s, &req).await?;
     let b: CancelAllBody = req.json()?;
     let command = Command::CancelAll {
         account: b.account.map(AccountId::new),
@@ -1020,6 +1025,7 @@ struct ReasonBody {
 
 /// `POST /v1/admin/halt-all`: kill switch; halt every open market.
 pub async fn halt_all(State(s): Shared, req: Req) -> ApiResult {
+    admin_user(&s, &req).await?;
     let b: ReasonBody = req.json()?;
     admin(&s, &req, "halt_all", Command::HaltAll, json!({}), &b.reason).await
 }

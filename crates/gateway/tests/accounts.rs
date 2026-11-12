@@ -299,3 +299,56 @@ async fn public_accounts_end_to_end() {
         .get(0);
     assert_eq!(audited, 1);
 }
+
+/// A stolen password cannot be paired with a guessed TOTP code: after the per-account burst,
+/// codes are refused whatever address they come from, and even the right code waits.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "needs PostgreSQL (make up; BRIER_TEST_DATABASE_URL)"]
+async fn totp_guesses_are_limited_per_account() {
+    let schema = common::schema("gateway_totp_limit");
+    let data = tempfile::tempdir().unwrap();
+    let (core, _, _thread) = start(CoreConfig::new(data.path())).unwrap();
+    let mut state = AppState::new(core.clone(), connect(&schema).await)
+        .unwrap()
+        .with_totp_key(common::TOTP_KEY);
+    state.auth_limits = Limiter::per_minute(1_000, 1_000);
+    let app = router(Arc::new(state));
+    let (status, body) = call(
+        &app,
+        Method::POST,
+        "/v1/register",
+        None,
+        Some(json!({ "username": "lee", "password": PW, "adult": true, "terms": TERMS_VERSION })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let token = login(&app, "lee", PW).await;
+    // Turning TOTP on and signing in with it use two of the burst.
+    common::with_totp(&app, &token, "lee", PW).await;
+    let guess = |code: &'static str| {
+        let app = app.clone();
+        async move {
+            call(
+                &app,
+                Method::POST,
+                "/v1/login",
+                None,
+                Some(json!({ "username": "lee", "password": PW, "totp": code })),
+            )
+            .await
+        }
+    };
+    let mut refused = Vec::new();
+    for _ in 0..10 {
+        refused.push(guess("000000").await.0);
+    }
+    assert!(
+        refused[..8].iter().all(|s| *s == StatusCode::UNAUTHORIZED),
+        "{refused:?}"
+    );
+    assert_eq!(
+        refused[8..],
+        [StatusCode::TOO_MANY_REQUESTS, StatusCode::TOO_MANY_REQUESTS],
+        "the burst of 10 is spent"
+    );
+}

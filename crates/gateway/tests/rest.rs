@@ -464,6 +464,36 @@ async fn the_rest_api_end_to_end() {
         audited, 3,
         "create, open, and the rejected state change are audited with their seq"
     );
+    // Every admin endpoint refuses a trader before reading anything else.
+    for (method, path) in brier_gateway::ENDPOINTS
+        .iter()
+        .filter(|(_, p)| p.starts_with("/v1/admin/"))
+    {
+        let method = Method::from_bytes(method.as_bytes()).unwrap();
+        let path = path.replace("{id}", "1");
+        let (status, body) = call(&app, method.clone(), &path, Some(&bob), Some(json!({}))).await;
+        assert_eq!(
+            status,
+            StatusCode::FORBIDDEN,
+            "{method} {path} as a trader: {body}"
+        );
+        let (status, _) = call(&app, method.clone(), &path, None, Some(json!({}))).await;
+        assert_eq!(
+            status,
+            StatusCode::UNAUTHORIZED,
+            "{method} {path} signed out"
+        );
+    }
+    // The audit log is append-only: a completed row cannot be edited, and no row deleted.
+    for sql in [
+        "UPDATE audit_log SET reason = 'rewritten afterwards' WHERE seq IS NOT NULL",
+        "UPDATE audit_log SET detail = '{}' WHERE seq IS NOT NULL",
+        "DELETE FROM audit_log",
+        "TRUNCATE audit_log",
+    ] {
+        let refused = admin_db.batch_execute(sql).await;
+        assert!(refused.is_err(), "{sql} must be refused");
+    }
 
     // Limits and errors.
     let big = json!({ "username": "x".repeat(10_000), "password": pw });

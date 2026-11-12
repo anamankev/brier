@@ -22,6 +22,11 @@ pub const ADDRESS_REQUEST_BURST: u32 = 1_000;
 pub const ADDRESS_AUTH_PER_MINUTE: u32 = 30;
 /// Login and registration burst from one client address.
 pub const ADDRESS_AUTH_BURST: u32 = 10;
+/// TOTP codes checked per account per minute (G10 security review): with a code space of a
+/// million and three valid steps, guessing takes days even from many addresses.
+pub const ACCOUNT_TOTP_PER_MINUTE: u32 = 5;
+/// Burst for [`ACCOUNT_TOTP_PER_MINUTE`].
+pub const ACCOUNT_TOTP_BURST: u32 = 10;
 /// Buckets kept before idle ones are dropped, bounding memory under address churn.
 const MAX_BUCKETS: usize = 100_000;
 
