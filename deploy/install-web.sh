@@ -1,6 +1,7 @@
 #!/bin/bash
 # Install or upgrade the public host (brier-web): Node, Caddy (HTTPS), and the web app.
 #   sudo BRIER_HOST=example.org BRIER_GATEWAY=10.0.0.138:8080 BRIER_PROXY_KEY=... \
+#   (optional: BRIER_OLD_HOSTS="old.example.org" to forward former addresses) \
 #        bash install-web.sh /path/to/brier-release.tar.gz
 set -euo pipefail
 RELEASE=${1:?usage: install-web.sh brier-release.tar.gz}
@@ -76,6 +77,13 @@ chown root:caddy /etc/brier/caddy.env && chmod 640 /etc/brier/caddy.env
 install -d /etc/systemd/system/caddy.service.d
 printf '[Service]\nEnvironmentFile=/etc/brier/caddy.env\n' > /etc/systemd/system/caddy.service.d/brier.conf
 install -m 644 "$STAGE"/deploy/Caddyfile /etc/caddy/Caddyfile
+# Addresses the site used to have (space-separated) answer with a permanent redirect.
+rm -rf /etc/caddy/brier-redirects && install -d /etc/caddy/brier-redirects
+if [ -n "${BRIER_OLD_HOSTS:-}" ]; then
+  printf '%s {\n\tredir https://%s{uri} permanent\n}\n' "$(echo $BRIER_OLD_HOSTS | sed 's/ /, /g')" "$BRIER_HOST" \
+    > /etc/caddy/brier-redirects/old-hosts.caddy
+fi
+caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 || { echo "Caddyfile does not validate" >&2; exit 1; }
 install -d -o caddy -g caddy /var/log/caddy
 install -m 644 "$STAGE"/deploy/systemd/brier-web.service /etc/systemd/system/
 systemctl daemon-reload

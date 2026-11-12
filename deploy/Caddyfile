@@ -29,3 +29,7 @@
 		}
 	}
 }
+
+# Former addresses forward to the current one, path and query kept. install-web.sh writes one
+# file here per deploy from BRIER_OLD_HOSTS; with none set the folder is empty.
+import /etc/caddy/brier-redirects/*.caddy

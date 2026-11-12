@@ -1,6 +1,7 @@
 #!/bin/bash
 # Deploy a release built by the `release` workflow to both servers (docs/runbooks/deploy.md).
 #   deploy/deploy.sh <run-id> [db|web|both]
+#   BRIER_OLD_HOSTS="old.example.org" deploy/deploy.sh ...   (former addresses redirect to the new one)
 # Needs the `brier-db` and `brier-web` SSH host entries. The proxy key goes from server to
 # server through this shell and is never printed or written locally.
 set -euo pipefail
@@ -30,7 +31,7 @@ if [ "$WHICH" != db ]; then
   scp -q "$TAR" brier-web:/tmp/brier-release.tar.gz
   tar -xzf "$TAR" -O ./deploy/install-web.sh | ssh brier-web 'cat > /tmp/install-web.sh'
   ssh brier-db 'sudo grep ^BRIER_PROXY_KEY= /etc/brier/gateway.env' \
-    | { cat; printf 'BRIER_HOST=%s\nBRIER_GATEWAY=%s\n' "$HOST" "$GATEWAY"; } \
+    | { cat; printf 'BRIER_HOST=%s\nBRIER_GATEWAY=%s\nBRIER_OLD_HOSTS="%s"\n' "$HOST" "$GATEWAY" "${BRIER_OLD_HOSTS:-}"; } \
     | ssh brier-web 'umask 077; cat > /tmp/web-install.env'
   detached brier-web "set -a; . /tmp/web-install.env; set +a; rm -f /tmp/web-install.env; bash /tmp/install-web.sh /tmp/brier-release.tar.gz" /tmp/install-web.log
 fi
