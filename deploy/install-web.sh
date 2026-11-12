@@ -79,12 +79,13 @@ printf '[Service]\nEnvironmentFile=/etc/brier/caddy.env\n' > /etc/systemd/system
 install -m 644 "$STAGE"/deploy/Caddyfile /etc/caddy/Caddyfile
 # Addresses the site used to have (deploy/old-hosts, or BRIER_OLD_HOSTS) answer with a
 # permanent redirect to the current one.
-rm -rf /etc/caddy/brier-redirects && install -d /etc/caddy/brier-redirects
+rm -rf /etc/caddy/brier-redirects && install -d -m 755 /etc/caddy/brier-redirects
 BRIER_OLD_HOSTS=${BRIER_OLD_HOSTS:-$(grep -v '^#' "$STAGE"/deploy/old-hosts 2>/dev/null | grep -vx "$BRIER_HOST" | tr '\n' ' ')}
 BRIER_OLD_HOSTS=$(echo $BRIER_OLD_HOSTS)
 if [ -n "${BRIER_OLD_HOSTS:-}" ]; then
   printf '%s {\n\tredir https://%s{uri} permanent\n}\n' "$(echo $BRIER_OLD_HOSTS | sed 's/ /, /g')" "$BRIER_HOST" \
     > /etc/caddy/brier-redirects/old-hosts.caddy
+  chmod 644 /etc/caddy/brier-redirects/old-hosts.caddy  # Caddy runs as its own user; umask is 077 here
 fi
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 || { echo "Caddyfile does not validate" >&2; exit 1; }
 install -d -o caddy -g caddy /var/log/caddy
