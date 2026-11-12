@@ -55,6 +55,7 @@ QUAKE_FIT = (dt.date(2024, 11, 1), dt.date(2025, 10, 31))
 QUAKE_TEST = (dt.date(2025, 11, 1), dt.date(2026, 10, 31))
 CLIMATE_YEARS = (1996, 2025)
 RESAMPLES = 1000
+LOWS_SEED = 20261112  # docs/notes/daily-lows.md
 SEED = 20261108
 
 
@@ -87,16 +88,16 @@ def days(span: tuple[dt.date, dt.date]) -> list[dt.date]:
     return [span[0] + dt.timedelta(days=i) for i in range((span[1] - span[0]).days + 1)]
 
 
-def ghcn_tmax(get: Callable[[str], Any], station: str) -> dict[dt.date, int]:
-    """Whole °F by date, converted as the NOAA resolver converts."""
+def ghcn_tmax(get: Callable[[str], Any], station: str, element: str = "TMAX") -> dict[dt.date, int]:
+    """Whole °F by date (``TMAX`` or ``TMIN``), converted as the NOAA resolver converts."""
     url = (
         "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries"
         f"&stations={station}&startDate={CLIMATE_YEARS[0]}-01-01&endDate={TEST[1].isoformat()}"
-        "&dataTypes=TMAX&units=metric&format=json"
+        f"&dataTypes={element}&units=metric&format=json"
     )
     out = {}
     for row in get(url):
-        raw = row.get("TMAX")
+        raw = row.get(element)
         if isinstance(raw, str) and raw.strip():
             celsius = Fraction(raw.strip())
             out[dt.date.fromisoformat(row["DATE"])] = int(
@@ -106,9 +107,13 @@ def ghcn_tmax(get: Callable[[str], Any], station: str) -> dict[dt.date, int]:
 
 
 def forecast_highs(
-    get: Callable[[str], Any], lat: float, lon: float, tz: str
+    get: Callable[[str], Any],
+    lat: float,
+    lon: float,
+    tz: str,
+    pick: Callable[[list[float]], float] = max,
 ) -> dict[dt.date, int]:
-    """Day-ahead forecast high, whole °F, by local date."""
+    """Day-ahead forecast high (or, with ``pick=min``, low), whole °F, by local date."""
     url = (
         "https://previous-runs-api.open-meteo.com/v1/forecast"
         f"?latitude={lat}&longitude={lon}&hourly=temperature_2m_previous_day1"
@@ -125,7 +130,7 @@ def forecast_highs(
         else:
             by_day[day].append(value)
     return {
-        d: int(round_half_up(Fraction(str(max(v))), 0))
+        d: int(round_half_up(Fraction(str(pick(v))), 0))
         for d, v in by_day.items()
         if d not in missing and len(v) >= 23
     }
@@ -148,13 +153,16 @@ def bootstrap(diffs: Sequence[float], rng: random.Random) -> list[float]:
     return [means[int(0.025 * (RESAMPLES - 1))], means[int(0.975 * (RESAMPLES - 1))]]
 
 
-def temperature(get: Callable[[str], Any], rng: random.Random) -> dict[str, Any]:
+def temperature(
+    get: Callable[[str], Any], rng: random.Random, element: str = "TMAX"
+) -> dict[str, Any]:
     per_city: dict[str, Any] = {}
     pooled: list[tuple[float, int]] = []
     for city in CITIES:
         station, tz = STATIONS[city.slug]
-        actual = ghcn_tmax(get, station)
-        forecast = forecast_highs(get, city.latitude, city.longitude, tz)
+        actual = ghcn_tmax(get, station, element)
+        pick = min if element == "TMIN" else max
+        forecast = forecast_highs(get, city.latitude, city.longitude, tz, pick)
         errors = [actual[d] - forecast[d] for d in days(FIT) if d in actual and d in forecast]
         bias, sd = statistics.fmean(errors), statistics.stdev(errors)
         model_scores, clim_scores, diffs = [], [], []
@@ -344,9 +352,22 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m brier_services.catalog.backtest")
     parser.add_argument("--out", type=Path, default=Path("var/catalog-backtest"))
     parser.add_argument("--explore", action="store_true", help="the exploratory follow-ups only")
+    parser.add_argument("--lows", action="store_true", help="daily lows (docs/notes/daily-lows.md)")
     args = parser.parse_args(argv)
     get = fetcher(args.out / "raw")
     rng = random.Random(SEED)  # noqa: S311 - resampling
+    if args.lows:
+        lows = temperature(get, random.Random(LOWS_SEED), "TMIN")  # noqa: S311 - resampling
+        (args.out / "lows.json").write_text(json.dumps(lows, indent=1, sort_keys=True) + "\n")
+        for slug, r in lows["cities"].items():
+            print(
+                f"{slug:14} bias {r['bias']:+.2f} sd {r['sd']:.2f}  model {r['model_brier']:.3f}"
+                f"  clim {r['climatology_brier']:.3f}  diff CI {r['difference_ci95']}  n={r['test_days']}"  # noqa: E501
+            )
+        print("L1", lows["T1"], "L2", lows["T2"])
+        for b in lows["calibration_bins"]:
+            print(b)
+        return 0
     if args.explore:
         explored = explore_earthquakes(get, rng)
         (args.out / "explore.json").write_text(
