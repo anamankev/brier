@@ -13,6 +13,7 @@ import json
 import os
 import random
 import time
+import urllib.error
 import urllib.request
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[4]
-CACHE = ROOT / "var" / "sports"
+CACHE = Path(os.environ.get("BRIER_SPORTS_CACHE") or ROOT / "var" / "sports")
 UA = "brier-catalog/1"
 
 # Registered parameters (docs/notes/sports-models.md §3).
@@ -31,6 +32,8 @@ SOCCER_LEAGUES = ("PL", "PD", "SA", "BL1", "FL1")
 SEED = 20261109
 RESAMPLES = 1000
 BALLDONTLIE_PAUSE = 12.5  # the free plan allows 5 requests a minute
+RETRIES = 4
+RETRY_PAUSE = 20.0  # seconds, growing with each retry
 
 
 @dataclass(frozen=True)
@@ -53,10 +56,20 @@ class Game:
 # ---- history -------------------------------------------------------------------------------
 
 
-def _get(url: str, headers: dict[str, str]) -> Any:  # noqa: ANN401 - JSON
+def fetch_json(url: str, headers: dict[str, str]) -> Any:  # noqa: ANN401 - JSON
+    """GET JSON; on 429 (the free plans' per-minute limits) wait and try again, up to
+    ``RETRIES`` times."""
     req = urllib.request.Request(url, headers={"User-Agent": UA, **headers})  # noqa: S310 - fixed HTTPS hosts
-    with urllib.request.urlopen(req, timeout=60) as res:  # noqa: S310
-        return json.loads(res.read())
+    for attempt in range(RETRIES + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as res:  # noqa: S310
+                return json.loads(res.read())
+        except urllib.error.HTTPError as e:
+            if e.code != 429 or attempt == RETRIES:
+                raise
+            time.sleep(RETRY_PAUSE * (attempt + 1))
+    msg = "unreachable"
+    raise AssertionError(msg)
 
 
 def _cached(name: str, load: Any) -> Any:  # noqa: ANN401 - JSON
@@ -81,7 +94,7 @@ def balldontlie_season(league: str, season: int) -> list[Game]:
             url = f"https://api.balldontlie.io{path}?seasons[]={season}&per_page=100"
             if cursor is not None:
                 url += f"&cursor={cursor}"
-            page = _get(url, {"Authorization": key})
+            page = fetch_json(url, {"Authorization": key})
             rows += page["data"]
             cursor = page.get("meta", {}).get("next_cursor")
             time.sleep(BALLDONTLIE_PAUSE)
@@ -114,7 +127,7 @@ def football_data_season(code: str, season: int) -> list[Game]:
 
     def load() -> dict[str, Any]:
         url = f"https://api.football-data.org/v4/competitions/{code}/matches?season={season}"
-        data = _get(url, {"X-Auth-Token": key})
+        data = fetch_json(url, {"X-Auth-Token": key})
         time.sleep(7)  # 10 requests a minute on the free plan
         return dict(data)
 

@@ -410,6 +410,23 @@ async fn markets_group_into_events_with_daily_statistics() {
         StatusCode::FORBIDDEN,
         "a one-off event needs an admin"
     );
+    // A single game (schema 3) settles by an admin's confirmation, so the lister may list it.
+    let game = json!({
+        "schema": 3, "market": 100_000_011, "title": "Lakers at Celtics, Sep 5: Celtics win",
+        "question": "Will the Boston Celtics beat the Los Angeles Lakers on September 5, 2026?",
+        "source": { "provider": "balldontlie", "series": "NBA/MARGIN", "url": "https://www.balldontlie.io/",
+                    "game": { "id": "1", "starts": "2026-09-05T00:30:00Z" } },
+        "observation": "2026-09-05",
+        "condition": { "transform": "level", "op": ">", "threshold": "0" },
+        "schedule": { "open": "2026-09-02T00:30:00Z", "close": "2026-09-05T00:30:00Z",
+                      "release": "2026-09-05T04:30:00Z", "deadline": "2026-09-12T04:30:00Z" },
+        "revision": "first_release", "void": ["no_value_by_deadline"],
+        "event": { "slug": "nba-lal-bos-2026-09-05", "title": "Lakers at Celtics, Sep 5",
+                   "tags": ["basketball", "nba"], "series": "nba-games", "exclusive": true, "outcome": "Celtics" },
+        "review": "manual",
+    });
+    let (status, body) = by_lister(game).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
     let (status, _) = by_lister(common::rulebook(302)).await;
     assert_eq!(
         status,

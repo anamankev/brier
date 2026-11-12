@@ -284,8 +284,9 @@ async fn store(s: &AppState, v: &Validated, user: i64) -> Result<(), ApiError> {
 }
 
 /// `POST /v1/admin/markets`: list a market from its rulebook (it starts in `pre_open`). An
-/// admin signed in with TOTP may list any market; the lister role (signed key) only markets
-/// of a recurring series with automatic review.
+/// admin signed in with TOTP may list any market; the lister role only markets of a recurring
+/// series, and those either settle by automatic review or are single games (G10), which an admin
+/// still confirms before payout.
 pub async fn create_market(State(s): Shared, req: Req) -> ApiResult {
     let user = match req.user(&s, true).await? {
         u if u.role == Role::Lister => u,
@@ -295,14 +296,14 @@ pub async fn create_market(State(s): Shared, req: Req) -> ApiResult {
     let reason = audit::reason(&b.reason)?;
     let v = validate(&b.rulebook).map_err(|e| invalid(format!("{}: {e}", e.code())))?;
     if user.role == Role::Lister
-        && !(v.rulebook.review == Some(brier_rules::Review::Automatic)
+        && !((v.rulebook.review == Some(brier_rules::Review::Automatic) || v.series.per_game)
             && v.rulebook
                 .event
                 .as_ref()
                 .is_some_and(|e| e.series.is_some()))
     {
         return Err(ApiError::forbidden_because(
-            "the lister lists only recurring-series markets with automatic review",
+            "the lister lists only recurring-series markets with automatic review, or single games",
         ));
     }
     if v.times.close <= s.clock.now() {

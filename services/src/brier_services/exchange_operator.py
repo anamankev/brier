@@ -1,7 +1,7 @@
 """The exchange's operator: the long-running process that keeps a public Brier deployment
 alive next to its gateway (docs/runbooks/deploy.md).
 
-    python -m brier_services.operator --gateway http://127.0.0.1:8080 \\
+    python -m brier_services.exchange_operator --gateway http://127.0.0.1:8080 \\
         --gateway-binary /opt/brier/bin/brier-gateway --core /opt/brier/bin/brier-core \\
         --data /var/lib/brier/journal --state /var/lib/brier/operator
 
@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from brier_services import resolve
+from brier_services.catalog import sports_catalog
 from brier_services.catalog.forecast import Forecasts
 from brier_services.catalog.lister import run_once as list_catalogue
 from brier_services.client import ApiError, RestClient
@@ -38,7 +39,7 @@ from brier_services.surveillance import service as surveillance
 
 TERMS = "2026-11-08"
 ROLES = {"lister": "lister", "resolver": "resolver", "maker": None, "watch": "surveillance"}
-EVERY = {"list": 1800.0, "resolve": 600.0, "surveil": 3600.0}
+EVERY = {"list": 1800.0, "sports": 3 * 3600.0, "resolve": 600.0, "surveil": 3600.0}
 TICK = 60.0
 
 
@@ -117,7 +118,7 @@ def accounts(base: str, binary: Path, state: Path) -> dict[str, Session]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="python -m brier_services.operator")
+    p = argparse.ArgumentParser(prog="python -m brier_services.exchange_operator")
     p.add_argument("--gateway", default="http://127.0.0.1:8080")
     p.add_argument("--gateway-binary", type=Path, required=True)
     p.add_argument("--core", type=Path, required=True)
@@ -127,7 +128,15 @@ def main(argv: list[str] | None = None) -> int:
 
     who = accounts(args.gateway, args.gateway_binary, args.state)
     fred = os.environ.get("FRED_API_KEY")
-    maker = MarketMaker(who["maker"], FairValues(fred), say=lambda *a, **k: None)
+    ratings = sports_catalog.Ratings(args.state)
+    sports_on = bool(
+        os.environ.get("BALLDONTLIE_API_KEY") and os.environ.get("FOOTBALL_DATA_API_KEY")
+    )
+    maker = MarketMaker(
+        who["maker"],
+        FairValues(fred, sports=ratings.lookup if sports_on else None),
+        say=lambda *a, **k: None,
+    )
     forecasts = Forecasts()
     store = EvidenceStore(args.state / "evidence")
     verified: set[int] = set()
@@ -141,6 +150,11 @@ def main(argv: list[str] | None = None) -> int:
                 listed = list_catalogue(who["lister"], at, forecasts.high, lambda *a, **k: None)
                 log("listed", slugs=listed)
                 last["list"] = now
+            if sports_on and now - last["sports"] >= EVERY["sports"]:
+                at = dt.datetime.now(dt.UTC)
+                games = sports_catalog.run_once(who["lister"], ratings, at, log)
+                log("sports_listed", slugs=games)
+                last["sports"] = now
             maker.run_once()
             if now - last["resolve"] >= EVERY["resolve"]:
                 resolve.run_once(

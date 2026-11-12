@@ -62,6 +62,9 @@ class FairValues:
     fetcher: Callable[[Request], Response] = fetch
     wall: Callable[[], float] = time.time
     cache: dict[str, Inputs] = field(default_factory=dict)
+    # A game's fair probabilities (home, draw, away) by provider game ID, from the sports
+    # ratings (catalog.sports_catalog.Ratings.lookup); None means no sports quotes.
+    sports: Callable[[str], dict[str, float] | None] | None = None
 
     def _get(self, name: str, load: Callable[[], Any]) -> Any:  # noqa: ANN401 - model data
         now = self.wall()
@@ -186,6 +189,13 @@ class FairValues:
             counts = cv.daily_counts(body, 5.0 if series == "WORLD/M5" else 6.0)
             days = [today - dt.timedelta(days=i) for i in range(1, 366)]
             return cv.earthquakes(counts, days, op, threshold)
+        if provider in {"balldontlie", "football_data"}:
+            game = rulebook["source"].get("game") or {}
+            fair = self.sports(str(game.get("id"))) if self.sports else None
+            if fair is None or threshold != 0:
+                return None
+            side = {">": "home", "<": "away", "==": "draw"}.get(op)
+            return None if side is None else fair.get(side)
         if series == "KP/MAX":
             text = self._get("SWPC 3-DAY", lambda: self._body(Request(SWPC_3DAY)).decode())
             probs = catalog_models.storm_probabilities(text).get(observation)
