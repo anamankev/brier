@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { gateway, renderTime } from "@/lib/server";
-import { CATEGORIES, cadence, categoryName, label, leading, noPrice, yesPrice, type EventSummary } from "@/lib/events";
+import { CATEGORIES, cadence, categoryName, compact, label, leading, noPrice, yesPrice, type EventSummary } from "@/lib/events";
 import { listEvents } from "@/lib/events-server";
 import { cents, relative } from "@/lib/format";
 import { EventCard } from "@/components/EventCard";
@@ -40,6 +40,30 @@ function Move({ e, now }: { e: EventSummary; now: number }) {
   );
 }
 
+/** The event to lead with: the busiest of the last day; before anything has traded, the next
+ * game to start, then the richest question (most outcomes). */
+function pickFeatured(events: EventSummary[]): EventSummary | undefined {
+  const traded = events.filter((e) => e.volume_24h > 0);
+  if (traded.length) return traded.reduce((a, b) => (b.volume_24h > a.volume_24h ? b : a));
+  const games = events.filter((e) => e.category === "sports" && e.markets.every((m) => m.chance != null));
+  if (games.length) return games.reduce((a, b) => (Date.parse(b.close) < Date.parse(a.close) ? b : a));
+  return events.find((e) => e.markets.length > 2) ?? events[0];
+}
+
+/** Take turns across categories, keeping each category's own order (busiest first), so the
+ * grid shows the range of markets instead of one long run of a single series. */
+function interleave(events: EventSummary[]): EventSummary[] {
+  const groups = new Map<string, EventSummary[]>();
+  for (const e of events) {
+    const k = e.category ?? "other";
+    groups.set(k, [...(groups.get(k) ?? []), e]);
+  }
+  const queues = [...groups.values()];
+  const out: EventSummary[] = [];
+  while (out.length < events.length) for (const q of queues) if (q.length) out.push(q.shift()!);
+  return out;
+}
+
 export default async function Home() {
   const now = renderTime();
   const [busiest, movers, closing, health] = await Promise.all([
@@ -57,7 +81,7 @@ export default async function Home() {
     );
   }
   const events = busiest.events;
-  const featured = events.find((e) => e.markets.length > 2) ?? events[0];
+  const featured = pickFeatured(events);
   const series = featured ? await history(featured, 4) : [];
   const moving = (movers?.events ?? []).filter((e) => e.markets.some((m) => m.change_24h));
 
@@ -99,7 +123,14 @@ export default async function Home() {
                     </li>
                   ))}
               </ul>
-              <MultiChart series={series} height={240} />
+              <MultiChart series={series} height={featured.markets.length > 2 ? 300 : 340} />
+            </div>
+            <div className="feature-foot">
+              <span>{featured.volume > 0 ? `${compact(featured.volume)} contracts traded` : "New market"}</span>
+              <span>Closes {relative(featured.close, now)}</span>
+              <Link href={`/e/${featured.slug}`} className="link-strong">
+                Trade this market <Chevron />
+              </Link>
             </div>
           </section>
 
@@ -112,14 +143,14 @@ export default async function Home() {
                 </Link>
               </div>
               {moving.length ? (
-                moving.slice(0, 5).map((e) => <Move key={e.slug} e={e} now={now} />)
+                moving.slice(0, 3).map((e) => <Move key={e.slug} e={e} now={now} />)
               ) : (
                 <p className="muted empty-line">No moves in the last 24 hours yet.</p>
               )}
             </section>
             <section className="card rail" aria-labelledby="closing-h">
               <h2 id="closing-h">Closing soon</h2>
-              {(closing?.events ?? []).slice(0, 4).map((e) => {
+              {(closing?.events ?? []).slice(0, 3).map((e) => {
                 const top = leading(e)[0];
                 return (
                   <Link key={e.slug} href={`/e/${e.slug}`} className="move">
@@ -160,7 +191,7 @@ export default async function Home() {
           </p>
         ) : (
           <div className="grid-3" style={{ marginTop: 16 }}>
-            {events.map((e) => (
+            {interleave(events).map((e) => (
               <EventCard key={e.slug} e={e} now={now} />
             ))}
           </div>

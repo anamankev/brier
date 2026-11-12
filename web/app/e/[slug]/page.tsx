@@ -5,6 +5,12 @@ import { WS_URL, gateway, me, renderTime } from "@/lib/server";
 import { cadence, categoryName, compact, label, leading, type EventSummary } from "@/lib/events";
 import { getEvent } from "@/lib/events-server";
 import { relative, shortDate, when } from "@/lib/format";
+import { plainRules } from "@/lib/rules-text";
+import { matchup } from "@/lib/teams";
+
+const LEAGUES: Record<string, string> = {
+  nba: "NBA", nfl: "NFL", "premier-league": "Premier League", "la-liga": "La Liga", "serie-a": "Serie A", bundesliga: "Bundesliga", "ligue-1": "Ligue 1",
+};
 import type { Portfolio, ResolutionView, Rules } from "@/lib/types";
 import { Repeat } from "@/components/Icons";
 import { Photo } from "@/components/Photo";
@@ -16,8 +22,8 @@ export const dynamic = "force-dynamic";
 
 const SOURCES: Record<string, string> = {
   nws: "the National Weather Service daily climate report",
-  balldontlie: "the final score (balldontlie), confirmed by an admin against the league",
-  football_data: "the full-time score (football-data.org), confirmed by an admin against the league",
+  balldontlie: "the official final score",
+  football_data: "the official full-time score",
   usgs: "the USGS earthquake catalog",
   swpc: "NOAA's Space Weather Prediction Center",
   bls: "the Bureau of Labor Statistics",
@@ -25,7 +31,7 @@ const SOURCES: Record<string, string> = {
   noaa: "NOAA's GHCN-Daily record",
 };
 const STATUS: Record<EventSummary["status"], string> = {
-  open: "Trading",
+  open: "",
   upcoming: "Opens soon",
   closed: "Closed · waiting for the result",
   settled: "Settled",
@@ -66,7 +72,7 @@ export default async function EventPage({ params, searchParams }: { params: Prom
     volume: m.volume,
     bid: m.best_bid,
     ask: m.best_ask,
-    rules: rules[i]!.ok ? rules[i]!.body.text : "The rulebook could not be loaded.",
+    rules: rules[i]!.ok ? plainRules(rules[i]!.body.rulebook, rules[i]!.body.text) : "The rules could not be loaded.",
     position: positions.get(m.market) ?? 0,
   }));
   const asked = Number(q.m);
@@ -79,7 +85,9 @@ export default async function EventPage({ params, searchParams }: { params: Prom
   const series = charted.map((m, i) => ({ name: e.markets.length > 1 ? label(m) : "Yes", points: prices[i]!.ok ? prices[i]!.body.points : [] }));
   const siblings = e.siblings ?? [];
   const at = siblings.findIndex((s) => s.slug === e.slug);
-  const tabs = siblings.slice(Math.max(0, at - 3), at + 4);
+  // Day tabs suit a daily series; a league lists many games a day, so its tabs would all read the same.
+  const daily = new Set(siblings.map((s) => s.observation)).size === siblings.length;
+  const tabs = daily ? siblings.slice(Math.max(0, at - 3), at + 4) : [];
   const repeat = cadence(e);
 
   return (
@@ -89,6 +97,7 @@ export default async function EventPage({ params, searchParams }: { params: Prom
         <div className="event-title">
           <p className="kicker">
             {e.category ? <Link href={`/c/${e.category}`}>{categoryName(e.category)}</Link> : "Markets"}
+            {matchup(e.slug) && ` · ${LEAGUES[matchup(e.slug)!.league]}`}
             {repeat && (
               <>
                 {" · "}
@@ -97,12 +106,16 @@ export default async function EventPage({ params, searchParams }: { params: Prom
                 </span>
               </>
             )}
-            {" · "}
-            {STATUS[e.status]}
+            {STATUS[e.status] && (
+              <>
+                {" · "}
+                {STATUS[e.status]}
+              </>
+            )}
           </p>
           <h1 className="display">{e.title}</h1>
           <p className="meta">
-            <span>{compact(e.volume)} contracts traded</span>
+            {e.volume > 0 && <span>{compact(e.volume)} contracts traded</span>}
             <span>
               {e.status === "open" || e.status === "upcoming" ? `Trading closes ${relative(e.close, now)}` : `Trading closed ${shortDate(e.close)}`}
             </span>

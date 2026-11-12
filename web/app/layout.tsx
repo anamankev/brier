@@ -46,7 +46,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </Link>
             <nav className="nav" aria-label="Main">
               <Link href="/">Markets</Link>
-              <Link href="/movers">Movers</Link>
               <Link href="/leaderboards">Leaderboards</Link>
               {user && <Link href="/portfolio">Portfolio</Link>}
               {user?.role === "admin" && <Link href="/admin">Admin</Link>}
@@ -127,15 +126,21 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </ul>
               </div>
               <div>
-                <h2>How it settles</h2>
+                <h2>How it works</h2>
                 <ul>
-                  <li><a href="https://github.com/anamankev/brier/blob/main/docs/rulebook.md">Rulebooks</a></li>
-                  <li><a href="https://github.com/anamankev/brier/blob/main/docs/resolution.md">Resolution and disputes</a></li>
-                  <li><a href="https://github.com/anamankev/brier/blob/main/docs/data-licenses.md">Data sources</a></li>
-                  <li><Link href="/credits">Photo credits</Link></li>
                   <li><Link href="/rules">House rules</Link></li>
+                  <li><a href="https://github.com/anamankev/brier/blob/main/docs/rulebook.md">Rulebooks</a></li>
+                  <li><a href="https://github.com/anamankev/brier/blob/main/docs/resolution.md">Settlement and disputes</a></li>
+                  <li><a href="https://github.com/anamankev/brier/blob/main/docs/data-licenses.md">Data sources</a></li>
+                </ul>
+              </div>
+              <div>
+                <h2>Legal</h2>
+                <ul>
                   <li><Link href="/terms">Terms of use</Link></li>
                   <li><Link href="/privacy">Privacy</Link></li>
+                  <li><Link href="/credits">Photo credits</Link></li>
+                  <li><a href="https://github.com/anamankev/brier/security/policy">Security</a></li>
                 </ul>
               </div>
               <div>
@@ -147,20 +152,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </ul>
               </div>
             </div>
-            <div className="legal">
-              <p style={{ margin: 0 }}>
-                Brier uses play money. Credits are granted once at sign-up, have no cash value, and cannot be bought,
-                sold, withdrawn, or transferred.
+            <div className="fine-print">
+              <p>
+                <strong>Play money only.</strong> Credits come free at sign-up and as a daily allowance. They have no cash
+                value and cannot be bought, sold, withdrawn or transferred. 18+.
               </p>
-              <p style={{ margin: 0 }}>
-                Data: U.S. Bureau of Labor Statistics; Federal Reserve Bank of St. Louis (FRED®); National Weather
-                Service; U.S. Geological Survey; NOAA Space Weather Prediction Center; NOAA National Centers for
-                Environmental Information. Weather forecasts behind the market maker&apos;s temperature quotes by{" "}
-                <a className="link" href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0). This product uses the FRED® API but is not endorsed or certified by the
-                Federal Reserve Bank of St. Louis. By using FRED® data here you are bound by the{" "}
-                <a href="https://fred.stlouisfed.org/docs/api/terms_of_use.html">FRED® API Terms of Use</a>. NBA and NFL
-                schedules and scores from balldontlie. Football data provided by the{" "}
-                <a href="https://www.football-data.org/">Football-Data.org</a> API.
+              <p>
+                Data from the U.S. Bureau of Labor Statistics, FRED®, the National Weather Service, USGS, NOAA,{" "}
+                <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0) and balldontlie. Football data provided by the{" "}
+                <a href="https://www.football-data.org/">Football-Data.org</a> API. This product uses the FRED® API but is not
+                endorsed or certified by the Federal Reserve Bank of St. Louis; the{" "}
+                <a href="https://fred.stlouisfed.org/docs/api/terms_of_use.html">FRED® API Terms of Use</a> apply.
               </p>
             </div>
           </div>

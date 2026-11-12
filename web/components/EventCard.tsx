@@ -58,7 +58,7 @@ export function EventCard({ e, now }: { e: EventSummary; now: number }) {
           <p className="muted state">{STATUS[e.status]}</p>
         )
       ) : open && !quoted ? (
-        <p className="muted state">No quotes yet. The market maker quotes once its forecast covers this day.</p>
+        <p className="muted state">No price yet. Place the first order.</p>
       ) : (
         <ul className="outcomes">
           {top.map((m) => (
@@ -83,7 +83,7 @@ export function EventCard({ e, now }: { e: EventSummary; now: number }) {
       )}
 
       <footer>
-        <span>{compact(e.volume)} traded</span>
+        <span>{e.volume > 0 ? `${compact(e.volume)} traded` : "New"}</span>
         {repeat && (
           <span className="cad">
             <Repeat /> {repeat}

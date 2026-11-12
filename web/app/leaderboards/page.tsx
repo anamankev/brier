@@ -12,7 +12,7 @@ export default async function Leaderboards() {
   const [skill, profit] = await Promise.all([gateway<Skill>("/v1/leaderboards/skill"), gateway<Profit>("/v1/leaderboards/profit")]);
   const min = skill.ok ? skill.body.min_scored_markets : 10;
   return (
-    <div className="stack" style={{ gap: 24 }}>
+    <div className="stack" style={{ gap: 24, marginTop: 24 }}>
       <div>
         <h1 className="display">Leaderboards</h1>
         <p className="dim" style={{ maxWidth: 720 }}>

@@ -272,7 +272,7 @@ export function EventBoard({
                 <div key={x.market} role="listitem" className={`orow${x.market === o.market ? " on" : ""}`}>
                   <button type="button" className="oname" aria-pressed={x.market === o.market} onClick={() => choose(x.market)}>
                     <b>{x.label}</b>
-                    <span className="muted">{compact(x.volume)} traded</span>
+                    {x.volume > 0 && <span className="muted">{compact(x.volume)} traded</span>}
                   </button>
                   <span className="ochance">
                     <b>{x.chance == null ? "—" : `${x.chance}%`}</b>
@@ -304,7 +304,7 @@ export function EventBoard({
             <span className="kicker">{single ? "Yes contracts" : o.label}</span>
             <span className={`live${connected ? " on" : ""}`}>{connected ? "Live" : "Connecting"}</span>
           </div>
-          <OrderBook book={book} depth={6} />
+          <OrderBook book={book} depth={6} note={false} />
         </section>
 
         <MarketSocial market={o.market} />

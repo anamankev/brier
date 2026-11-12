@@ -38,12 +38,12 @@ export function MultiChart({ series, height = 280 }: { series: Series[]; height?
     });
   }, [series, range]);
 
-  const H = width < 520 ? Math.min(220, height) : height;
+  const H = width < 420 ? Math.min(220, height) : height;
   const pad = { l: 8, r: 46, t: 14, b: 26 };
   if (drawn.length === 0) {
     return (
       <div ref={box} className="empty chart-empty" style={{ height: 200 }}>
-        Prices are recorded every minute once trading opens; the chart starts with the first two minutes.
+        No price history yet. The chart fills in as soon as the market has a price.
       </div>
     );
   }

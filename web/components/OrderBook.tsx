@@ -3,7 +3,7 @@ import type { Book } from "@/lib/book";
 
 /** The book in two columns: bids to buy YES (each also an offer to sell NO) and offers to sell
  * YES. Depth bars show size; the words carry the meaning. */
-export function OrderBook({ book, depth = 8 }: { book: Book; depth?: number }) {
+export function OrderBook({ book, depth = 8, note = true }: { book: Book; depth?: number; note?: boolean }) {
   const bids = [...book.bids.entries()].sort((a, b) => b[0] - a[0]).slice(0, depth);
   const asks = [...book.asks.entries()].sort((a, b) => a[0] - b[0]).slice(0, depth);
   const max = Math.max(1, ...bids.map((l) => l[1]), ...asks.map((l) => l[1]));
@@ -54,9 +54,11 @@ export function OrderBook({ book, depth = 8 }: { book: Book; depth?: number }) {
         {side(bids, "bids", "Bids to buy YES")}
         {side(asks, "asks", "Offers to sell YES")}
       </div>
-      <p className="muted" style={{ fontSize: 12.5, padding: "8px 16px 16px", margin: 0 }}>
-        Buying NO at q¢ is the same order as selling YES at (100 − q)¢, so one book serves both sides.
-      </p>
+      {note && (
+        <p className="muted" style={{ fontSize: 12.5, padding: "8px 16px 16px", margin: 0 }}>
+          Buying NO at q¢ is the same order as selling YES at (100 − q)¢, so one book serves both sides.
+        </p>
+      )}
     </div>
   );
 }
