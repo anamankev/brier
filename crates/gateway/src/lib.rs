@@ -107,6 +107,12 @@ pub struct AppState {
     /// SHA-256 of the shared key that lets the web server forward client addresses
     /// (`BRIER_PROXY_KEY`); without it, forwarded addresses are never trusted.
     pub proxy_key: Option<[u8; 32]>,
+    /// How long the events list's market rows may be reused (zero: never). A burst of visitors
+    /// then shares one database read instead of queueing on the one connection.
+    pub events_ttl: std::time::Duration,
+    /// The market rows last read for the events list, and when.
+    pub(crate) events_cache:
+        tokio::sync::Mutex<Option<(std::time::Instant, Arc<Vec<events::MarketRow>>)>>,
     /// A hash checked when the username is unknown, so login time does not reveal it.
     dummy_hash: String,
 }
@@ -141,6 +147,8 @@ impl AppState {
             dispute_window: DISPUTE_WINDOW,
             totp_key: None,
             proxy_key: None,
+            events_ttl: std::time::Duration::ZERO,
+            events_cache: tokio::sync::Mutex::new(None),
             dummy_hash: auth::hash_password("timing equalizer, never a real password")?,
         })
     }

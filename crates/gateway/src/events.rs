@@ -11,6 +11,7 @@
 #![allow(clippy::missing_errors_doc)] // handler errors are the documented API responses
 
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -35,7 +36,7 @@ const STANDALONE_PREFIX: &str = "market-";
 
 /// One market's row for event pages and cards.
 #[derive(Debug, Clone)]
-struct MarketRow {
+pub(crate) struct MarketRow {
     market: i64,
     title: String,
     event: Option<String>,
@@ -50,6 +51,22 @@ struct MarketRow {
     price_day_ago: Option<i16>,
     volume_day_ago: Option<i64>,
     range_start: Option<i128>,
+}
+
+/// The market rows, reused for `events_ttl` after a read so that concurrent requests share it.
+async fn cached_rows(s: &AppState) -> Result<Arc<Vec<MarketRow>>, ApiError> {
+    if s.events_ttl.is_zero() {
+        return Ok(Arc::new(market_rows(s).await?));
+    }
+    let mut cache = s.events_cache.lock().await;
+    if let Some((at, rows)) = cache.as_ref()
+        && at.elapsed() < s.events_ttl
+    {
+        return Ok(Arc::clone(rows));
+    }
+    let rows = Arc::new(market_rows(s).await?);
+    *cache = Some((std::time::Instant::now(), Arc::clone(&rows)));
+    Ok(rows)
 }
 
 async fn market_rows(s: &AppState) -> Result<Vec<MarketRow>, ApiError> {
@@ -177,7 +194,7 @@ async fn event_info(s: &AppState) -> Result<HashMap<String, EventInfo>, ApiError
 async fn all_events(s: &AppState) -> Result<Vec<(Value, EventKeys)>, ApiError> {
     let info = event_info(s).await?;
     let mut groups: BTreeMap<String, Vec<MarketRow>> = BTreeMap::new();
-    for m in market_rows(s).await? {
+    for m in cached_rows(s).await?.iter().cloned() {
         let slug = m
             .event
             .clone()

@@ -5,7 +5,7 @@ maker quotes them with (docs/notes/sports-models.md, docs/catalog.md).
   football-data.org (five soccer leagues).
 - **Events.** Each game is one event. NBA and NFL games have two outcomes, one per team; an NFL
   tie resolves both No. Soccer matches have three: home win, draw, away win.
-- **Trading** opens three days before kickoff and closes at kickoff.
+- **Trading** opens five days before kickoff and closes at kickoff.
 - **Settlement** goes through the manual lane: an admin confirms each result against the league
   (balldontlie's terms require independent verification).
 - **Pricing.** Ratings are the registered Elo model (`sports.Elo`, unchanged parameters), warmed
@@ -32,8 +32,8 @@ from typing import Any
 from brier_services.catalog import sports
 from brier_services.rules import Provider, find_series
 
-LISTING_DAYS = 3  # list games starting within this many days
-OPEN_BEFORE = dt.timedelta(days=3)
+LISTING_DAYS = 5  # list games starting within this many days (Elo does not degrade with lead time)
+OPEN_BEFORE = dt.timedelta(days=LISTING_DAYS)
 RESULT_AFTER = {
     "NBA": dt.timedelta(hours=4),
     "NFL": dt.timedelta(hours=5),

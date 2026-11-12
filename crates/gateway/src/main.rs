@@ -113,6 +113,11 @@ fn with_keys(mut state: AppState) -> Result<AppState, String> {
     Ok(state)
 }
 
+/// Seconds the events list may be served from memory: prices on the list lag at most this
+/// much, while the live book on each event page streams over the WebSocket.
+#[cfg(not(feature = "test-clock"))]
+const EVENTS_TTL_SECONDS: u64 = 3;
+
 async fn serve(url: &str) -> Result<(), String> {
     let data = PathBuf::from(std::env::var("BRIER_DATA_DIR").unwrap_or_else(|_| "data".to_owned()));
     let listen: SocketAddr = std::env::var("BRIER_LISTEN")
@@ -143,6 +148,12 @@ async fn serve(url: &str) -> Result<(), String> {
         .map_err(|e| format!("{e:?}"))?
         .with_dispute_window(dispute_window);
     state = with_keys(state)?;
+    // Production builds share the events list's market rows for a few seconds; test builds,
+    // which list and read back within a second, always read fresh.
+    #[cfg(not(feature = "test-clock"))]
+    {
+        state.events_ttl = std::time::Duration::from_secs(EVENTS_TTL_SECONDS);
+    }
     // Test builds only: a looser sign-in limit, for browser tests that sign many users in from
     // one address.
     #[cfg(feature = "test-clock")]
