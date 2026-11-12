@@ -15,6 +15,12 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       <h1 id="search-h" className="display" style={{ marginBottom: 6 }}>
         {query ? `Results for “${query}”` : "Search"}
       </h1>
+      <form className="search search-page" action="/search" role="search">
+        <label className="sr-only" htmlFor="q-page">
+          Search markets
+        </label>
+        <input id="q-page" name="q" type="search" defaultValue={query} placeholder="Search markets" autoComplete="off" />
+      </form>
       {query && (
         <p className="muted" style={{ marginTop: 0 }}>
           {list?.events.length ?? 0} {all ? "markets" : "open markets"}.{" "}

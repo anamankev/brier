@@ -59,6 +59,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <input id="q" name="q" type="search" placeholder="Search markets" autoComplete="off" />
             </form>
             <div className="who">
+              <Link href="/search" className="search-link" aria-label="Search markets">
+                <SearchIcon />
+              </Link>
               {user ? (
                 <>
                   {allowance?.ok && !allowance.body.claimed_today && <DailyCredits amount={allowance.body.amount} />}
@@ -69,7 +72,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     </Link>
                   )}
                   <Bell />
-                  <UserMenu username={user.username} admin={user.role === "admin"} />
+                  <UserMenu username={user.username} admin={user.role === "admin"} cash={portfolio?.ok ? credits(portfolio.body.cash) : undefined} />
                 </>
               ) : (
                 <>
@@ -96,6 +99,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             ))}
             <span className="sep" aria-hidden="true" />
             <Link href="/watchlist">Watchlist</Link>
+            <Link href="/leaderboards" className="cats-phone">Leaderboards</Link>
             {user && <Link href="/scorecard">Your scorecard</Link>}
           </nav>
         </header>

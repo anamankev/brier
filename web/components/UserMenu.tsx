@@ -3,8 +3,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-/** The signed-in user's menu: profile, portfolio, account settings, and sign out. */
-export function UserMenu({ username, admin }: { username: string; admin: boolean }) {
+/** The signed-in user's menu: profile, portfolio, account settings, and sign out. On a phone,
+ * where the header hides the cash balance and the main links, it carries them too. */
+export function UserMenu({ username, admin, cash }: { username: string; admin: boolean; cash?: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -43,6 +44,11 @@ export function UserMenu({ username, admin }: { username: string; admin: boolean
       </button>
       {open && (
         <div className="menu card" role="menu" aria-label="Account">
+          {cash !== undefined && (
+            <Link role="menuitem" href="/portfolio" onClick={go} className="menu-cash">
+              Cash <strong>{cash}</strong>
+            </Link>
+          )}
           <Link role="menuitem" href={`/u/${encodeURIComponent(username)}`} onClick={go}>
             Profile
           </Link>
@@ -54,6 +60,9 @@ export function UserMenu({ username, admin }: { username: string; admin: boolean
           </Link>
           <Link role="menuitem" href="/watchlist" onClick={go}>
             Watchlist
+          </Link>
+          <Link role="menuitem" href="/leaderboards" onClick={go} className="menu-phone">
+            Leaderboards
           </Link>
           <Link role="menuitem" href="/account" onClick={go}>
             Account settings

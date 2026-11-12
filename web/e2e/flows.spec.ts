@@ -3,7 +3,7 @@
 // without seeing them. The newcomer signs in once and keeps the session, as a browser would; TOTP
 // codes are accepted once each, so a second sign-in waits for an unused code.
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { devices, expect, test, type Browser, type Page } from "@playwright/test";
 import { NEWCOMER_SESSION, PASSWORD, WEB_PORT, call, currentStep, freshTotp, instant, iso, now, recordStep, setClock, state, until } from "./stack";
 
 test.describe.configure({ mode: "serial" });
@@ -207,6 +207,50 @@ test("an event: browse its category, open it, and buy one outcome by amount", as
     await page.goto(path);
     await accessible(page, what);
   }
+});
+
+test("on a phone: a stranger signs up, claims the daily credits, and buys an outcome", async ({ browser }) => {
+  const { event } = state();
+  const context = await browser.newContext({ ...devices["Pixel 7"], baseURL: `http://127.0.0.1:${WEB_PORT}` });
+  const page = await context.newPage();
+  const name = `phone_${Date.now() % 1_000_000}`;
+  await page.goto("/register");
+  await accessible(page, "sign-up on a phone");
+  await page.getByLabel(/Username/).fill(name);
+  await page.getByLabel(/Password/).fill(PASSWORD);
+  await page.getByLabel("I am 18 or older").check();
+  await page.getByLabel(/I agree to the terms of use/).check();
+  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByLabel("I have saved my recovery codes").check();
+  await page.getByRole("button", { name: "Start trading" }).click();
+  const daily = page.getByRole("button", { name: /\+100 daily/ });
+  await daily.click();
+  await expect(daily).toBeHidden();
+  // The other trader's offer of the 59-60°F range at 30¢ still has 10 contracts left.
+  await page.goto(`/e/${event.slug}`);
+  await expect(page.getByRole("heading", { level: 1, name: event.title })).toBeVisible();
+  await accessible(page, "event page on a phone");
+  await page.getByRole("button", { name: /^59-60°F/ }).click();
+  // Amounts are in credits with cents.
+  await page.getByRole("spinbutton", { name: "Amount" }).fill("1.5");
+  await page.getByRole("button", { name: "Buy Yes · 1.50" }).click();
+  await expect(page.getByText("Bought 5 Yes on “59-60°F”.")).toBeVisible();
+  await page.goto("/portfolio");
+  await accessible(page, "portfolio on a phone");
+  await expect(page.getByRole("row", { name: /New York high 59-60°F on Nov 12.*5 Yes/ })).toBeVisible();
+  const width = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(width, "no sideways scrolling on a phone").toBeLessThanOrEqual(0);
+  // The header's cash balance and search box are hidden on a phone; the menu and a search
+  // button stand in for them.
+  await page.locator(".me-btn").click();
+  await expect(page.getByRole("menuitem", { name: /Cash/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("link", { name: "Search markets" }).click();
+  await page.getByRole("searchbox", { name: "Search markets" }).fill("new york");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("link", { name: event.title }).first()).toBeVisible();
+  await accessible(page, "search on a phone");
+  await context.close();
 });
 
 test("a forecast is recorded, and covered by the next price samples", async ({ browser }) => {

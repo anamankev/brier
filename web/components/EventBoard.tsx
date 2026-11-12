@@ -132,7 +132,7 @@ function Ticket({ o, side, setSide, book, signedIn, question }: { o: Outcome; si
               <label className="field amount">
                 <span>Amount</span>
                 <div className="input-adorn">
-                  <input type="number" inputMode="decimal" min={1} step={1} value={amount} onChange={(e) => setAmount(Math.max(0, Number(e.target.value)))} />
+                  <input type="number" inputMode="decimal" min={0.01} step={0.01} value={amount} onChange={(e) => setAmount(Math.max(0, Number(e.target.value)))} />
                   <span className="unit" aria-hidden="true">
                     credits
                   </span>
