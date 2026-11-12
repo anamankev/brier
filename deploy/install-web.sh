@@ -11,8 +11,8 @@ if ! swapon --show | grep -q /swapfile; then
   grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
 fi
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq curl gnupg debian-keyring debian-archive-keyring apt-transport-https netfilter-persistent >/dev/null
+apt-get -o DPkg::Lock::Timeout=900 update -qq
+apt-get -o DPkg::Lock::Timeout=900 install -y -qq curl gnupg debian-keyring debian-archive-keyring apt-transport-https netfilter-persistent >/dev/null
 
 # Node 24 from nodejs.org: the newest 24.x released at least 14 days ago, checked against its
 # published SHA-256.
@@ -34,7 +34,7 @@ fi
 if ! command -v caddy >/dev/null; then
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
-  apt-get update -qq && apt-get install -y -qq caddy >/dev/null
+  apt-get -o DPkg::Lock::Timeout=900 update -qq && apt-get -o DPkg::Lock::Timeout=900 install -y -qq caddy >/dev/null
 fi
 
 # The firewall: web traffic in.

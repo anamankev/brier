@@ -15,7 +15,9 @@ SITE=$(tar -xzf "$TAR" -O ./SITE)
 HOST=${SITE#https://}
 
 detached() { # host, script, log: run an install as a systemd job so a dropped connection cannot stop it
-  ssh "$1" "sudo systemd-run --unit=brier-install --collect --wait bash -c '$2 > $3 2>&1'; tail -3 $3"
+  # (--wait returns the job's exit status, kept past the tail, so a failed install fails the deploy)
+  ssh "$1" "sudo systemd-run --unit=brier-install --collect --wait bash -c '$2 > $3 2>&1'; s=\$?; tail -3 $3; exit \$s" \
+    || { echo "install on $1 failed (log: $3)" >&2; exit 1; }
 }
 
 if [ "$WHICH" != web ]; then

@@ -13,8 +13,8 @@ swap() {
 }
 swap
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq postgresql python3-venv openssl >/dev/null
+apt-get -o DPkg::Lock::Timeout=900 update -qq
+apt-get -o DPkg::Lock::Timeout=900 install -y -qq postgresql python3-venv openssl >/dev/null
 
 id brier >/dev/null 2>&1 || useradd --system --home /var/lib/brier --shell /usr/sbin/nologin brier
 install -d -o brier -g brier -m 750 /var/lib/brier /var/lib/brier/journal /var/lib/brier/operator

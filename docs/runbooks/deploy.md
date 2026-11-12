@@ -88,3 +88,11 @@ ssh brier-web sudo journalctl -u brier-web -u caddy -f
 ```bash
 curl https://132-145-162-222.sslip.io/v1/health
 ```
+
+## Drill record
+| Date | Drill | Result |
+|---|---|---|
+| 2026-11-11 | Restore: the latest nightly backup was decrypted and restored into a scratch database and journal, then a second gateway was started on them | Passed. The restored gateway reached seq 1695 with 80 events, the same as live. The decrypted copies were deleted afterwards. |
+| 2026-11-11 | Restart: both servers rebooted | Passed. The site answered again after 73 s and the exchange after 79 s; every service started on its own. |
+| 2026-11-11 | Load test (`scripts/load_test.py`, see `docs/notes/load-test.md`) | About 14 pages a second at 50 users, no errors. |
+| 2026-11-12 | Deploy during an automatic security update | The install stopped on the package lock while `deploy.sh` still reported success. Fixed: installs now wait up to 15 minutes for the lock, and a failed install fails the deploy. |

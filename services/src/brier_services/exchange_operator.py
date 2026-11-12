@@ -117,6 +117,10 @@ def accounts(base: str, binary: Path, state: Path) -> dict[str, Session]:
     return {name: Session(base, name, saved["password"]) for name in ROLES}
 
 
+# Maker lines worth keeping in the journal; routine quotes and cancels are not.
+MAKER_LOGGED = frozenset({"quote_refused", "allowance", "allowance_failed"})
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python -m brier_services.exchange_operator")
     p.add_argument("--gateway", default="http://127.0.0.1:8080")
@@ -135,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
     maker = MarketMaker(
         who["maker"],
         FairValues(fred, sports=ratings.lookup if sports_on else None),
-        say=lambda *a, **k: None,
+        say=lambda event, **k: log(f"maker_{event}", **k) if event in MAKER_LOGGED else None,
     )
     forecasts = Forecasts()
     store = EvidenceStore(args.state / "evidence")
