@@ -1,0 +1,57 @@
+# Build a deployable release for the public servers (docs/runbooks/deploy.md): the gateway and
+# core for Linux x86_64, the web app as a self-contained Node bundle, and the Python services as
+# a wheel with hash-pinned requirements. Manual only; the artifact holds no credentials.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "The public origin, e.g. https://132-145-162-222.sslip.io"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      SITE: ${{ inputs.site }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup show active-toolchain || rustup toolchain install
+      - run: cargo build --release --locked -p brier-gateway -p brier-core
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Python services
+        working-directory: services
+        run: |
+          uv build --wheel -o ../dist/py
+          uv export --locked --no-dev --no-emit-project -o ../dist/py/requirements.txt
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Web app
+        working-directory: web
+        run: |
+          case "$SITE" in https://*) ;; *) echo "site must start with https://"; exit 1;; esac
+          npm ci
+          BRIER_STANDALONE=1 BRIER_WS_URL="wss://${SITE#https://}/v1/ws" npx next build
+          mkdir -p ../dist/web
+          cp -r .next/standalone/. ../dist/web/
+          cp -r .next/static ../dist/web/.next/static
+          cp -r public ../dist/web/public
+      - name: Package
+        run: |
+          mkdir -p dist/bin
+          cp target/release/brier-gateway target/release/brier-core dist/bin/
+          cp -r deploy dist/deploy
+          git rev-parse HEAD > dist/COMMIT
+          echo "$SITE" > dist/SITE
+          tar -czf brier-release.tar.gz -C dist .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: brier-release
+          path: brier-release.tar.gz
+          retention-days: 14

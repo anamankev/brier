@@ -6,6 +6,9 @@ import type { NextConfig } from "next";
 const ws = process.env.BRIER_WS_URL ?? "ws://127.0.0.1:8080/v1/ws";
 
 const config: NextConfig = {
+  // A self-contained server bundle for deployment (docs/runbooks/deploy.md); the default build
+  // (tests, local runs) is unchanged.
+  output: process.env.BRIER_STANDALONE === "1" ? "standalone" : undefined,
   poweredByHeader: false,
   reactStrictMode: true,
   async headers() {

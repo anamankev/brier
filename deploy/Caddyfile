@@ -1,0 +1,25 @@
+# The public entrance (brier-web): HTTPS from Let's Encrypt, the WebSocket and the public REST
+# API to the gateway on the private network, everything else to the web app.
+{$BRIER_HOST} {
+	encode zstd gzip
+	@api path /v1/*
+	handle @api {
+		reverse_proxy {$BRIER_GATEWAY} {
+			header_up X-Brier-Proxy-Key {$BRIER_PROXY_KEY}
+			header_up X-Brier-Client-Address {remote_host}
+		}
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 20MiB
+			roll_keep 5
+		}
+	}
+}

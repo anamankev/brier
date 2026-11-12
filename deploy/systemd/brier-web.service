@@ -1,0 +1,20 @@
+[Unit]
+Description=Brier web app (Next.js)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=brier
+Group=brier
+EnvironmentFile=/etc/brier/web.env
+WorkingDirectory=/opt/brier/web
+ExecStart=/usr/bin/node /opt/brier/web/server.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

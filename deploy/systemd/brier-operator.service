@@ -1,0 +1,21 @@
+[Unit]
+Description=Brier operator (lister, market maker, resolver, surveillance)
+After=brier-gateway.service
+Requires=brier-gateway.service
+
+[Service]
+User=brier
+Group=brier
+EnvironmentFile=/etc/brier/operator.env
+WorkingDirectory=/var/lib/brier
+ExecStart=/opt/brier/venv/bin/python -m brier_services.operator --gateway http://127.0.0.1:8080 --gateway-binary /opt/brier/bin/brier-gateway --core /opt/brier/bin/brier-core --data /var/lib/brier/journal --state /var/lib/brier/operator
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/brier
+
+[Install]
+WantedBy=multi-user.target

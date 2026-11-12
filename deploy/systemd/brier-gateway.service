@@ -1,0 +1,25 @@
+[Unit]
+Description=Brier gateway (matching engine, journal, REST and WebSocket API)
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+User=brier
+Group=brier
+EnvironmentFile=/etc/brier/gateway.env
+ExecStart=/opt/brier/bin/brier-gateway serve
+Restart=always
+RestartSec=3
+# SIGTERM lets the gateway finish its batch; the journal is durable before any acknowledgement.
+KillSignal=SIGTERM
+TimeoutStopSec=60
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/brier
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
