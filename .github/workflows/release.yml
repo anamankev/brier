@@ -40,8 +40,8 @@ jobs:
           BRIER_STANDALONE=1 BRIER_WS_URL="wss://${SITE#https://}/v1/ws" npx next build
           mkdir -p ../dist/web
           cp -r .next/standalone/. ../dist/web/
-          cp -r .next/static ../dist/web/.next/static
-          cp -r public ../dist/web/public
+          mkdir -p ../dist/web/.next/static && cp -r .next/static/. ../dist/web/.next/static/
+          mkdir -p ../dist/web/public && cp -r public/. ../dist/web/public/
       - name: Package
         run: |
           mkdir -p dist/bin
