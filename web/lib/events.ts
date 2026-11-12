@@ -69,6 +69,7 @@ export const CATEGORIES: { slug: string; name: string; blurb: string }[] = [
   { slug: "science", name: "Science", blurb: "Earthquakes worldwide from the USGS catalog, and geomagnetic storms from NOAA." },
   { slug: "economics", name: "Economy", blurb: "Inflation and jobs, from the Bureau of Labor Statistics." },
   { slug: "rates", name: "Rates", blurb: "The Fed's target rate and Treasury yields." },
+  { slug: "sports", name: "Sports", blurb: "Every NBA and NFL game, and five European soccer leagues, until kickoff." },
 ];
 
 export function categoryName(slug: string | null | undefined): string {
@@ -104,10 +105,26 @@ export const TAG_NAMES: Record<string, string> = {
   dallas: "Dallas",
   earthquakes: "Earthquakes",
   "space-weather": "Space weather",
+  nba: "NBA",
+  nfl: "NFL",
+  "premier-league": "Premier League",
+  "la-liga": "La Liga",
+  "serie-a": "Serie A",
+  bundesliga: "Bundesliga",
+  "ligue-1": "Ligue 1",
+};
+
+/** Sports topics: the league tags shown as subcategories (the sport tags only pick photos). */
+const LEAGUE_BLURBS: Record<string, string> = {
+  nba: "Every NBA game, with a market for each team, until tip-off. Results include overtime.",
+  nfl: "Every NFL game, with a market for each team, until kickoff. Results include overtime; a tie resolves both No.",
 };
 
 /** What a topic page under a category covers. */
 export function tagBlurb(tag: string): string | null {
+  if (LEAGUE_BLURBS[tag]) return LEAGUE_BLURBS[tag]!;
+  if (["premier-league", "la-liga", "serie-a", "bundesliga", "ligue-1"].includes(tag))
+    return `Every ${TAG_NAMES[tag]} match: home win, draw or away win after 90 minutes, until kickoff.`;
   if (tag === "earthquakes") return "Daily counts of magnitude 5+ and 6+ earthquakes worldwide, from the USGS catalog.";
   if (tag === "space-weather") return "The day's strongest geomagnetic storm, from NOAA's Space Weather Prediction Center.";
   const city = TAG_NAMES[tag];

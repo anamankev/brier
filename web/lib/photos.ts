@@ -35,6 +35,9 @@ export const PHOTOS = {
   jobs: { subject: "A hiring fair", author: "U.S. Space Force (Van Ha)", license: "Public domain", source: commons("Air_Force_Civilian_Service_Hiring_Fair_(6107214).jpg") },
   fed: { subject: "The Federal Reserve's Eccles Building", author: "Federal Reserve", license: "Public domain", source: commons("Eccles_Building_(26088200676).jpg") },
   treasury: { subject: "The Treasury Building, Washington", author: "Sealy j", license: "CC BY-SA 4.0", source: commons("U.S._Treasury_Building_and_Albert_Gallatin_Statue.jpg") },
+  basketball: { subject: "A dunk under the arena lights", author: "U.S. Navy (Mass Communication Specialist 2nd Class James R. Evans)", license: "Public domain", source: commons("US_Navy_111110-N-DR144-460_University_of_North_Carolina_basketball_player_Tyler_Zeller_dunks_during_a_practice_in_the_basketball_arena_on_the_fligh.jpg") },
+  football: { subject: "A ball carrier breaks a tackle", author: "Damon J. Moritz, U.S. Navy", license: "Public domain", source: commons("2005_Temple-Navy_Game_02.jpg") },
+  soccer: { subject: "A floodlit soccer stadium at night", author: "YoTuT", license: "CC BY 2.0", source: commons("LA_Galaxy_vs_Houston_Dynamo-_Western_Conference_Finals_panorama.jpg") },
 } as const satisfies Record<string, Photo>;
 
 export type PhotoKey = keyof typeof PHOTOS;
@@ -71,12 +74,22 @@ const BY_TITLE: [RegExp, PhotoKey][] = [
   [/\bfed\b|federal funds|target rate/i, "fed"],
 ];
 
-const BY_CATEGORY: Record<string, PhotoKey> = { weather: "weather", science: "earthquakes", economics: "cpi", rates: "fed" };
+const BY_CATEGORY: Record<string, PhotoKey> = { weather: "weather", science: "earthquakes", economics: "cpi", rates: "fed", sports: "soccer" };
+const LEAGUE_SPORT: Record<string, PhotoKey> = {
+  nba: "basketball",
+  nfl: "football",
+  "premier-league": "soccer",
+  "la-liga": "soccer",
+  "serie-a": "soccer",
+  bundesliga: "soccer",
+  "ligue-1": "soccer",
+};
 
 /** The photo for an event, market or topic: its tags first (a city, earthquakes, space
  * weather), then words in its title, then its category. */
 export function photoFor(x: { title?: string | null; category?: string | null; tags?: string[] }): PhotoKey {
   for (const t of x.tags ?? []) if (t in PHOTOS) return t as PhotoKey;
+  for (const t of x.tags ?? []) if (LEAGUE_SPORT[t]) return LEAGUE_SPORT[t]!;
   for (const [re, key] of BY_TITLE) if (x.title && re.test(x.title)) return key;
   return BY_CATEGORY[x.category ?? ""] ?? "cpi";
 }

@@ -154,7 +154,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 Environmental Information. Weather forecasts behind the market maker&apos;s temperature quotes by{" "}
                 <a className="link" href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0). This product uses the FRED® API but is not endorsed or certified by the
                 Federal Reserve Bank of St. Louis. By using FRED® data here you are bound by the{" "}
-                <a href="https://fred.stlouisfed.org/docs/api/terms_of_use.html">FRED® API Terms of Use</a>.
+                <a href="https://fred.stlouisfed.org/docs/api/terms_of_use.html">FRED® API Terms of Use</a>. NBA and NFL
+                schedules and scores from balldontlie. Football data provided by the{" "}
+                <a href="https://www.football-data.org/">Football-Data.org</a> API.
               </p>
             </div>
           </div>
