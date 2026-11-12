@@ -71,8 +71,8 @@ test("a newcomer signs up, turns on two-step sign-in, and signs in with a code",
   await page.context().storageState({ path: NEWCOMER_SESSION });
 });
 
-test("a public account: claims the daily credits, resets a lost password with a code, exports its data, and deletes itself", async ({ page }) => {
-  const name = `pub_${Date.now() % 1_000_000}`;
+/** Claim the daily credits, reset a lost password with a recovery code, export, and delete. */
+async function publicAccount(page: Page, name: string) {
   await page.goto("/register");
   await page.getByLabel(/Username/).fill(name);
   await page.getByLabel(/Password/).fill(PASSWORD);
@@ -90,7 +90,14 @@ test("a public account: claims the daily credits, resets a lost password with a 
   await expect(daily).toBeVisible();
   await daily.click();
   await expect(daily).toBeHidden();
-  await expect(page.locator(".balance strong")).toHaveText(/10,100/);
+  if (await page.locator(".balance").isVisible()) {
+    await expect(page.locator(".balance strong")).toHaveText(/10,100/);
+  } else {
+    // A phone: the cash balance is in the account menu.
+    await page.locator(".me-btn").click();
+    await expect(page.getByRole("menuitem", { name: /Cash/ })).toHaveText(/10,100/);
+    await page.keyboard.press("Escape");
+  }
 
   // Lose the password: sign out, then reset it with the saved code.
   await signOut(page);
@@ -124,6 +131,16 @@ test("a public account: claims the daily credits, resets a lost password with a 
   await page.getByLabel("Password").fill(`${PASSWORD} again`);
   await page.getByRole("button", { name: "Log in" }).click();
   await expect(page.getByText("wrong username or password")).toBeVisible();
+}
+
+test("a public account: claims the daily credits, resets a lost password with a code, exports its data, and deletes itself", async ({ page }) => {
+  await publicAccount(page, `pub_${Date.now() % 1_000_000}`);
+});
+
+test("the same public account flow on a phone", async ({ browser }) => {
+  const context = await browser.newContext({ ...devices["Pixel 7"], baseURL: `http://127.0.0.1:${WEB_PORT}` });
+  await publicAccount(await context.newPage(), `pubph_${Date.now() % 1_000_000}`);
+  await context.close();
 });
 
 test("the legal pages are reachable from every page", async ({ page }) => {
