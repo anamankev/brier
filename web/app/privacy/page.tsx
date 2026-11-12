@@ -6,7 +6,8 @@ export const metadata = { title: "Privacy policy" };
 
 // Structure after GitHub's Privacy Statement (github/site-policy, CC0 1.0), written for what
 // Brier actually holds. Keep it true: every fact here is checked against the code and servers.
-const CONTACT = "kanaman@brandeis.edu";
+// Contact is by LinkedIn message: the site publishes no email address.
+const CONTACT = "https://www.linkedin.com/in/kelvin-anaman";
 
 export default function Privacy() {
   return (
@@ -138,7 +139,7 @@ export default function Privacy() {
 
       <h2>Contact</h2>
       <p>
-        Privacy questions and requests: <a className="link" href={`mailto:${CONTACT}`}>{CONTACT}</a>. Please do not post
+        Privacy questions and requests: send a message on <a className="link" href={CONTACT} rel="noopener noreferrer">LinkedIn</a>. Please do not post
         personal data in public places such as GitHub issues.
       </p>
     </article>

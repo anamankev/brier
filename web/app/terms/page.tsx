@@ -5,7 +5,8 @@ export const metadata = { title: "Terms of service" };
 
 // Structure after GitHub's Terms of Service (github/site-policy, CC0 1.0), written for a free,
 // play-money prediction market.
-const CONTACT = "kanaman@brandeis.edu";
+// Contact is by LinkedIn message: the site publishes no email address.
+const CONTACT = "https://www.linkedin.com/in/kelvin-anaman";
 
 export default function Terms() {
   return (
@@ -137,7 +138,7 @@ export default function Terms() {
 
       <h2>16. Contact</h2>
       <p>
-        Questions about these terms: <a className="link" href={`mailto:${CONTACT}`}>{CONTACT}</a>. Bugs and suggestions:{" "}
+        Questions about these terms: send a message on <a className="link" href={CONTACT} rel="noopener noreferrer">LinkedIn</a>. Bugs and suggestions:{" "}
         <a className="link" href="https://github.com/anamankev/brier/issues">GitHub issues</a>. Security problems: our{" "}
         <a className="link" href="https://github.com/anamankev/brier/security/policy">security policy</a>.
       </p>
