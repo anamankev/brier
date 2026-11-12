@@ -63,4 +63,6 @@ def holds(value: Fraction, op: Op, threshold: str, upper: str | None = None) -> 
         return value >= t
     if op is Op.BELOW:
         return value < t
+    if op is Op.EQUAL:
+        return value == t
     return value <= t

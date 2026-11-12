@@ -21,6 +21,8 @@ ALLOWED_HOSTS = frozenset(
         "earthquake.usgs.gov",
         "services.swpc.noaa.gov",
         "api.open-meteo.com",
+        "api.balldontlie.io",
+        "api.football-data.org",
     }
 )
 MAX_BODY_BYTES = 4 * 1024 * 1024
@@ -35,10 +37,12 @@ class FetchError(Exception):
 
 @dataclass(frozen=True)
 class Request:
-    """A GET, or a POST with a JSON body."""
+    """A GET, or a POST with a JSON body. ``headers`` carry credentials for sources that take
+    them in a header; they are sent and never kept in evidence."""
 
     url: str
     body: bytes | None = None
+    headers: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -110,7 +114,7 @@ def fetch(request: Request) -> Response:
     url = request.url
     check_url(url)
     retrieved_at = now_instant()
-    headers = {"User-Agent": USER_AGENT}
+    headers = {"User-Agent": USER_AGENT, **dict(request.headers)}
     if request.body is not None:
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=request.body, headers=headers)  # noqa: S310 - scheme and host checked above

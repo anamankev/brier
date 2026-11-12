@@ -17,13 +17,13 @@ from dataclasses import dataclass
 from types import ModuleType
 from typing import Any
 
-from brier_services.resolution import bls, fred, noaa, nws, swpc, usgs
+from brier_services.resolution import balldontlie, bls, football_data, fred, noaa, nws, swpc, usgs
 from brier_services.resolution.fetch import Fetcher, Response, fetch
 from brier_services.resolution.sources import MalformedResponseError, Missing, Reading
 from brier_services.resolution.values import format_decimal, holds, round_half_up
 from brier_services.rules import Provider, Rulebook, instant
 
-RESOLVER_VERSION = "brier-resolver 3"  # bump with any change to fetching, parsing, or deciding
+RESOLVER_VERSION = "brier-resolver 4"  # bump with any change to fetching, parsing, or deciding
 
 SOURCES: dict[Provider, ModuleType] = {
     Provider.BLS: bls,
@@ -31,6 +31,8 @@ SOURCES: dict[Provider, ModuleType] = {
     Provider.NOAA: noaa,
     Provider.USGS: usgs,
     Provider.SWPC: swpc,
+    Provider.BALLDONTLIE: balldontlie,
+    Provider.FOOTBALL_DATA: football_data,
 }
 
 

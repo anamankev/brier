@@ -309,7 +309,7 @@
    "observation": "2026-09",
    "condition": {
     "transform": "pct_change_12m",
-    "op": "==",
+    "op": "!=",
     "threshold": "3.0"
    },
    "schedule": {
@@ -359,9 +359,9 @@
   "error": "malformed"
  },
  {
-  "name": "schema_3",
+  "name": "schema_4",
   "input": {
-   "schema": 3,
+   "schema": 4,
    "market": 101,
    "title": "CPI inflation above 3.0% in September 2026",
    "question": "Will the 12-month change in CPI-U for September 2026 be above 3.0%?",
@@ -2346,5 +2346,707 @@
    ]
   },
   "error": "void_conditions"
+ },
+ {
+  "name": "v3_game_valid",
+  "input": {
+   "schema": 3,
+   "market": 30001,
+   "title": "Lakers at Celtics: Celtics win",
+   "question": "Will the Boston Celtics beat the Los Angeles Lakers on 12 November 2026?",
+   "source": {
+    "provider": "balldontlie",
+    "series": "NBA/MARGIN",
+    "url": "https://www.balldontlie.io/",
+    "game": {
+     "id": "18447001",
+     "starts": "2026-11-13T00:30:00Z"
+    }
+   },
+   "observation": "2026-11-13",
+   "condition": {
+    "transform": "level",
+    "op": ">",
+    "threshold": "0"
+   },
+   "schedule": {
+    "open": "2026-11-10T00:30:00Z",
+    "close": "2026-11-13T00:30:00Z",
+    "release": "2026-11-13T04:30:00Z",
+    "deadline": "2026-11-20T04:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nba-lal-bos-2026-11-12",
+    "title": "Lakers at Celtics",
+    "tags": [
+     "basketball",
+     "nba"
+    ],
+    "series": "nba-games",
+    "exclusive": true,
+    "outcome": "Celtics"
+   },
+   "review": "manual"
+  },
+  "error": null,
+  "canonical": "{\"condition\":{\"op\":\">\",\"threshold\":\"0\",\"transform\":\"level\"},\"event\":{\"exclusive\":true,\"outcome\":\"Celtics\",\"series\":\"nba-games\",\"slug\":\"nba-lal-bos-2026-11-12\",\"tags\":[\"basketball\",\"nba\"],\"title\":\"Lakers at Celtics\"},\"market\":30001,\"observation\":\"2026-11-13\",\"question\":\"Will the Boston Celtics beat the Los Angeles Lakers on 12 November 2026?\",\"review\":\"manual\",\"revision\":\"first_release\",\"schedule\":{\"close\":\"2026-11-13T00:30:00Z\",\"deadline\":\"2026-11-20T04:30:00Z\",\"open\":\"2026-11-10T00:30:00Z\",\"release\":\"2026-11-13T04:30:00Z\"},\"schema\":3,\"source\":{\"game\":{\"id\":\"18447001\",\"starts\":\"2026-11-13T00:30:00Z\"},\"provider\":\"balldontlie\",\"series\":\"NBA/MARGIN\",\"url\":\"https://www.balldontlie.io/\"},\"title\":\"Lakers at Celtics: Celtics win\",\"void\":[\"no_value_by_deadline\"]}",
+  "sha256": "346801f48028fd9dc7bcad418468863e0321933ba6bd9a4c901992f5b197e823"
+ },
+ {
+  "name": "v3_draw_valid",
+  "input": {
+   "schema": 3,
+   "market": 30102,
+   "title": "Arsenal v Chelsea: draw",
+   "question": "Will Arsenal v Chelsea on 14 November 2026 end in a draw after 90 minutes?",
+   "source": {
+    "provider": "football_data",
+    "series": "PL/MARGIN",
+    "url": "https://www.football-data.org/",
+    "game": {
+     "id": "537001",
+     "starts": "2026-11-14T15:00:00Z"
+    }
+   },
+   "observation": "2026-11-14",
+   "condition": {
+    "transform": "level",
+    "op": "==",
+    "threshold": "0"
+   },
+   "schedule": {
+    "open": "2026-11-10T15:00:00Z",
+    "close": "2026-11-14T15:00:00Z",
+    "release": "2026-11-14T17:30:00Z",
+    "deadline": "2026-11-21T17:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "pl-ars-che-2026-11-14",
+    "title": "Arsenal v Chelsea",
+    "tags": [
+     "premier-league",
+     "soccer"
+    ],
+    "series": "premier-league",
+    "exclusive": true,
+    "outcome": "Draw"
+   },
+   "review": "manual"
+  },
+  "error": null,
+  "canonical": "{\"condition\":{\"op\":\"==\",\"threshold\":\"0\",\"transform\":\"level\"},\"event\":{\"exclusive\":true,\"outcome\":\"Draw\",\"series\":\"premier-league\",\"slug\":\"pl-ars-che-2026-11-14\",\"tags\":[\"premier-league\",\"soccer\"],\"title\":\"Arsenal v Chelsea\"},\"market\":30102,\"observation\":\"2026-11-14\",\"question\":\"Will Arsenal v Chelsea on 14 November 2026 end in a draw after 90 minutes?\",\"review\":\"manual\",\"revision\":\"first_release\",\"schedule\":{\"close\":\"2026-11-14T15:00:00Z\",\"deadline\":\"2026-11-21T17:30:00Z\",\"open\":\"2026-11-10T15:00:00Z\",\"release\":\"2026-11-14T17:30:00Z\"},\"schema\":3,\"source\":{\"game\":{\"id\":\"537001\",\"starts\":\"2026-11-14T15:00:00Z\"},\"provider\":\"football_data\",\"series\":\"PL/MARGIN\",\"url\":\"https://www.football-data.org/\"},\"title\":\"Arsenal v Chelsea: draw\",\"void\":[\"no_value_by_deadline\"]}",
+  "sha256": "01839cb114e7f148cf19ba4f62d72cf78d6b503caf13c79789a097c59dce904d"
+ },
+ {
+  "name": "v3_bracket_valid",
+  "input": {
+   "schema": 3,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": null,
+  "canonical": "{\"condition\":{\"op\":\"between\",\"threshold\":\"88\",\"transform\":\"level\",\"upper\":\"89\"},\"event\":{\"exclusive\":true,\"outcome\":\"88-89 °F\",\"series\":\"nyc-daily-high\",\"slug\":\"nyc-high-2027-07-04\",\"tags\":[\"daily\",\"new-york\"],\"title\":\"Highest temperature in New York on 4 July 2027?\"},\"market\":2001,\"observation\":\"2027-07-04\",\"question\":\"Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?\",\"review\":\"automatic\",\"revision\":\"first_release\",\"schedule\":{\"close\":\"2027-07-03T23:59:00Z\",\"deadline\":\"2027-08-05T00:00:00Z\",\"open\":\"2027-06-01T12:00:00Z\",\"release\":\"2027-07-06T00:00:00Z\"},\"schema\":3,\"source\":{\"provider\":\"noaa\",\"series\":\"USW00094728/TMAX\",\"url\":\"https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX\"},\"title\":\"Central Park high 88-89 °F on 4 July 2027\",\"void\":[\"no_value_by_deadline\"]}",
+  "sha256": "86f43aa9774ede8df951754852aaa407333a526ccc143a56c1b582335366dcfe"
+ },
+ {
+  "name": "v2_with_game",
+  "input": {
+   "schema": 2,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX",
+    "game": {
+     "id": "18447001",
+     "starts": "2026-11-13T00:30:00Z"
+    }
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": "schema_fields"
+ },
+ {
+  "name": "v2_equal_op",
+  "input": {
+   "schema": 2,
+   "market": 2002,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX"
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "==",
+    "threshold": "90"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "exclusive": true,
+    "outcome": "90 °F or higher"
+   },
+   "review": "manual"
+  },
+  "error": "schema_fields"
+ },
+ {
+  "name": "v3_game_missing",
+  "input": {
+   "schema": 3,
+   "market": 30001,
+   "title": "Lakers at Celtics: Celtics win",
+   "question": "Will the Boston Celtics beat the Los Angeles Lakers on 12 November 2026?",
+   "source": {
+    "provider": "balldontlie",
+    "series": "NBA/MARGIN",
+    "url": "https://www.balldontlie.io/"
+   },
+   "observation": "2026-11-13",
+   "condition": {
+    "transform": "level",
+    "op": ">",
+    "threshold": "0"
+   },
+   "schedule": {
+    "open": "2026-11-10T00:30:00Z",
+    "close": "2026-11-13T00:30:00Z",
+    "release": "2026-11-13T04:30:00Z",
+    "deadline": "2026-11-20T04:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nba-lal-bos-2026-11-12",
+    "title": "Lakers at Celtics",
+    "tags": [
+     "basketball",
+     "nba"
+    ],
+    "series": "nba-games",
+    "exclusive": true,
+    "outcome": "Celtics"
+   },
+   "review": "manual"
+  },
+  "error": "game"
+ },
+ {
+  "name": "v3_game_on_daily_series",
+  "input": {
+   "schema": 3,
+   "market": 2001,
+   "title": "Central Park high 88-89 °F on 4 July 2027",
+   "question": "Will the maximum temperature at Central Park on 4 July 2027 be between 88 and 89 °F?",
+   "source": {
+    "provider": "noaa",
+    "series": "USW00094728/TMAX",
+    "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094728&dataTypes=TMAX",
+    "game": {
+     "id": "18447001",
+     "starts": "2026-11-13T00:30:00Z"
+    }
+   },
+   "observation": "2027-07-04",
+   "condition": {
+    "transform": "level",
+    "op": "between",
+    "threshold": "88",
+    "upper": "89"
+   },
+   "schedule": {
+    "open": "2027-06-01T12:00:00Z",
+    "close": "2027-07-03T23:59:00Z",
+    "release": "2027-07-06T00:00:00Z",
+    "deadline": "2027-08-05T00:00:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nyc-high-2027-07-04",
+    "title": "Highest temperature in New York on 4 July 2027?",
+    "tags": [
+     "daily",
+     "new-york"
+    ],
+    "series": "nyc-daily-high",
+    "exclusive": true,
+    "outcome": "88-89 °F"
+   },
+   "review": "automatic"
+  },
+  "error": "game"
+ },
+ {
+  "name": "v3_game_id_bad_char",
+  "input": {
+   "schema": 3,
+   "market": 30001,
+   "title": "Lakers at Celtics: Celtics win",
+   "question": "Will the Boston Celtics beat the Los Angeles Lakers on 12 November 2026?",
+   "source": {
+    "provider": "balldontlie",
+    "series": "NBA/MARGIN",
+    "url": "https://www.balldontlie.io/",
+    "game": {
+     "id": "184 47",
+     "starts": "2026-11-13T00:30:00Z"
+    }
+   },
+   "observation": "2026-11-13",
+   "condition": {
+    "transform": "level",
+    "op": ">",
+    "threshold": "0"
+   },
+   "schedule": {
+    "open": "2026-11-10T00:30:00Z",
+    "close": "2026-11-13T00:30:00Z",
+    "release": "2026-11-13T04:30:00Z",
+    "deadline": "2026-11-20T04:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nba-lal-bos-2026-11-12",
+    "title": "Lakers at Celtics",
+    "tags": [
+     "basketball",
+     "nba"
+    ],
+    "series": "nba-games",
+    "exclusive": true,
+    "outcome": "Celtics"
+   },
+   "review": "manual"
+  },
+  "error": "game"
+ },
+ {
+  "name": "v3_game_id_too_long",
+  "input": {
+   "schema": 3,
+   "market": 30001,
+   "title": "Lakers at Celtics: Celtics win",
+   "question": "Will the Boston Celtics beat the Los Angeles Lakers on 12 November 2026?",
+   "source": {
+    "provider": "balldontlie",
+    "series": "NBA/MARGIN",
+    "url": "https://www.balldontlie.io/",
+    "game": {
+     "id": "999999999999999999999999999999999",
+     "starts": "2026-11-13T00:30:00Z"
+    }
+   },
+   "observation": "2026-11-13",
+   "condition": {
+    "transform": "level",
+    "op": ">",
+    "threshold": "0"
+   },
+   "schedule": {
+    "open": "2026-11-10T00:30:00Z",
+    "close": "2026-11-13T00:30:00Z",
+    "release": "2026-11-13T04:30:00Z",
+    "deadline": "2026-11-20T04:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nba-lal-bos-2026-11-12",
+    "title": "Lakers at Celtics",
+    "tags": [
+     "basketball",
+     "nba"
+    ],
+    "series": "nba-games",
+    "exclusive": true,
+    "outcome": "Celtics"
+   },
+   "review": "manual"
+  },
+  "error": "game"
+ },
+ {
+  "name": "v3_game_start_not_instant",
+  "input": {
+   "schema": 3,
+   "market": 30001,
+   "title": "Lakers at Celtics: Celtics win",
+   "question": "Will the Boston Celtics beat the Los Angeles Lakers on 12 November 2026?",
+   "source": {
+    "provider": "balldontlie",
+    "series": "NBA/MARGIN",
+    "url": "https://www.balldontlie.io/",
+    "game": {
+     "id": "18447001",
+     "starts": "2026-11-13T00:30Z"
+    }
+   },
+   "observation": "2026-11-13",
+   "condition": {
+    "transform": "level",
+    "op": ">",
+    "threshold": "0"
+   },
+   "schedule": {
+    "open": "2026-11-10T00:30:00Z",
+    "close": "2026-11-13T00:30:00Z",
+    "release": "2026-11-13T04:30:00Z",
+    "deadline": "2026-11-20T04:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nba-lal-bos-2026-11-12",
+    "title": "Lakers at Celtics",
+    "tags": [
+     "basketball",
+     "nba"
+    ],
+    "series": "nba-games",
+    "exclusive": true,
+    "outcome": "Celtics"
+   },
+   "review": "manual"
+  },
+  "error": "game"
+ },
+ {
+  "name": "v3_observation_not_start_date",
+  "input": {
+   "schema": 3,
+   "market": 30001,
+   "title": "Lakers at Celtics: Celtics win",
+   "question": "Will the Boston Celtics beat the Los Angeles Lakers on 12 November 2026?",
+   "source": {
+    "provider": "balldontlie",
+    "series": "NBA/MARGIN",
+    "url": "https://www.balldontlie.io/",
+    "game": {
+     "id": "18447001",
+     "starts": "2026-11-13T00:30:00Z"
+    }
+   },
+   "observation": "2026-11-12",
+   "condition": {
+    "transform": "level",
+    "op": ">",
+    "threshold": "0"
+   },
+   "schedule": {
+    "open": "2026-11-10T00:30:00Z",
+    "close": "2026-11-13T00:30:00Z",
+    "release": "2026-11-13T04:30:00Z",
+    "deadline": "2026-11-20T04:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nba-lal-bos-2026-11-12",
+    "title": "Lakers at Celtics",
+    "tags": [
+     "basketball",
+     "nba"
+    ],
+    "series": "nba-games",
+    "exclusive": true,
+    "outcome": "Celtics"
+   },
+   "review": "manual"
+  },
+  "error": "game"
+ },
+ {
+  "name": "v3_close_after_start",
+  "input": {
+   "schema": 3,
+   "market": 30001,
+   "title": "Lakers at Celtics: Celtics win",
+   "question": "Will the Boston Celtics beat the Los Angeles Lakers on 12 November 2026?",
+   "source": {
+    "provider": "balldontlie",
+    "series": "NBA/MARGIN",
+    "url": "https://www.balldontlie.io/",
+    "game": {
+     "id": "18447001",
+     "starts": "2026-11-13T00:30:00Z"
+    }
+   },
+   "observation": "2026-11-13",
+   "condition": {
+    "transform": "level",
+    "op": ">",
+    "threshold": "0"
+   },
+   "schedule": {
+    "open": "2026-11-10T00:30:00Z",
+    "close": "2026-11-13T00:31:00Z",
+    "release": "2026-11-13T04:30:00Z",
+    "deadline": "2026-11-20T04:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nba-lal-bos-2026-11-12",
+    "title": "Lakers at Celtics",
+    "tags": [
+     "basketball",
+     "nba"
+    ],
+    "series": "nba-games",
+    "exclusive": true,
+    "outcome": "Celtics"
+   },
+   "review": "manual"
+  },
+  "error": "game"
+ },
+ {
+  "name": "v3_release_at_start",
+  "input": {
+   "schema": 3,
+   "market": 30001,
+   "title": "Lakers at Celtics: Celtics win",
+   "question": "Will the Boston Celtics beat the Los Angeles Lakers on 12 November 2026?",
+   "source": {
+    "provider": "balldontlie",
+    "series": "NBA/MARGIN",
+    "url": "https://www.balldontlie.io/",
+    "game": {
+     "id": "18447001",
+     "starts": "2026-11-13T00:30:00Z"
+    }
+   },
+   "observation": "2026-11-13",
+   "condition": {
+    "transform": "level",
+    "op": ">",
+    "threshold": "0"
+   },
+   "schedule": {
+    "open": "2026-11-10T00:30:00Z",
+    "close": "2026-11-13T00:00:00Z",
+    "release": "2026-11-13T00:30:00Z",
+    "deadline": "2026-11-20T04:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nba-lal-bos-2026-11-12",
+    "title": "Lakers at Celtics",
+    "tags": [
+     "basketball",
+     "nba"
+    ],
+    "series": "nba-games",
+    "exclusive": true,
+    "outcome": "Celtics"
+   },
+   "review": "manual"
+  },
+  "error": "game"
+ },
+ {
+  "name": "v3_game_unknown_field",
+  "input": {
+   "schema": 3,
+   "market": 30001,
+   "title": "Lakers at Celtics: Celtics win",
+   "question": "Will the Boston Celtics beat the Los Angeles Lakers on 12 November 2026?",
+   "source": {
+    "provider": "balldontlie",
+    "series": "NBA/MARGIN",
+    "url": "https://www.balldontlie.io/",
+    "game": {
+     "id": "18447001",
+     "starts": "2026-11-13T00:30:00Z",
+     "venue": "TD Garden"
+    }
+   },
+   "observation": "2026-11-13",
+   "condition": {
+    "transform": "level",
+    "op": ">",
+    "threshold": "0"
+   },
+   "schedule": {
+    "open": "2026-11-10T00:30:00Z",
+    "close": "2026-11-13T00:30:00Z",
+    "release": "2026-11-13T04:30:00Z",
+    "deadline": "2026-11-20T04:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nba-lal-bos-2026-11-12",
+    "title": "Lakers at Celtics",
+    "tags": [
+     "basketball",
+     "nba"
+    ],
+    "series": "nba-games",
+    "exclusive": true,
+    "outcome": "Celtics"
+   },
+   "review": "manual"
+  },
+  "error": "malformed"
+ },
+ {
+  "name": "v3_automatic_review",
+  "input": {
+   "schema": 3,
+   "market": 30001,
+   "title": "Lakers at Celtics: Celtics win",
+   "question": "Will the Boston Celtics beat the Los Angeles Lakers on 12 November 2026?",
+   "source": {
+    "provider": "balldontlie",
+    "series": "NBA/MARGIN",
+    "url": "https://www.balldontlie.io/",
+    "game": {
+     "id": "18447001",
+     "starts": "2026-11-13T00:30:00Z"
+    }
+   },
+   "observation": "2026-11-13",
+   "condition": {
+    "transform": "level",
+    "op": ">",
+    "threshold": "0"
+   },
+   "schedule": {
+    "open": "2026-11-10T00:30:00Z",
+    "close": "2026-11-13T00:30:00Z",
+    "release": "2026-11-13T04:30:00Z",
+    "deadline": "2026-11-20T04:30:00Z"
+   },
+   "revision": "first_release",
+   "void": [
+    "no_value_by_deadline"
+   ],
+   "event": {
+    "slug": "nba-lal-bos-2026-11-12",
+    "title": "Lakers at Celtics",
+    "tags": [
+     "basketball",
+     "nba"
+    ],
+    "series": "nba-games",
+    "exclusive": true,
+    "outcome": "Celtics"
+   },
+   "review": "automatic"
+  },
+  "error": "review"
  }
 ]

@@ -23,9 +23,11 @@ use crate::time::{DAY, PeriodKind, Unix};
 
 /// The newest rulebook schema version this code reads. Schema 1 rulebooks stay valid, with
 /// the same canonical form and hash.
-pub const SCHEMA: u32 = 2;
+pub const SCHEMA: u32 = 3;
 /// The oldest schema version this code reads.
 pub const MIN_SCHEMA: u32 = 1;
+/// Longest provider game identifier accepted.
+pub const MAX_GAME_ID_CHARS: usize = 32;
 /// The longest event slug, series slug, and tag, in characters.
 pub const MAX_SLUG_CHARS: usize = 80;
 /// The most tags an event may have.
@@ -58,6 +60,11 @@ pub enum Provider {
     Usgs,
     /// NOAA's Space Weather Prediction Center.
     Swpc,
+    /// balldontlie: NBA and NFL schedules and final scores (schema 3).
+    Balldontlie,
+    /// football-data.org: soccer schedules and full-time scores (schema 3).
+    #[serde(rename = "football_data")]
+    FootballData,
 }
 
 /// How the resolved value is derived from the series.
@@ -90,6 +97,9 @@ pub enum Op {
     /// Between `threshold` and `upper`, both inclusive (schema 2).
     #[serde(rename = "between")]
     Between,
+    /// Exactly equal (schema 3), such as a drawn match's margin of 0.
+    #[serde(rename = "==")]
+    Equal,
 }
 
 /// Who confirms a proposed resolution (schema 2).
@@ -152,6 +162,21 @@ pub struct Source {
     pub series: String,
     /// The public page for the series; must equal the registry's.
     pub url: String,
+    /// The one game a per-game series' market is about (schema 3): required for those series
+    /// and absent otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game: Option<Game>,
+}
+
+/// A scheduled game (schema 3).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Game {
+    /// The provider's game identifier: 1 to 32 ASCII letters, digits, `-` or `_`.
+    pub id: String,
+    /// The scheduled start, a UTC instant. Trading closes by then, the observation is its UTC
+    /// date, and the result is released after it.
+    pub starts: String,
 }
 
 /// The YES condition: `value op threshold`.
@@ -230,6 +255,7 @@ pub struct Measure {
 
 /// A series that markets may resolve on. Only registry series are accepted: each one has had
 /// its terms read (`docs/data-licenses.md`) and has a resolver.
+#[allow(clippy::struct_excessive_bools)] // independent yes/no facts about a source
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Series {
     /// The provider.
@@ -255,6 +281,8 @@ pub struct Series {
     /// The resolver computes the outcome from the source without judgement, so a second fetch
     /// can confirm it and `review = "automatic"` is allowed.
     pub machine_checkable: bool,
+    /// Each market is about one scheduled game named in `source.game` (schema 3).
+    pub per_game: bool,
 }
 
 const PERCENT_1DP: Measure = Measure {
@@ -272,6 +300,17 @@ const FAHRENHEIT: Measure = Measure {
     transform: Transform::Level,
     precision: 0,
     unit: "°F",
+};
+
+const POINTS: Measure = Measure {
+    transform: Transform::Level,
+    precision: 0,
+    unit: "points",
+};
+const GOALS: Measure = Measure {
+    transform: Transform::Level,
+    precision: 0,
+    unit: "goals",
 };
 
 /// Every series markets may resolve on.
@@ -298,6 +337,7 @@ pub const REGISTRY: &[Series] = &[
         live: false,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Bls,
@@ -310,6 +350,7 @@ pub const REGISTRY: &[Series] = &[
         live: false,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Fred,
@@ -322,6 +363,7 @@ pub const REGISTRY: &[Series] = &[
         live: false,
         released_after_period: false,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Fred,
@@ -334,6 +376,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Noaa,
@@ -350,6 +393,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Nws,
@@ -362,6 +406,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Nws,
@@ -374,6 +419,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Nws,
@@ -386,6 +432,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Nws,
@@ -398,6 +445,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Nws,
@@ -410,6 +458,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Nws,
@@ -422,6 +471,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Nws,
@@ -434,6 +484,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Nws,
@@ -446,6 +497,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Nws,
@@ -458,6 +510,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Nws,
@@ -470,6 +523,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Nws,
@@ -482,6 +536,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Nws,
@@ -494,6 +549,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Usgs,
@@ -510,6 +566,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Usgs,
@@ -526,6 +583,7 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
     },
     Series {
         provider: Provider::Swpc,
@@ -542,6 +600,98 @@ pub const REGISTRY: &[Series] = &[
         live: true,
         released_after_period: true,
         machine_checkable: true,
+        per_game: false,
+    },
+    Series {
+        provider: Provider::Balldontlie,
+        id: "NBA/MARGIN",
+        name: "NBA game final margin: home points minus away points, including overtime",
+        url: "https://www.balldontlie.io/",
+        kind: PeriodKind::Day,
+        measures: &[POINTS],
+        category: "sports",
+        live: false,
+        released_after_period: false,
+        machine_checkable: false,
+        per_game: true,
+    },
+    Series {
+        provider: Provider::Balldontlie,
+        id: "NFL/MARGIN",
+        name: "NFL game final margin: home points minus away points, including overtime",
+        url: "https://www.balldontlie.io/",
+        kind: PeriodKind::Day,
+        measures: &[POINTS],
+        category: "sports",
+        live: false,
+        released_after_period: false,
+        machine_checkable: false,
+        per_game: true,
+    },
+    Series {
+        provider: Provider::FootballData,
+        id: "PL/MARGIN",
+        name: "Premier League match full-time margin: home goals minus away goals",
+        url: "https://www.football-data.org/",
+        kind: PeriodKind::Day,
+        measures: &[GOALS],
+        category: "sports",
+        live: false,
+        released_after_period: false,
+        machine_checkable: false,
+        per_game: true,
+    },
+    Series {
+        provider: Provider::FootballData,
+        id: "PD/MARGIN",
+        name: "La Liga match full-time margin: home goals minus away goals",
+        url: "https://www.football-data.org/",
+        kind: PeriodKind::Day,
+        measures: &[GOALS],
+        category: "sports",
+        live: false,
+        released_after_period: false,
+        machine_checkable: false,
+        per_game: true,
+    },
+    Series {
+        provider: Provider::FootballData,
+        id: "SA/MARGIN",
+        name: "Serie A match full-time margin: home goals minus away goals",
+        url: "https://www.football-data.org/",
+        kind: PeriodKind::Day,
+        measures: &[GOALS],
+        category: "sports",
+        live: false,
+        released_after_period: false,
+        machine_checkable: false,
+        per_game: true,
+    },
+    Series {
+        provider: Provider::FootballData,
+        id: "BL1/MARGIN",
+        name: "Bundesliga match full-time margin: home goals minus away goals",
+        url: "https://www.football-data.org/",
+        kind: PeriodKind::Day,
+        measures: &[GOALS],
+        category: "sports",
+        live: false,
+        released_after_period: false,
+        machine_checkable: false,
+        per_game: true,
+    },
+    Series {
+        provider: Provider::FootballData,
+        id: "FL1/MARGIN",
+        name: "Ligue 1 match full-time margin: home goals minus away goals",
+        url: "https://www.football-data.org/",
+        kind: PeriodKind::Day,
+        measures: &[GOALS],
+        category: "sports",
+        live: false,
+        released_after_period: false,
+        machine_checkable: false,
+        per_game: true,
     },
 ];
 
@@ -588,6 +738,10 @@ pub enum RuleError {
     Event,
     /// Automatic review for a series that is not machine-checkable.
     Review,
+    /// `source.game` missing for a per-game series or present for another; a malformed game
+    /// ID or start; an observation that is not the start's UTC date; trading that closes after
+    /// the start, or a release before it.
+    Game,
     /// The rulebook has no canonical JSON form (cannot happen for a parsed rulebook).
     Canonical,
 }
@@ -617,6 +771,7 @@ impl RuleError {
             Self::VoidConditions => "void_conditions",
             Self::Event => "event",
             Self::Review => "review",
+            Self::Game => "game",
             Self::Canonical => "canonical",
         }
     }
@@ -704,6 +859,29 @@ fn threshold_ok(s: &str, precision: usize) -> bool {
     int_ok && frac_ok && !(s.starts_with('-') && zero)
 }
 
+/// The game rules (schema 3): a per-game series names exactly one well-formed game, observed
+/// on its UTC start date, traded only before it starts and released after.
+fn game_ok(series: Series, game: Option<&Game>, observation: &str, times: &Times) -> bool {
+    match (series.per_game, game) {
+        (false, None) => true,
+        (true, Some(g)) => {
+            let id_ok = (1..=MAX_GAME_ID_CHARS).contains(&g.id.len())
+                && g.id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+            let Some(starts) = time::instant(&g.starts) else {
+                return false;
+            };
+            let date = time::format_instant(starts.div_euclid(DAY).saturating_mul(DAY));
+            id_ok
+                && date.is_some_and(|d| d.get(..10) == Some(observation))
+                && times.close <= starts
+                && times.release > starts
+        }
+        _ => false,
+    }
+}
+
 /// A slug: lowercase ASCII letters, digits, and single hyphens inside, at most
 /// [`MAX_SLUG_CHARS`].
 fn slug_ok(s: &str) -> bool {
@@ -776,6 +954,7 @@ impl Validated {
             Op::Below => (None, t.and_then(|t| t.checked_sub(1))),
             Op::AtMost => (None, t),
             Op::Between => (t, c.upper.as_deref().and_then(|u| scaled(u, p))),
+            Op::Equal => (t, t),
         }
     }
 }
@@ -836,7 +1015,8 @@ impl Rulebook {
             v2_fields == [false, false] && self.condition.op != Op::Between
         } else {
             v2_fields == [true, true]
-        };
+        } && (self.schema >= 3
+            || (self.source.game.is_none() && self.condition.op != Op::Equal));
         if !fields_ok {
             return Err(RuleError::SchemaFields);
         }
@@ -910,6 +1090,9 @@ impl Rulebook {
         if self.review == Some(Review::Automatic) && !series.machine_checkable {
             return Err(RuleError::Review);
         }
+        if !game_ok(series, self.source.game.as_ref(), &self.observation, &times) {
+            return Err(RuleError::Game);
+        }
         let value = serde_json::to_value(&self).map_err(|_| RuleError::Canonical)?;
         let canonical = canonical::canonical(&value).map_err(|_| RuleError::Canonical)?;
         let hash: [u8; 32] = Sha256::digest(canonical.as_bytes()).into();
@@ -945,6 +1128,7 @@ impl Validated {
             Op::Below => "below",
             Op::AtMost => "at or below",
             Op::Between => "between",
+            Op::Equal => "exactly",
         };
         let period = match self.series.kind {
             PeriodKind::Month => "the month",

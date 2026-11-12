@@ -125,6 +125,7 @@ fn registry_file_matches_the_code() {
                 "live": s.live,
                 "released_after_period": s.released_after_period,
                 "machine_checkable": s.machine_checkable,
+                "per_game": s.per_game,
             })
         })
         .collect();

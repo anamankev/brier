@@ -28,8 +28,9 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-SCHEMA = 2  # the newest schema read; schema 1 rulebooks stay valid with the same hash
+SCHEMA = 3  # the newest schema read; older rulebooks stay valid with the same hash
 MIN_SCHEMA = 1
+MAX_GAME_ID_CHARS = 32
 MAX_SLUG_CHARS = 80
 MAX_TAGS = 8
 MAX_OUTCOME_CHARS = 40
@@ -57,6 +58,8 @@ class Provider(StrEnum):
     NWS = "nws"
     USGS = "usgs"
     SWPC = "swpc"
+    BALLDONTLIE = "balldontlie"
+    FOOTBALL_DATA = "football_data"
 
 
 class Transform(StrEnum):
@@ -70,6 +73,7 @@ class Op(StrEnum):
     BELOW = "<"
     AT_MOST = "<="
     BETWEEN = "between"
+    EQUAL = "=="
 
 
 class Review(StrEnum):
@@ -104,6 +108,7 @@ class Series:
     live: bool
     released_after_period: bool
     machine_checkable: bool = True
+    per_game: bool = False
 
 
 _NOAA_URL = (
@@ -336,6 +341,44 @@ REGISTRY: tuple[Series, ...] = (
         live=True,
         released_after_period=True,
     ),
+    *(
+        Series(
+            Provider.BALLDONTLIE,
+            f"{league}/MARGIN",
+            f"{league} game final margin: home points minus away points, including overtime",
+            "https://www.balldontlie.io/",
+            PeriodKind.DAY,
+            (Measure(Transform.LEVEL, 0, "points"),),
+            "sports",
+            live=False,
+            released_after_period=False,
+            machine_checkable=False,
+            per_game=True,
+        )
+        for league in ("NBA", "NFL")
+    ),
+    *(
+        Series(
+            Provider.FOOTBALL_DATA,
+            f"{code}/MARGIN",
+            f"{name} match full-time margin: home goals minus away goals",
+            "https://www.football-data.org/",
+            PeriodKind.DAY,
+            (Measure(Transform.LEVEL, 0, "goals"),),
+            "sports",
+            live=False,
+            released_after_period=False,
+            machine_checkable=False,
+            per_game=True,
+        )
+        for code, name in (
+            ("PL", "Premier League"),
+            ("PD", "La Liga"),
+            ("SA", "Serie A"),
+            ("BL1", "Bundesliga"),
+            ("FL1", "Ligue 1"),
+        )
+    ),
 )
 
 
@@ -535,6 +578,7 @@ class Rulebook:
     op: Op
     threshold: str
     upper: str | None
+    game: dict[str, str] | None
     event: dict[str, Any] | None
     review: Review | None
     times: Times
@@ -566,7 +610,13 @@ def validate(value: object) -> Rulebook:
     market = _u32(top["market"], "market")
     title = _str(top["title"], "title")
     question = _str(top["question"], "question")
-    source = _object(top["source"], ("provider", "series", "url"), "source")
+    source = _object(top["source"], ("provider", "series", "url"), "source", optional=("game",))
+    game = None
+    if "game" in source:
+        fields = _object(source["game"], ("id", "starts"), "source.game")
+        game = {k: _str(fields[k], f"source.game.{k}") for k in ("id", "starts")}
+        source = {**source, "game": game}
+    top = {**top, "source": source}
     provider = _enum(Provider, source["provider"], "source.provider")
     series_id = _str(source["series"], "source.series")
     url = _str(source["url"], "source.url")
@@ -612,8 +662,10 @@ def validate(value: object) -> Rulebook:
     if not MIN_SCHEMA <= schema <= SCHEMA:
         raise RuleError("unsupported_schema")
     has_v2 = (event is not None, review is not None)
-    if (schema == 1 and (has_v2 != (False, False) or op is Op.BETWEEN)) or (
-        schema == 2 and has_v2 != (True, True)
+    if (
+        (schema == 1 and (has_v2 != (False, False) or op is Op.BETWEEN))
+        or (schema >= 2 and has_v2 != (True, True))
+        or (schema < 3 and (game is not None or op is Op.EQUAL))
     ):
         raise RuleError("schema_fields")
     if market == 0:
@@ -672,6 +724,8 @@ def validate(value: object) -> Rulebook:
         raise RuleError("event")
     if review is Review.AUTOMATIC and not series.machine_checkable:
         raise RuleError("review")
+    if not _game_ok(series, game, observation, times):
+        raise RuleError("game")
     text = canonical(top)
     return Rulebook(
         raw=top,
@@ -683,6 +737,7 @@ def validate(value: object) -> Rulebook:
         op=op,
         threshold=threshold,
         upper=upper,
+        game=game,
         event=event,
         review=review,
         times=times,
@@ -690,6 +745,24 @@ def validate(value: object) -> Rulebook:
         canonical=text,
         hash=hashlib.sha256(text.encode()).hexdigest(),
     )
+
+
+def _game_ok(series: Series, game: dict[str, str] | None, observation: str, times: Times) -> bool:
+    """A per-game series names one well-formed game, observed on its UTC start date, traded
+    only before it starts and released after (schema 3)."""
+    if not series.per_game:
+        return game is None
+    if game is None:
+        return False
+    gid = game["id"]
+    id_ok = 1 <= len(gid) <= MAX_GAME_ID_CHARS and all(
+        c.isascii() and (c.isalnum() or c in "-_") for c in gid
+    )
+    starts = instant(game["starts"])
+    if starts is None:
+        return False
+    day = dt.datetime.fromtimestamp(starts, dt.UTC).date().isoformat()
+    return id_ok and day == observation and times.close <= starts and times.release > starts
 
 
 def load_toml(path: Path) -> Rulebook:
