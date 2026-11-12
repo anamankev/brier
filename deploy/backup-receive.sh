@@ -4,6 +4,6 @@
 set -euo pipefail
 NAME=${SSH_ORIGINAL_COMMAND:-}
 [[ "$NAME" =~ ^brier-[0-9]{8}T[0-9]{6}Z\.tar\.enc$ ]] || { echo "refused" >&2; exit 1; }
-cat > "/var/backups/brier/$NAME.part"
+umask 077; cat > "/var/backups/brier/$NAME.part"
 mv "/var/backups/brier/$NAME.part" "/var/backups/brier/$NAME"
 find /var/backups/brier -name 'brier-*.tar.enc' -mtime +30 -delete

@@ -39,6 +39,11 @@ fi
 
 # The firewall: web traffic in.
 for p in 80 443; do iptables -C INPUT -p tcp --dport $p -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport $p -j ACCEPT; done
+# SSH only from the private network: the operator reaches this server through brier-db.
+iptables -C INPUT -s 10.0.0.0/16 -p tcp --dport 22 -j ACCEPT 2>/dev/null || iptables -I INPUT -s 10.0.0.0/16 -p tcp --dport 22 -j ACCEPT
+while iptables -C INPUT -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT 2>/dev/null; do
+  iptables -D INPUT -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT
+done
 netfilter-persistent save >/dev/null
 
 id brier >/dev/null 2>&1 || useradd --system --home /opt/brier --shell /usr/sbin/nologin brier
@@ -76,5 +81,9 @@ install -m 644 "$STAGE"/deploy/systemd/brier-web.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable -q brier-web caddy
 systemctl restart brier-web caddy
+# SSH: keys only, no root login, no X11 (deploy/sshd-hardening.conf). Checked before reloading,
+# so a bad file never locks the operator out.
+install -m 644 "$STAGE"/deploy/sshd-hardening.conf /etc/ssh/sshd_config.d/10-brier.conf
+sshd -t && systemctl reload ssh
 rm -rf "$STAGE"
 echo "brier-web: $(cat /opt/brier/COMMIT) at https://$BRIER_HOST"

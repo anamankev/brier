@@ -58,5 +58,9 @@ for _ in $(seq 1 30); do curl -sf http://127.0.0.1:8080/v1/health >/dev/null && 
 curl -sf http://127.0.0.1:8080/v1/health
 echo
 systemctl restart brier-operator
+# SSH: keys only, no root login, no X11 (deploy/sshd-hardening.conf). Checked before reloading,
+# so a bad file never locks the operator out.
+install -m 644 "$STAGE"/deploy/sshd-hardening.conf /etc/ssh/sshd_config.d/10-brier.conf
+sshd -t && systemctl reload ssh
 rm -rf "$STAGE"
 echo "brier-db: $(cat /opt/brier/COMMIT)"
