@@ -130,6 +130,27 @@ Checked on the live servers on 12 November 2026.
 | Capacity | A flood of requests on a 1 GB server | Per-address rate limits in the gateway; 2 GB of swap; systemd restarts any crashed service | load test in `docs/notes/load-test.md` | No rate limiting in Caddy for the website's own pages, and a distributed flood would exhaust the micro servers. There is no CDN |
 | Sports settlement | Paying out on a wrong score | Every sports result is proposed from the source and confirmed by the admin against the league's official result, as balldontlie's terms require | `docs/data-licenses.md` | Payouts wait until the admin is available |
 
+## Security review (12 November 2026)
+
+A full review against the owner's 27-point checklist. Each row is a change made in the review; the checks that found nothing to change are in the private report.
+
+| Asset | Threat | Mitigation | Evidence | Gap |
+|---|---|---|---|---|
+| Pages | Cross-site scripting through injected markup | A Content Security Policy with a fresh nonce per request and `'strict-dynamic'`: only the app's own scripts run. Inline handlers, injected `<script>` tags and plugins are refused. React escapes all text, and nothing renders raw HTML | `web/proxy.ts`; `e2e/security.spec.ts` (an injected `onerror` handler does not run) | Styles keep `'unsafe-inline'` because React writes style attributes. Styles cannot run code |
+| Sessions in the browser | Cookie injection from a sibling domain or plain HTTP | The cookie is now `__Host-brier_session`: the browser accepts it only as Secure, host-only and site-wide. It is also httpOnly and SameSite=Strict, and is removed with the same attributes | `e2e/security.spec.ts` | — |
+| Mutating requests | Cross-site request forgery | Three defences: the SameSite=Strict cookie, the custom request header, and an `Origin` check. A browser-sent origin must be this site | `sameSiteWrite` in `web/lib/server.ts`; `e2e/security.spec.ts` | — |
+| The web proxy | Steering `/api/v1/*` outside the gateway's `/v1` | Dot and empty path segments are refused, and URL parsing folds encoded dots before the route | `e2e/security.spec.ts` | — |
+| TOTP | A stolen password paired with guessed codes from many addresses | At most 5 code checks a minute per account (burst 10), whatever the address. The code space is a million | `tests/accounts.rs` `totp_guesses_are_limited_per_account` | Someone who knows the password can use up the owner's attempts for a minute at a time |
+| Monitoring | Attacks going unnoticed | Every 401, 403 and 429 response is logged as a `security` line: path, status, and a keyed hash of the client address, never the address itself. Lines are capped at 30 a minute per address, so the log cannot be flooded | `security_line` unit tests in `crates/gateway/src/lib.rs`; `journalctl -u brier-gateway | grep '"security"'` | Nothing alerts on a spike yet; the log is read by hand |
+| Administration | An admin endpoint reached by a non-admin | Every `/v1/admin/*` endpoint checks the role before reading the request. A test calls each one as a trader (403) and signed out (401) | `tests/rest.rs` admin sweep | — |
+| Audit log | Rewriting or deleting the record of admin actions | A database trigger: a row may be completed once, with its outcome, and then never changed. Deleting rows and truncating the table are refused | migration `0014_audit_append_only.sql`; `tests/rest.rs` | The application's role owns the table and could drop the trigger. A stolen database password still defeats it |
+| Responses | Sniffing, framing, and leaking to other sites | Every response gets HSTS (with subdomains), `nosniff`, `X-Frame-Options: DENY`, a same-origin referrer policy and a Permissions-Policy, from Caddy, the API included. Pages also get cross-origin opener and resource policies. Caddy's `Server` and `Via` headers are removed | `deploy/Caddyfile`; `e2e/security.spec.ts`; checked live | HSTS preload is not possible on an sslip.io name |
+| Configuration | A half-configured server, such as one with no proxy key and so no per-address limits | The web server refuses to start in production without valid gateway, WebSocket (`wss:`) and site (`https:`) URLs and a proxy key of 32 or more characters. The gateway already refused a bad TOTP key, proxy key or database URL | `web/instrumentation.ts`; `e2e/security.spec.ts` | — |
+| The servers | SSH abuse | Both servers have no root login, no X11 forwarding, 3 tries per connection and keys only. brier-web accepts SSH only from the private network | `deploy/sshd-hardening.conf`; `deploy/install-*.sh` | — |
+| Backups | Reading another file on brier-web | Backups are written mode 600 | `deploy/backup-receive.sh` | — |
+| Dependencies | Known-vulnerable releases | `rustix` updated to 1.1.6 (RUSTSEC-2026-0486, used only by tests through `tempfile`). `minimatch` pinned to 11.0.3 (GHSA-g3hv-75wg-m249, ESLint only). No other known advisories in Rust, Python or npm. Every version is at least 14 days old | `security.yml`; `scripts/dependency_age.py` | — |
+| Disclosure | A finder with no safe way to report | `SECURITY.md` and `/.well-known/security.txt` point to GitHub's private vulnerability reporting | `SECURITY.md` | — |
+
 ## Components to come (from SPEC §13), owned by their gates
 
 | Gate | Threat | Planned mitigation |
