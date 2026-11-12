@@ -1,40 +1,23 @@
 import type { NextConfig } from "next";
 
-// The gateway's WebSocket, which the browser connects to directly for public market data. The
-// security headers are fixed at build time, so set BRIER_WS_URL when building as well as when
-// serving (web/README.md).
-const ws = process.env.BRIER_WS_URL ?? "ws://127.0.0.1:8080/v1/ws";
-
 const config: NextConfig = {
   // A self-contained server bundle for deployment (docs/runbooks/deploy.md); the default build
   // (tests, local runs) is unchanged.
   output: process.env.BRIER_STANDALONE === "1" ? "standalone" : undefined,
   poweredByHeader: false,
   reactStrictMode: true,
+  // The Content Security Policy is set per request, with a nonce, in proxy.ts.
   async headers() {
     return [
       {
         source: "/:path*",
         headers: [
-          {
-            key: "Content-Security-Policy",
-            // Next.js inlines its bootstrap scripts, so scripts need 'unsafe-inline' until the
-            // app uses per-request nonces (docs/threat-model.md, G6).
-            value: [
-              "default-src 'self'",
-              // React's development build needs eval for its debugging tools; production never does.
-              `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'"}`,
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data:",
-              `connect-src 'self' ${ws}`,
-              "frame-ancestors 'none'",
-              "base-uri 'self'",
-              "form-action 'self'",
-            ].join("; "),
-          },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "same-origin" },
           { key: "X-Frame-Options", value: "DENY" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()" },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
         ],
       },
     ];

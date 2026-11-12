@@ -1,0 +1,5 @@
+Contact: https://github.com/anamankev/brier/security/advisories/new
+Expires: 2027-11-12T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://132-145-162-222.sslip.io/.well-known/security.txt
+Policy: https://github.com/anamankev/brier/security/policy

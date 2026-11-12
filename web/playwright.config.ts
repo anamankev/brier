@@ -20,6 +20,9 @@ export default defineConfig({
     timeout: 240_000,
     reuseExistingServer: false,
     env: {
+      // A local test server on plain HTTP with no proxy key: the production settings check
+      // (instrumentation.ts) does not apply.
+      BRIER_SKIP_ENV_CHECK: "1",
       BRIER_GATEWAY_URL: `http://127.0.0.1:${GATEWAY_PORT}`,
       BRIER_WS_URL: `ws://127.0.0.1:${GATEWAY_PORT}/v1/ws`,
     },

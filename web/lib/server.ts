@@ -3,7 +3,9 @@
 import { cookies, headers as requestHeaders } from "next/headers";
 
 export const GATEWAY = process.env.BRIER_GATEWAY_URL ?? "http://127.0.0.1:8080";
-export const SESSION_COOKIE = "brier_session";
+/** In production the __Host- prefix makes the browser refuse the cookie unless it is Secure,
+ * host-only and for the whole site, so a sibling domain or plain HTTP can never set it. */
+export const SESSION_COOKIE = process.env.NODE_ENV === "production" ? "__Host-brier_session" : "brier_session";
 /** The gateway's WebSocket, which browsers connect to directly for public market data. */
 export const WS_URL = process.env.BRIER_WS_URL ?? "ws://127.0.0.1:8080/v1/ws";
 
@@ -67,4 +69,20 @@ export async function me(): Promise<Me | null> {
 /** The server's clock for one render (relative times like "closes in 3 days"). */
 export function renderTime(): number {
   return Date.now();
+}
+
+/**
+ * Whether a request that changes something may proceed: it must carry `x-brier-request: 1`
+ * (a cross-site form or image cannot), and if the browser names its origin, that origin must be
+ * this site. With the SameSite=Strict cookie these are the CSRF defences.
+ */
+export function sameSiteWrite(req: Request): boolean {
+  if (req.headers.get("x-brier-request") !== "1") return false;
+  const origin = req.headers.get("origin");
+  if (origin === null) return true;
+  try {
+    return new URL(origin).host === req.headers.get("host");
+  } catch {
+    return false;
+  }
 }
