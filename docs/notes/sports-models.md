@@ -1,6 +1,6 @@
 # Pricing sports markets: does a simple rating model beat the base rate? (G10 U6)
 
-Status: REGISTERED. Registered before any model in this note was fitted or tested; the registering commit is the first that contains this file. Nothing below changes after results are seen; a change would be a new, dated section.
+Status: COMPLETE. S1, S2 and S3 supported; S4 not supported (§5). Registered before any model in this note was fitted or tested; the registering commit is the first that contains this file. Nothing below changes after results are seen; a change would be a new, dated section.
 
 ## 1. Why
 Sports markets (G10 U6) need a fair value for the reference market maker to quote around. A model that is worse than knowing only "home teams win about 55% of the time" would quote people into losing trades. This note tests a standard rating model on seasons it was not tuned on.
@@ -42,3 +42,32 @@ A hypothesis is supported if its inequality holds on the point estimates. Differ
 - **If a hypothesis is supported:** that sport's markets are quoted around the Elo model.
 - **If it is not supported:** that sport is quoted around the base rate instead, and the result is reported here.
 - **Either way:** sports markets settle through the manual review lane (`docs/data-licenses.md`); the model only sets quotes.
+
+## 5. Results
+Run on 11 November 2026 with the code at commit `ee26879`, the first commit with the runner:
+
+    BALLDONTLIE_API_KEY=... FOOTBALL_DATA_API_KEY=... python -m brier_services.catalog.sports
+
+| Hypothesis | Test games | Model Brier | Base-rate Brier | Difference (95% CI) | Supported |
+|---|---|---|---|---|---|
+| S1 NBA | 1322 | 0.2154 | 0.2470 | -0.0316 (-0.0401 to -0.0229) | yes |
+| S2 NFL | 285 | 0.2282 | 0.2494 | -0.0212 (-0.0331 to -0.0094) | yes |
+| S3 soccer | 1751 | 0.6113 | 0.6491 | -0.0377 (-0.0443 to -0.0311) | yes |
+
+S4 calibration, NBA and NFL test games pooled:
+| Bin | Forecasts | Mean forecast | Observed | Within 0.05 |
+|---|---|---|---|---|
+| 0.1-0.2 | 10 | 0.171 | 0.000 | n/a (<100) |
+| 0.2-0.3 | 42 | 0.264 | 0.095 | n/a (<100) |
+| 0.3-0.4 | 131 | 0.356 | 0.298 | no |
+| 0.4-0.5 | 227 | 0.458 | 0.357 | no |
+| 0.5-0.6 | 314 | 0.549 | 0.475 | no |
+| 0.6-0.7 | 346 | 0.653 | 0.616 | yes |
+| 0.7-0.8 | 306 | 0.751 | 0.699 | no |
+| 0.8-0.9 | 196 | 0.844 | 0.791 | no |
+| 0.9-1.0 | 35 | 0.920 | 0.886 | n/a (<100) |
+
+- **S1, S2 and S3 are supported,** and none is weak: every interval is clear of zero. The rating model beats the base rate by 0.032 (NBA), 0.021 (NFL) and 0.038 (soccer, three outcomes).
+- **S4 is not supported.** In five of the six bins with at least 100 forecasts, home teams won less often than forecast, by 0.04 to 0.10. The model favours home teams too much: the registered home advantages (100 Elo points in the NBA, 48 in the NFL) are larger than what these test seasons showed.
+- **What follows, under §4:** NBA, NFL and soccer markets are quoted around the Elo model, because it beats the base rate.
+- **The calibration miss is reported, not tuned away.** A smaller home advantage fitted on these seasons would look better here by construction. Any change goes in a new, dated section with its own registration.
