@@ -73,3 +73,6 @@ Reads: SPEC §0, §1, §7, §16; `docs/threat-model.md`; `docs/data-licenses.md`
 
 ## Order
 U1, then U2, U3 and U4 (no owner action needed). U5 next. U6 once the keys are in `.env`, built against recorded fixtures until then. U7 once the VM exists.
+
+## Status
+Closed on 12 November 2026. See `docs/gates/G10-review.md`.

@@ -2,7 +2,15 @@
 
 A prediction-market exchange, named after the Brier score (Brier, 1950), the standard measure of how good probability forecasts are. It is built to the engineering standard of a regulated venue, and run with play money.
 
-Traders buy and sell yes/no contracts on things public data settles: tomorrow's high in twelve US cities, how many strong earthquakes strike today, whether a geomagnetic storm arrives, inflation, jobs, and rates. A recurring catalogue lists the next two days of every series by itself, grouped into events like "Highest temperature in Denver on Nov 12?". A contract pays 100 if the event happens and 0 if it does not, so its price (1 to 99) reads as the market's probability. Under that simple product sits the machinery a real exchange needs:
+**Live at https://132-145-162-222.sslip.io** (18+, play money).
+
+Traders buy and sell yes/no contracts on things public data settles:
+- weather: tomorrow's high and low in twelve US cities
+- science: how many strong earthquakes strike today, and whether a geomagnetic storm arrives
+- economy and rates: inflation, jobs, the Fed decision and the 10-year Treasury
+- sports: every NBA and NFL game, and five European soccer leagues
+
+A recurring catalogue lists every series ahead by itself, grouped into events like "Highest temperature in Denver on Nov 12?". A contract pays 100 if the event happens and 0 if it does not, so its price (1 to 99) reads as the market's probability. Under that simple product sits the machinery a real exchange needs:
 
 - **Deterministic matching engine.** Price-time priority order book. Replaying the command log reproduces every state hash exactly.
 - **Double-entry ledger.** Fully collateralized contracts and pre-trade collateral checks. A conservation invariant is checked after every event: credits issued = balances + escrow.
@@ -10,7 +18,7 @@ Traders buy and sell yes/no contracts on things public data settles: tomorrow's 
 - **APIs.** REST and WebSocket order entry with signed requests and idempotent retries; sequenced market data with gap recovery.
 - **Evidence-backed resolution.**
   - Every market has a rulebook whose hash is in the journal.
-  - It resolves from free public sources: the National Weather Service, USGS, NOAA, BLS, and FRED.
+  - It resolves from free public sources: the National Weather Service, USGS, NOAA, BLS, and FRED; sports from balldontlie and football-data.org, confirmed by an admin.
   - It settles only after a second check: a second admin for monthly markets, or, for daily ones, an independent re-fetch that must agree. A dispute window follows.
   - The settlement names its evidence by hash ([docs/resolution.md](docs/resolution.md)).
 - **Reference market maker.**
@@ -23,11 +31,11 @@ The full standard is [docs/SPEC.md](docs/SPEC.md). The exact engine behavior is 
 
 ## Play money, by design
 
-Credits are granted once at signup. They cannot be bought, sold, withdrawn, redeemed, or transferred, and they have no cash value. Real-money event contracts for US persons require a CFTC-designated contract market, which this project is not. The code contains no deposit, withdrawal, or payment path, and a test will enforce that from G2 onward.
+Credits are granted at signup, plus an equal daily allowance anyone can claim. They cannot be bought, sold, withdrawn, redeemed, or transferred, and they have no cash value. Real-money event contracts for US persons require a CFTC-designated contract market, which this project is not. The code contains no deposit, withdrawal, or payment path, and a test will enforce that from G2 onward.
 
 ## Status
 
-Built in gates G0 to G10 ([SPEC §15](docs/SPEC.md)). Nothing is released before every gate passes.
+Built in gates G0 to G10 ([SPEC §15](docs/SPEC.md)), all closed. Brier runs in public on two Oracle Cloud Always Free servers ([deploy runbook](docs/runbooks/deploy.md)).
 
 | Gate | Scope | State |
 |---|---|---|
@@ -40,8 +48,8 @@ Built in gates G0 to G10 ([SPEC §15](docs/SPEC.md)). Nothing is released before
 | G6 | Web app | Done |
 | G7 | Market maker, simulation harness | Done |
 | G8 | Surveillance and its evaluation | Done |
-| G9 | Live catalogue: events, recurring series, a Polymarket-grade interface | Next |
-| G10 | Release | |
+| G9 | Live catalogue: events, recurring series, a Polymarket-grade interface | Done, one criterion carried into G10 ([review](docs/gates/G9-review.md)) |
+| G10 | Public launch: accounts, allowance, social, sports, deployment | Done ([review](docs/gates/G10-review.md)) |
 
 ## Measured so far
 
@@ -57,6 +65,7 @@ Built in gates G0 to G10 ([SPEC §15](docs/SPEC.md)). Nothing is released before
 | Recovery replay | 10 million commands from disk in 7.7 s (median of 3) | [durability note](docs/notes/durability.md) |
 | Order to acknowledgment through the gateway | p50 4.74 ms, p99 9.14 ms at 10,000 orders/s (one to two durable syncs); the 5 ms p99 target was refuted, the registered 9.9 ms bound held | [gateway note](docs/notes/gateway.md) |
 | Market data to 1,000 WebSocket subscribers | p50 3.69 ms, p99 16.4 ms after batching writes (was 22.9 ms); the 10 ms p99 target was refuted, remaining tail is intermittent machine-wide stalls | [gateway note](docs/notes/gateway.md) |
+| Public site under load | About 14 pages a second at 50 simultaneous users, no errors, on a free 1 GB server | [load-test note](docs/notes/load-test.md) |
 | Fuzzing | 6 targets (wire, journal decode and recovery, snapshot restore, gateway requests, signatures), 1 hour each, about 2.2 billion executions; one finding (non-canonical snapshot bytes), fixed | [G4 review](docs/gates/G4-review.md) |
 | Resolver accuracy | 855 values from BLS, FRED, and NOAA equal to independent comparators (FRED, Treasury, FOMC statements, GHCN-Daily), 0 mismatches; every decision recomputed identically from the stored response with networking disabled | [resolution note](docs/notes/resolution.md) |
 | Resolution end to end | All five launch markets listed, traded, closed by schedule, resolved, disputed, and settled through a real gateway | [G5 review](docs/gates/G5-review.md) |
