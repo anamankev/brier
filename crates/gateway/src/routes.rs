@@ -332,20 +332,36 @@ fn totp_key(s: &AppState) -> Result<[u8; 32], ApiError> {
     })
 }
 
-/// `POST /v1/totp/setup`: a new TOTP secret for the caller (session only), not yet on.
+/// `POST /v1/totp/setup`: the caller's TOTP secret, not yet on (session only). A secret set up
+/// earlier and not yet turned on is returned again rather than replaced, so a reload or a
+/// second click cannot leave the authenticator app holding a key the server has discarded.
 pub async fn totp_setup(State(s): Shared, req: Req) -> ApiResult {
     let user = req.user(&s, false).await?;
     let key = totp_key(&s)?;
-    let (secret, stored) = totp::new_secret(&key)?;
-    let row = s
-        .db
-        .query_opt(
-            "UPDATE users SET totp_secret = $2, totp_last_step = NULL WHERE id = $1 AND NOT totp_enabled RETURNING username",
-            &[&user.id, &stored],
+    let current =
+        s.db.query_one(
+            "SELECT username, totp_enabled, totp_secret FROM users WHERE id = $1",
+            &[&user.id],
         )
-        .await?
-        .ok_or_else(|| ApiError::conflict("TOTP is already on for this account"))?;
-    let username: String = row.get(0);
+        .await?;
+    if current.get::<_, bool>(1) {
+        return Err(ApiError::conflict("TOTP is already on for this account"));
+    }
+    let username: String = current.get(0);
+    let secret = if let Some(stored) = current.get::<_, Option<Vec<u8>>>(2) {
+        totp::open_secret(&key, &stored)?
+    } else {
+        {
+            let (secret, stored) = totp::new_secret(&key)?;
+            s.db.query_opt(
+                "UPDATE users SET totp_secret = $2, totp_last_step = NULL WHERE id = $1 AND NOT totp_enabled RETURNING id",
+                &[&user.id, &stored],
+            )
+            .await?
+            .ok_or_else(|| ApiError::conflict("TOTP is already on for this account"))?;
+            secret
+        }
+    };
     let encoded = totp::base32(&secret);
     let uri = format!(
         "otpauth://totp/Brier:{username}?secret={encoded}&issuer=Brier&algorithm=SHA1&digits={}&period={}",

@@ -553,3 +553,8 @@ a.note:hover { background: var(--surface-2); }
 .menu a, .menu button { display: block; width: 100%; text-align: left; padding: 9px 12px; border-radius: 8px; font: inherit; font-size: 14px; color: var(--text-2); background: none; border: 0; cursor: pointer; }
 .menu a:hover, .menu button:hover { background: var(--surface-2); color: var(--text); }
 .menu hr { border: 0; border-top: 1px solid var(--line); margin: 6px 4px; }
+
+/* ---- two-step sign-in setup ----------------------------------------------------------------- */
+.totp-setup { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+.qr { border-radius: 10px; flex: none; }
+.totp-key { font-size: 15px; letter-spacing: 0.06em; word-break: break-all; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm); max-width: 320px; }

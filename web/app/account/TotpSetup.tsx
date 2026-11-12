@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/client";
+import { QrCode } from "@/components/QrCode";
 
 export function TotpSetup() {
   const router = useRouter();
@@ -40,12 +41,26 @@ export function TotpSetup() {
       }}
     >
       <p style={{ margin: 0 }}>
-        Add this account to your authenticator app with the key below (or open the{" "}
-        <a className="link" href={setup.otpauth_uri}>setup link</a> on a phone), then enter the code it shows.
+        Scan this with your authenticator app (1Password, Google Authenticator, Authy), then enter the 6-digit code it
+        shows. The key stays the same if you reload this page.
       </p>
-      <p>
-        Key: <code data-testid="totp-secret">{setup.secret}</code>
-      </p>
+      <div className="totp-setup">
+        <QrCode text={setup.otpauth_uri} label="QR code for your authenticator app" />
+        <div className="stack" style={{ gap: 8 }}>
+          <span className="muted" style={{ fontSize: 13 }}>Can&apos;t scan? Enter this key instead:</span>
+          <code className="totp-key" data-testid="totp-secret">
+            {setup.secret}
+          </code>
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="btn small" onClick={() => navigator.clipboard?.writeText(setup.secret).catch(() => undefined)}>
+              Copy key
+            </button>
+            <a className="btn small" href={setup.otpauth_uri}>
+              Open in app
+            </a>
+          </div>
+        </div>
+      </div>
       <label className="field">
         <span>6-digit code</span>
         <input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" value={code} onChange={(e) => setCode(e.target.value)} required />

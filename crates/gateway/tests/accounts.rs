@@ -159,6 +159,14 @@ async fn public_accounts_end_to_end() {
     let (_, body) = call(&app, Method::GET, "/v1/allowance", Some(&session), None).await;
     assert_eq!(body["claimed_today"], true);
 
+    // TOTP setup is stable until it is turned on: a second request returns the same key, so an
+    // authenticator app set up from the first one still works.
+    let (status, first) = call(&app, Method::POST, "/v1/totp/setup", Some(&session), None).await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    let (_, second) = call(&app, Method::POST, "/v1/totp/setup", Some(&session), None).await;
+    assert_eq!(first["secret"], second["secret"]);
+    assert_eq!(first["otpauth_uri"], second["otpauth_uri"]);
+
     // Export holds the profile and what was confirmed.
     let (status, body) = call(&app, Method::GET, "/v1/me/export", Some(&session), None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
