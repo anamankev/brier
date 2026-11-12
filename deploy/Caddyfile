@@ -26,6 +26,8 @@
 		output file /var/log/caddy/access.log {
 			roll_size 20MiB
 			roll_keep 5
+			# The privacy policy promises 14 days for these logs (client IPs).
+			roll_keep_for 336h
 		}
 	}
 }

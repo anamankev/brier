@@ -62,5 +62,10 @@ systemctl restart brier-operator
 # so a bad file never locks the operator out.
 install -m 644 "$STAGE"/deploy/sshd-hardening.conf /etc/ssh/sshd_config.d/10-brier.conf
 sshd -t && systemctl reload ssh
+# System and security logs are kept 30 days (the privacy policy says so).
+install -d -m 755 /etc/systemd/journald.conf.d
+printf '[Journal]\nMaxRetentionSec=30day\n' > /etc/systemd/journald.conf.d/10-brier.conf
+chmod 644 /etc/systemd/journald.conf.d/10-brier.conf
+systemctl restart systemd-journald
 rm -rf "$STAGE"
 echo "brier-db: $(cat /opt/brier/COMMIT)"
