@@ -73,7 +73,7 @@ async fn the_rest_api_end_to_end() {
             Method::POST,
             "/v1/register",
             None,
-            Some(json!({ "username": name, "password": pw, "adult": true, "terms": "2026-11-08" })),
+            Some(json!({ "username": name, "password": pw, "adult": true, "terms": "2026-11-12" })),
         )
         .await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
@@ -83,7 +83,7 @@ async fn the_rest_api_end_to_end() {
         Method::POST,
         "/v1/register",
         None,
-        Some(json!({ "username": "alice", "password": pw, "adult": true, "terms": "2026-11-08" })),
+        Some(json!({ "username": "alice", "password": pw, "adult": true, "terms": "2026-11-12" })),
     )
     .await;
     assert_eq!(
@@ -95,7 +95,7 @@ async fn the_rest_api_end_to_end() {
         Method::POST,
         "/v1/register",
         None,
-        Some(json!({ "username": "Eve!", "password": pw, "adult": true, "terms": "2026-11-08" })),
+        Some(json!({ "username": "Eve!", "password": pw, "adult": true, "terms": "2026-11-12" })),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -105,7 +105,7 @@ async fn the_rest_api_end_to_end() {
         "/v1/register",
         None,
         Some(
-            json!({ "username": "eve", "password": "short", "adult": true, "terms": "2026-11-08" }),
+            json!({ "username": "eve", "password": "short", "adult": true, "terms": "2026-11-12" }),
         ),
     )
     .await;

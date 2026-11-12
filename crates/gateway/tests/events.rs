@@ -102,7 +102,7 @@ async fn markets_group_into_events_with_daily_statistics() {
             Method::POST,
             "/v1/register",
             None,
-            Some(json!({ "username": name, "password": PW, "adult": true, "terms": "2026-11-08" })),
+            Some(json!({ "username": name, "password": PW, "adult": true, "terms": "2026-11-12" })),
         )
         .await;
         assert_eq!(status, StatusCode::CREATED, "{body}");

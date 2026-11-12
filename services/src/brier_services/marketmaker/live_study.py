@@ -108,7 +108,7 @@ def study(binary: str, env: dict[str, str], clock: Path) -> int:
         RestClient(BASE).request(
             "POST",
             "/v1/register",
-            {"username": name, "password": PASSWORD, "adult": True, "terms": "2026-11-08"},
+            {"username": name, "password": PASSWORD, "adult": True, "terms": "2026-11-12"},
         )
         if role:
             subprocess.run(  # noqa: S603 - fixed arguments

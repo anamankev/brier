@@ -422,13 +422,18 @@ pub async fn me(State(s): Shared, req: Req) -> ApiResult {
     let user = req.user(&s, true).await?;
     let row =
         s.db.query_one(
-            "SELECT username, role, totp_enabled FROM users WHERE id = $1",
+            "SELECT username, role, totp_enabled, terms_version FROM users WHERE id = $1",
             &[&user.id],
         )
         .await?;
+    let terms = row.get::<_, Option<String>>(3);
+    let current = terms
+        .as_deref()
+        .is_none_or(|v| v == crate::account::TERMS_VERSION);
     Ok(Json(json!({
         "user_id": user.id, "username": row.get::<_, &str>(0), "role": row.get::<_, &str>(1),
         "totp": row.get::<_, bool>(2), "signed_in_with_totp": user.mfa,
+        "terms_version": terms, "terms_current": current,
     }))
     .into_response())
 }
@@ -709,6 +714,17 @@ pub(crate) fn amend_result(c: &Committed, order: OrderId) -> Result<Value, ApiEr
 /// `POST /v1/orders`: place an order.
 pub async fn place(State(s): Shared, req: Req) -> ApiResult {
     let account = trader(&s, &req).await?;
+    let user_id = i64::try_from(account.get()).map_err(|e| ApiError::internal(&e))?;
+    if !crate::account::terms_current(&s, user_id).await? {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "terms_required",
+            format!(
+                "the terms of use changed: accept version {} to place orders (POST /v1/terms)",
+                crate::account::TERMS_VERSION
+            ),
+        ));
+    }
     let command = decode_order(&req.body, account)?;
     Ok(Json(place_result(&s.core.submit(command).await?)?).into_response())
 }

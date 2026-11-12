@@ -99,6 +99,8 @@ pub struct AppState {
     /// TOTP codes checked per account, so a stolen password cannot be paired with a code by
     /// guessing from many addresses.
     pub totp_limits: Limiter<i64>,
+    /// Users known to have accepted the current terms ([`account::terms_current`]).
+    pub(crate) terms_ok: std::sync::Mutex<std::collections::HashSet<i64>>,
     /// Security log lines per client address, so an attacker cannot flood the log.
     pub security_log_limits: Limiter<IpAddr>,
     /// The last sequence number reflected in the read models.
@@ -156,6 +158,7 @@ impl AppState {
                 limits::ACCOUNT_TOTP_PER_MINUTE,
                 limits::ACCOUNT_TOTP_BURST,
             ),
+            terms_ok: std::sync::Mutex::new(std::collections::HashSet::new()),
             security_log_limits: Limiter::per_minute(
                 SECURITY_LOG_PER_MINUTE,
                 SECURITY_LOG_PER_MINUTE,
@@ -351,6 +354,7 @@ endpoints! {
     GET "/v1/me/export" => account::export,
     POST "/v1/recover" => account::recover,
     POST "/v1/recovery-codes" => account::regenerate,
+    POST "/v1/terms" => account::accept_terms,
     GET "/v1/allowance" => allowance::status,
     POST "/v1/allowance" => allowance::claim,
     POST "/v1/totp/setup" => routes::totp_setup,

@@ -201,7 +201,7 @@ async fn the_websocket_api_end_to_end() {
             Method::POST,
             "/v1/register",
             None,
-            Some(json!({ "username": name, "password": pw, "adult": true, "terms": "2026-11-08" })),
+            Some(json!({ "username": name, "password": pw, "adult": true, "terms": "2026-11-12" })),
         )
         .await;
         assert_eq!(status, StatusCode::CREATED);

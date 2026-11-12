@@ -86,7 +86,7 @@ def main() -> int:
             time.sleep(0.2)
 
     def user(name: str, role: str | None = None) -> RestClient:
-        RestClient(BASE).request("POST", "/v1/register", {"username": name, "password": PASSWORD, "adult": True, "terms": "2026-11-08"})
+        RestClient(BASE).request("POST", "/v1/register", {"username": name, "password": PASSWORD, "adult": True, "terms": "2026-11-12"})
         if role:
             subprocess.run([binary, "role", name, role, "demo"], env=env, check=True, capture_output=True)  # noqa: S603
         c = RestClient(BASE)
@@ -95,7 +95,7 @@ def main() -> int:
 
     def from_address(name: str, address: str) -> RestClient:
         """Sign in as the web server would, forwarding the client's address."""
-        RestClient(BASE).request("POST", "/v1/register", {"username": name, "password": PASSWORD, "adult": True, "terms": "2026-11-08"})
+        RestClient(BASE).request("POST", "/v1/register", {"username": name, "password": PASSWORD, "adult": True, "terms": "2026-11-12"})
         req = urllib.request.Request(  # noqa: S310 - the local demo gateway
             f"{BASE}/v1/login",
             data=json.dumps({"username": name, "password": PASSWORD}).encode(),

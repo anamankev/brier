@@ -352,3 +352,90 @@ async fn totp_guesses_are_limited_per_account() {
         "the burst of 10 is spent"
     );
 }
+
+/// When the terms change, someone who accepted an older version cannot place orders until they
+/// accept the new one; service accounts that never accepted any version are not asked.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "needs PostgreSQL (make up; BRIER_TEST_DATABASE_URL)"]
+async fn changed_terms_must_be_accepted_before_trading() {
+    let schema = common::schema("gateway_terms");
+    let data = tempfile::tempdir().unwrap();
+    let (core, _, _thread) = start(CoreConfig::new(data.path())).unwrap();
+    let mut state = AppState::new(core.clone(), connect(&schema).await)
+        .unwrap()
+        .with_totp_key(common::TOTP_KEY);
+    state.auth_limits = Limiter::per_minute(1_000, 1_000);
+    let app = router(Arc::new(state));
+    let db = connect(&schema).await;
+    let (status, body) = call(
+        &app,
+        Method::POST,
+        "/v1/register",
+        None,
+        Some(json!({ "username": "ola", "password": PW, "adult": true, "terms": TERMS_VERSION })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    // Ola accepted an earlier version.
+    db.execute(
+        "UPDATE users SET terms_version = '2026-11-08' WHERE username = 'ola'",
+        &[],
+    )
+    .await
+    .unwrap();
+    let token = login(&app, "ola", PW).await;
+    let (_, me) = call(&app, Method::GET, "/v1/me", Some(&token), None).await;
+    assert_eq!(me["terms_current"], false);
+    let order = json!({ "market": 1, "side": "buy", "price": 40, "qty": 1 });
+    let (status, body) = call(
+        &app,
+        Method::POST,
+        "/v1/orders",
+        Some(&token),
+        Some(order.clone()),
+    )
+    .await;
+    assert_eq!(
+        (status, body["error"]["code"].as_str()),
+        (StatusCode::FORBIDDEN, Some("terms_required"))
+    );
+    let (status, _) = call(
+        &app,
+        Method::POST,
+        "/v1/terms",
+        Some(&token),
+        Some(json!({ "terms": "2026-11-08" })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "only the current version can be accepted"
+    );
+    let (status, body) = call(
+        &app,
+        Method::POST,
+        "/v1/terms",
+        Some(&token),
+        Some(json!({ "terms": TERMS_VERSION })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (_, me) = call(&app, Method::GET, "/v1/me", Some(&token), None).await;
+    assert_eq!(me["terms_current"], true);
+    let (status, body) = call(&app, Method::POST, "/v1/orders", Some(&token), Some(order)).await;
+    assert_ne!(
+        body["error"]["code"].as_str(),
+        Some("terms_required"),
+        "{status} {body}"
+    );
+    // A service account (no terms on record) is never asked.
+    db.execute(
+        "UPDATE users SET terms_version = NULL WHERE username = 'ola'",
+        &[],
+    )
+    .await
+    .unwrap();
+    let (_, me) = call(&app, Method::GET, "/v1/me", Some(&token), None).await;
+    assert_eq!(me["terms_current"], true);
+}

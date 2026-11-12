@@ -113,7 +113,7 @@ def test_the_reference_client_trades_against_a_real_gateway(
         rest.request(
             "POST",
             "/v1/register",
-            {"username": name, "password": PASSWORD, "adult": True, "terms": "2026-11-08"},
+            {"username": name, "password": PASSWORD, "adult": True, "terms": "2026-11-12"},
         )
     binary = str(ROOT / "target" / "release" / "brier-gateway")
     subprocess.run(  # noqa: S603 - fixed arguments

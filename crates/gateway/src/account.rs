@@ -26,7 +26,7 @@ use crate::{AppState, totp};
 
 /// The terms of use a new user accepts (`web/app/terms`); a later version is accepted at its
 /// own date. Clients send this exact string.
-pub const TERMS_VERSION: &str = "2026-11-08";
+pub const TERMS_VERSION: &str = "2026-11-12";
 /// Recovery codes issued at once. Ten covers years of lost passwords; more invites careless
 /// storage.
 pub const RECOVERY_CODES: usize = 10;
@@ -415,4 +415,52 @@ mod tests {
         assert_eq!(display("ABCDEFGHIJKLMNOP"), "ABCD-EFGH-IJKL-MNOP");
         assert_eq!(normalize(&display("ABCDEFGHIJKLMNOP")), "ABCDEFGHIJKLMNOP");
     }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TermsBody {
+    terms: String,
+}
+
+/// `POST /v1/terms`: accept the current terms of use, after they changed since sign-up.
+pub async fn accept_terms(State(s): Shared, req: Req) -> ApiResult {
+    let user = req.user(&s, true).await?;
+    let TermsBody { terms } = req.json()?;
+    if terms != TERMS_VERSION {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "terms_required",
+            format!("accept the terms of use (version {TERMS_VERSION})"),
+        ));
+    }
+    s.db.execute(
+        "UPDATE users SET terms_version = $2, terms_accepted_at = now() WHERE id = $1",
+        &[&user.id, &TERMS_VERSION],
+    )
+    .await?;
+    if let Ok(mut ok) = s.terms_ok.lock() {
+        ok.insert(user.id);
+    }
+    Ok(Json(json!({ "terms_version": TERMS_VERSION })).into_response())
+}
+
+/// Whether `user` has accepted the current terms. Accounts that never accepted any version
+/// (the exchange's own service accounts, created by the operator) are not asked; people who
+/// accepted an older version must accept the new one before placing orders. A yes is cached:
+/// it cannot become a no until the next version, which ships with a restart.
+pub(crate) async fn terms_current(s: &AppState, user: i64) -> Result<bool, ApiError> {
+    if s.terms_ok.lock().is_ok_and(|ok| ok.contains(&user)) {
+        return Ok(true);
+    }
+    let row =
+        s.db.query_one("SELECT terms_version FROM users WHERE id = $1", &[&user])
+            .await?;
+    let current = row
+        .get::<_, Option<String>>(0)
+        .is_none_or(|v| v == TERMS_VERSION);
+    if current && let Ok(mut ok) = s.terms_ok.lock() {
+        ok.insert(user);
+    }
+    Ok(current)
 }

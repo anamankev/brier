@@ -124,7 +124,7 @@ async fn forecasts_are_scored_against_the_market_and_ranked() {
             Method::POST,
             "/v1/register",
             None,
-            Some(json!({ "username": name, "password": pw, "adult": true, "terms": "2026-11-08" })),
+            Some(json!({ "username": name, "password": pw, "adult": true, "terms": "2026-11-12" })),
         )
         .await;
         assert_eq!(status, StatusCode::CREATED);

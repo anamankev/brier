@@ -198,7 +198,7 @@ def patiently(call: Callable[[], Any]) -> Any:  # noqa: ANN401 - JSON
 
 
 def user(ex: Exchange, name: str, role: str | None = None) -> RestClient:
-    body = {"username": name, "password": PASSWORD, "adult": True, "terms": "2026-11-08"}
+    body = {"username": name, "password": PASSWORD, "adult": True, "terms": "2026-11-12"}
     patiently(lambda: RestClient(ex.base).request("POST", "/v1/register", body))
     if role is not None:
         subprocess.run(  # noqa: S603 - fixed arguments

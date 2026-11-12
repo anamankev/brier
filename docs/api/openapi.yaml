@@ -134,6 +134,33 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/Error' }
+  /v1/terms:
+    post:
+      tags: [identity]
+      summary: Accept the current terms of use after they changed; until then, placing orders answers 403 terms_required
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [terms]
+              properties:
+                terms: { type: string, description: 'The current terms version, 2026-11-12 (400 terms_required otherwise)' }
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [terms_version]
+                properties:
+                  terms_version: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
   /v1/recovery-codes:
     post:
       tags: [identity]
@@ -242,6 +269,8 @@ paths:
                   role: { enum: [trader, admin, resolver] }
                   totp: { type: boolean, description: 'TOTP is on for this account' }
                   signed_in_with_totp: { type: boolean, description: 'This request carries the second factor (needed for admin actions)' }
+                  terms_version: { type: [string, 'null'], description: 'The terms version the user accepted (null for service accounts)' }
+                  terms_current: { type: boolean, description: 'False when the terms changed since the user accepted them; orders are refused until POST /v1/terms' }
         '401': { $ref: '#/components/responses/Error' }
     delete:
       tags: [identity]
@@ -1588,7 +1617,7 @@ components:
       description: |
         Gateway codes: bad_request (400), invalid_rulebook (400; the message starts with the
         rulebook error code, docs/rulebook.md), unauthorized (401), totp_required (401: this account needs its TOTP code), forbidden (403; also an admin action from a sign-in without TOTP), not_found
-        (404), adult_required (400: sign-up needs adult: true), terms_required (400: sign-up needs the current terms version), username_taken (409), too_many_signups (429: the day's sign-ups from this network), signups_paused (503: the exchange's sign-ups for the day), conflict (409: the state does not allow this), too_early
+        (404), adult_required (400: sign-up needs adult: true), terms_required (400: sign-up or POST /v1/terms needs the current terms version; 403: placing an order before accepting changed terms), username_taken (409), too_many_signups (429: the day's sign-ups from this network), signups_paused (503: the exchange's sign-ups for the day), conflict (409: the state does not allow this), too_early
         (409: allowed later, such as before a release time), too_large (413), rate_limited (429),
         too_many_in_flight (429, WebSocket only), unavailable (503), timeout (504). Every other
         code is an engine reject reason (422, docs/protocol.md).
@@ -1664,7 +1693,7 @@ components:
         username: { type: string, pattern: '^[a-z0-9_]{3,32}$' }
         password: { type: string, minLength: 12, maxLength: 256 }
         adult: { type: boolean, description: 'The user confirms they are 18 or older; must be true (400 adult_required)' }
-        terms: { type: string, description: 'The version of the terms of use the user accepts; must be the current one, 2026-11-08 (400 terms_required)' }
+        terms: { type: string, description: 'The version of the terms of use the user accepts; must be the current one, 2026-11-12 (400 terms_required)' }
     Reason:
       type: string
       minLength: 3

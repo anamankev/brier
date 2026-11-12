@@ -37,7 +37,7 @@ from brier_services.marketmaker.service import FairValues, MarketMaker
 from brier_services.resolution.evidence import EvidenceStore
 from brier_services.surveillance import service as surveillance
 
-TERMS = "2026-11-08"
+TERMS = "2026-11-12"
 ROLES = {"lister": "lister", "resolver": "resolver", "maker": None, "watch": "surveillance"}
 EVERY = {"list": 1800.0, "sports": 3 * 3600.0, "resolve": 600.0, "surveil": 3600.0}
 TICK = 60.0
@@ -114,7 +114,12 @@ def accounts(base: str, binary: Path, state: Path) -> dict[str, Session]:
         state.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(saved))
         path.chmod(0o600)
-    return {name: Session(base, name, saved["password"]) for name in ROLES}
+    sessions = {name: Session(base, name, saved["password"]) for name in ROLES}
+    # Accounts registered under an earlier version of the terms accept the current one, or the
+    # gateway refuses their orders (TERMS ships with the gateway it matches).
+    for session in sessions.values():
+        session.request("POST", "/v1/terms", {"terms": TERMS})
+    return sessions
 
 
 # Maker lines worth keeping in the journal; routine quotes and cancels are not.
