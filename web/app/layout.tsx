@@ -164,7 +164,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </p>
               <p>
                 Data from the U.S. Bureau of Labor Statistics, FRED®, the National Weather Service, USGS, NOAA,{" "}
-                <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0) and balldontlie. Football data provided by the{" "}
+                <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0), balldontlie, nflverse and sportsdataverse. Football data provided by the{" "}
                 <a href="https://www.football-data.org/">Football-Data.org</a> API. This product uses the FRED® API but is not
                 endorsed or certified by the Federal Reserve Bank of St. Louis; the{" "}
                 <a href="https://fred.stlouisfed.org/docs/api/terms_of_use.html">FRED® API Terms of Use</a> apply.

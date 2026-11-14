@@ -31,7 +31,7 @@ export function plainRules(rb: Rulebook, fallback: string): string {
     const when = rb.source?.game?.starts ? ` on ${longDate(rb.source.game.starts)}` : "";
     const scope = soccer ? "at full time (90 minutes plus stoppage time; extra time and penalties do not count)" : "in the final score, counting overtime";
     const what = rb.condition?.op === "==" ? `the game${when} ends in a draw ${scope}` : `the ${outcome} win the game${when} ${scope}`;
-    return `Resolves Yes if ${what}. Resolves No otherwise. Trading stops at kickoff.${VOID(deadline)}`;
+    return `Resolves Yes if ${what}. Resolves No otherwise. The result is confirmed automatically once a second, independent source agrees. Trading stops at kickoff.${VOID(deadline)}`;
   }
   if (provider === "nws" && outcome && rb.observation) {
     const low = (rb.source?.series ?? "").endsWith("/MIN");

@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 
 const SOURCES: Record<string, string> = {
   nws: "the National Weather Service daily climate report",
-  balldontlie: "the official final score",
+  balldontlie: "the official final score, checked against an independent source",
   football_data: "the official full-time score",
   usgs: "the USGS earthquake catalog",
   swpc: "NOAA's Space Weather Prediction Center",
