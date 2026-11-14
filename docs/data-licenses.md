@@ -81,13 +81,21 @@ Read on 7 November 2026. Every resolution source must be free, public, and autho
 - **What the terms allow:** data may be used "for any lawful personal or commercial purpose", including "publishing, displaying" it, and "fantasy sports, games, lawful sportsbook and wagering products". No attribution is required.
 - **What the terms forbid:** relying on the data "as the sole source for accepting, grading, or settling a wager without independent verification", and building a substitute sports-data API or feed.
 - **Free tier:** an account and API key (registered by the owner; no card), 5 requests a minute, with teams, players and games (final scores) included.
-- **Brier's use:** schedules and final scores for NBA and NFL markets (G10 U6). Because of the verification clause, sports markets use the manual review lane: an admin confirms each result against the league's official result before payout. Brier serves no data feed.
+- **Brier's use:** schedules and final scores for NBA and NFL markets (G10 U6). Because of the verification clause, every result is verified from an independent source before payout: sportsdataverse for the NBA, nflverse for the NFL (below; `docs/resolution.md`, sports). The gateway refuses a verification that names balldontlie. Brier serves no data feed.
 
 ### football-data.org: soccer scores, usable with attribution
 - **Terms read:** 8 November 2026. The published General Terms and Conditions are dated 1 June 2018; the owner confirms the current terms when registering.
 - **Attribution required (§7.1):** "Football data provided by the Football-Data.org API", shown wherever the data appears.
 - **Free tier:** "free forever", 12 competitions (including the Premier League and the Champions League), scores delayed, 10 calls a minute; an account and key, registered by the owner.
-- **Brier's use:** match schedules and final scores for soccer markets, settled through the manual review lane like every sports market, with the attribution in the footer and on sports pages.
+- **Brier's use:** match schedules and final scores for soccer markets, with the attribution in the footer. From 13 November 2026 they settle automatically with a second fetch (the terms have no verification clause).
+
+### sportsdataverse (github.com/sportsdataverse/sportsdataverse-data): NBA results for verification
+- **Read:** 13 November 2026. The repository is MIT-licensed. It publishes the NBA's team game logs for the season as a release file, updated daily.
+- **Brier's use:** reads one game's two rows (points and result) to verify a balldontlie result. Nothing is republished. Credited in the footer.
+
+### nflverse (github.com/nflverse/nfldata): NFL results for verification
+- **Read:** 13 November 2026. nflverse publishes NFL schedules and final scores as open data (the related nflverse-data repository is CC BY 4.0); the games file is updated within hours of each game.
+- **Brier's use:** reads one game's final score to verify a balldontlie result. Nothing is republished. Credited in the footer.
 
 ### Coinbase market data: not usable
 - Coinbase's Market Data Terms (updated 7 August 2026) license the data only for the user's own personal or research use. Without written consent they forbid:

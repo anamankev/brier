@@ -9,7 +9,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
-from email.message import Message
+from http.client import HTTPMessage
 from typing import IO
 
 ALLOWED_HOSTS = frozenset(
@@ -23,8 +23,15 @@ ALLOWED_HOSTS = frozenset(
         "api.open-meteo.com",
         "api.balldontlie.io",
         "api.football-data.org",
+        # Independent game results for verifying sports scores (second_source.py): open data
+        # published on GitHub, read as raw files or release downloads.
+        "raw.githubusercontent.com",
+        "github.com",
+        "release-assets.githubusercontent.com",
     }
 )
+# The one redirect allowed: a GitHub release download to GitHub's own file host.
+REDIRECTS = frozenset({("github.com", "release-assets.githubusercontent.com")})
 MAX_BODY_BYTES = 4 * 1024 * 1024
 TIMEOUT_SECONDS = 30.0
 SECRET_PARAMS = frozenset({"api_key", "registrationkey"})
@@ -87,9 +94,17 @@ class _NoRedirects(urllib.request.HTTPRedirectHandler):
         fp: IO[bytes],
         code: int,
         msg: str,
-        headers: Message,
+        headers: HTTPMessage,
         newurl: str,
     ) -> urllib.request.Request | None:
+        new = urllib.parse.urlsplit(newurl)
+        if (
+            (urllib.parse.urlsplit(req.full_url).hostname, new.hostname) in REDIRECTS
+            and new.scheme == "https"
+            and new.port is None
+            and not req.has_header("Authorization")
+        ):
+            return super().redirect_request(req, fp, code, msg, headers, newurl)
         raise FetchError(f"refusing a redirect ({code}) to {redact(newurl)}")
 
 

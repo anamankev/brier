@@ -87,3 +87,14 @@ A schema 2 rulebook on a machine-checkable series may say `review = "automatic"`
 - **A re-fetch that disagrees is kept** (`verify_mismatch`, shown in the admin queue). From then on only an admin can confirm or withdraw.
 - **A void outcome is never confirmed automatically.**
 - **Why two fetches:** one fetch can catch a source mid-update or a transient error page that still parses. Two fetches at least 10 minutes apart that agree are the machine version of four eyes. They do not protect against a source that publishes a wrong number and keeps it; the dispute window does.
+
+## Sports: an independent second source (13 November 2026)
+Game results settle with no admin. Every result is checked by a source independent of the one it was proposed from.
+- **NBA and NFL:** the resolver proposes from balldontlie. It verifies from open data that does not come from balldontlie (`resolution/second_source.py`):
+  - NBA: sportsdataverse's daily team game logs, compiled from the NBA's own statistics.
+  - NFL: nflverse's games file.
+  balldontlie's terms require independent verification before a wager is settled, and this is it.
+- **Soccer:** football-data.org has no such clause. Its games verify like any automatic series, with a second fetch of the same source.
+- **The gateway enforces independence:** a balldontlie result, and any game listed for manual review, is verified only by evidence that names a different provider. The `provider` field may not be the original one or another game provider; anything else is refused with 400.
+- **Games listed for manual review before this date** settle the same way. The independent check stands in for the admin's look at the league's result, which was the check they promised. An admin can still confirm by hand.
+- **When the two sources disagree:** the proposal is kept for an admin (`verify_mismatch`), as for any automatic series. This is expected to be rare, because both sources report the same official final score.

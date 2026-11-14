@@ -34,7 +34,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption,
 from brier_services.client import ApiError, Ed25519Key, RestClient, clock_ms
 from brier_services.resolution.evidence import DEFAULT_DIR, EvidenceStore
 from brier_services.resolution.fetch import Fetcher, FetchError, fetch
-from brier_services.resolution.resolver import Proposal, SourceError, resolve
+from brier_services.resolution.resolver import Proposal, SourceError, resolve, verify_source
 from brier_services.resolution.sources import MalformedResponseError
 from brier_services.rules import Review, Rulebook, RuleError, instant, validate
 
@@ -93,7 +93,7 @@ def _verify(
     if first is None or now < first + VERIFY_AFTER:
         say("verify_wait", market=rule.market, resolution=proposal["resolution"])
         return False
-    result = resolve(rule, now, api_key, fetcher)
+    result = verify_source(rule, now, api_key, fetcher)
     if not isinstance(result, Proposal):
         say("verify_wait", market=rule.market, reason=result.reason)
         return False
@@ -143,7 +143,7 @@ def run_once(
                 continue
             if live:
                 if (
-                    rule.review is Review.AUTOMATIC
+                    (rule.review is Review.AUTOMATIC or rule.series.per_game)
                     and market not in verified
                     and _verify(gateway, store, rule, live[0], now, api_key, fetcher, say)
                 ):

@@ -3047,6 +3047,8 @@
    },
    "review": "automatic"
   },
-  "error": "review"
+  "error": null,
+  "canonical": "{\"condition\":{\"op\":\">\",\"threshold\":\"0\",\"transform\":\"level\"},\"event\":{\"exclusive\":true,\"outcome\":\"Celtics\",\"series\":\"nba-games\",\"slug\":\"nba-lal-bos-2026-11-12\",\"tags\":[\"basketball\",\"nba\"],\"title\":\"Lakers at Celtics\"},\"market\":30001,\"observation\":\"2026-11-13\",\"question\":\"Will the Boston Celtics beat the Los Angeles Lakers on 12 November 2026?\",\"review\":\"automatic\",\"revision\":\"first_release\",\"schedule\":{\"close\":\"2026-11-13T00:30:00Z\",\"deadline\":\"2026-11-20T04:30:00Z\",\"open\":\"2026-11-10T00:30:00Z\",\"release\":\"2026-11-13T04:30:00Z\"},\"schema\":3,\"source\":{\"game\":{\"id\":\"18447001\",\"starts\":\"2026-11-13T00:30:00Z\"},\"provider\":\"balldontlie\",\"series\":\"NBA/MARGIN\",\"url\":\"https://www.balldontlie.io/\"},\"title\":\"Lakers at Celtics: Celtics win\",\"void\":[\"no_value_by_deadline\"]}",
+  "sha256": "be4aab592ec273528a14adc80818b3599c49e059b17a51993007dd91df5a1f98"
  }
 ]

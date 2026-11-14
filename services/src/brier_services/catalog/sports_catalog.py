@@ -246,7 +246,7 @@ def event(f: Fixture) -> list[dict[str, Any]]:
                     "exclusive": True,
                     "outcome": label[:40],
                 },
-                "review": "manual",
+                "review": "automatic",
             }
         )
     return rulebooks

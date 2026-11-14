@@ -192,7 +192,7 @@ cases += [
     ("v3_close_after_start", mut(game, ["schedule", "close"], "2026-11-13T00:31:00Z"), "game"),
     ("v3_release_at_start", mut(mut(game, ["schedule", "close"], "2026-11-13T00:00:00Z"), ["schedule", "release"], "2026-11-13T00:30:00Z"), "game"),
     ("v3_game_unknown_field", mut(game, ["source", "game", "venue"], "TD Garden"), "malformed"),
-    ("v3_automatic_review", mut(game, ["review"], "automatic"), "review"),
+    ("v3_automatic_review", mut(game, ["review"], "automatic"), None),  # checked by an independent source
 ]
 out = []
 for name, rb, err in cases:

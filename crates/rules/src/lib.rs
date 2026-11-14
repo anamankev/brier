@@ -279,7 +279,9 @@ pub struct Series {
     /// is a mistake. False for the FOMC target, announced before its effective date.
     pub released_after_period: bool,
     /// The resolver computes the outcome from the source without judgement, so a second fetch
-    /// can confirm it and `review = "automatic"` is allowed.
+    /// can confirm it and `review = "automatic"` is allowed. For game scores the second fetch
+    /// is from an independent source (`docs/resolution.md`, sports), as balldontlie's terms
+    /// require.
     pub machine_checkable: bool,
     /// Each market is about one scheduled game named in `source.game` (schema 3).
     pub per_game: bool,
@@ -768,7 +770,7 @@ pub const REGISTRY: &[Series] = &[
         category: "sports",
         live: false,
         released_after_period: false,
-        machine_checkable: false,
+        machine_checkable: true,
         per_game: true,
     },
     Series {
@@ -781,7 +783,7 @@ pub const REGISTRY: &[Series] = &[
         category: "sports",
         live: false,
         released_after_period: false,
-        machine_checkable: false,
+        machine_checkable: true,
         per_game: true,
     },
     Series {
@@ -794,7 +796,7 @@ pub const REGISTRY: &[Series] = &[
         category: "sports",
         live: false,
         released_after_period: false,
-        machine_checkable: false,
+        machine_checkable: true,
         per_game: true,
     },
     Series {
@@ -807,7 +809,7 @@ pub const REGISTRY: &[Series] = &[
         category: "sports",
         live: false,
         released_after_period: false,
-        machine_checkable: false,
+        machine_checkable: true,
         per_game: true,
     },
     Series {
@@ -820,7 +822,7 @@ pub const REGISTRY: &[Series] = &[
         category: "sports",
         live: false,
         released_after_period: false,
-        machine_checkable: false,
+        machine_checkable: true,
         per_game: true,
     },
     Series {
@@ -833,7 +835,7 @@ pub const REGISTRY: &[Series] = &[
         category: "sports",
         live: false,
         released_after_period: false,
-        machine_checkable: false,
+        machine_checkable: true,
         per_game: true,
     },
     Series {
@@ -846,7 +848,7 @@ pub const REGISTRY: &[Series] = &[
         category: "sports",
         live: false,
         released_after_period: false,
-        machine_checkable: false,
+        machine_checkable: true,
         per_game: true,
     },
 ];

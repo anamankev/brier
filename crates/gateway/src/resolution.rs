@@ -266,27 +266,43 @@ struct VerifyBody {
     evidence: Value,
 }
 
-/// The proposal a re-fetch may verify: its market, outcome, and evidence record, or why not.
-async fn verifiable(s: &AppState, id: i64) -> Result<(i64, String, String), ApiError> {
+/// The proposal a re-fetch may verify: its market, outcome, evidence record, and the provider
+/// the verifying evidence must differ from (if it must be independent), or why not.
+async fn verifiable(
+    s: &AppState,
+    id: i64,
+) -> Result<(i64, String, String, Option<String>), ApiError> {
     let r = s
         .db
         .query_opt(
-            "SELECT r.market, r.state, r.outcome, b.review, e.canonical, r.verify_mismatch IS NOT NULL \
+            "SELECT r.market, r.state, r.outcome, b.review, e.canonical, r.verify_mismatch IS NOT NULL, \
+             (b.canonical::jsonb -> 'source' ->> 'provider') \
              FROM resolutions r JOIN rulebooks b ON b.market = r.market JOIN evidence e ON e.evidence_hash = r.evidence_hash \
              WHERE r.id = $1",
             &[&id],
         )
         .await?
         .ok_or_else(|| ApiError::not_found("no such resolution"))?;
-    let (market_col, state, outcome, review, proposal, mismatched): (
+    let (market_col, state, outcome, review, proposal, mismatched, provider): (
         i64,
         String,
         String,
         String,
         String,
         bool,
-    ) = (r.get(0), r.get(1), r.get(2), r.get(3), r.get(4), r.get(5));
-    if review != "automatic" {
+        Option<String>,
+    ) = (
+        r.get(0),
+        r.get(1),
+        r.get(2),
+        r.get(3),
+        r.get(4),
+        r.get(5),
+        r.get(6),
+    );
+    let provider = provider.unwrap_or_default();
+    let game = GAME_PROVIDERS.contains(&provider.as_str());
+    if review != "automatic" && !game {
         return Err(ApiError::conflict(
             "this market's rulebook needs an admin to confirm (review = manual)",
         ));
@@ -306,11 +322,34 @@ async fn verifiable(s: &AppState, id: i64) -> Result<(i64, String, String), ApiE
             "an earlier re-fetch disagreed with this proposal; an admin decides",
         ));
     }
-    Ok((market_col, outcome, proposal))
+    // A game listed for manual review, and any balldontlie result, is verified only from an
+    // independent source: the verifying evidence must name a different provider.
+    let independent = (review != "automatic" || provider == "balldontlie").then_some(provider);
+    Ok((market_col, outcome, proposal, independent))
 }
 
+/// When a result must be verified independently, the verifying evidence must name a provider
+/// that is neither the original one nor another game provider.
+fn check_independent(evidence: &Value, original: Option<&str>) -> Result<(), ApiError> {
+    let Some(original) = original else {
+        return Ok(());
+    };
+    let theirs = evidence.get("provider").and_then(Value::as_str);
+    if theirs.is_none_or(|p| p == original || GAME_PROVIDERS.contains(&p)) {
+        return Err(ApiError::bad_request(format!(
+            "evidence: this result must be verified from a source independent of {original}"
+        )));
+    }
+    Ok(())
+}
+
+/// Providers of game results, whose proposals an independent source can verify even on a
+/// rulebook listed for manual review (docs/resolution.md, sports).
+const GAME_PROVIDERS: &[&str] = &["balldontlie", "football_data"];
+
 /// `POST /v1/resolutions/{id}/verify`: confirm a proposal on a market with automatic review by
-/// an independent re-fetch (resolver or admin role).
+/// an independent re-fetch (resolver or admin role). A game result (balldontlie, or any game
+/// listed for manual review) is verified only by evidence from a different provider.
 ///
 /// The re-fetch's evidence must be retrieved at least [`VERIFY_AFTER`] after the proposal's. If
 /// it computes the same outcome, the resolution is confirmed, with a dispute window of
@@ -326,7 +365,8 @@ pub async fn verify(State(s): Shared, Path(raw): Path<String>, req: Req) -> ApiR
         ));
     }
     let b: VerifyBody = req.json()?;
-    let (market_col, outcome, proposal) = verifiable(&s, id).await?;
+    let (market_col, outcome, proposal, independent_of) = verifiable(&s, id).await?;
+    check_independent(&b.evidence, independent_of.as_deref())?;
     let market = MarketId::new(u32::try_from(market_col).map_err(|e| ApiError::internal(&e))?);
     let l = listing(&s, market)
         .await?
@@ -725,4 +765,31 @@ pub async fn audit_log(State(s): Shared, req: Req) -> ApiResult {
         })
         .collect();
     Ok(Json(json!({ "entries": items })).into_response())
+}
+
+#[cfg(test)]
+mod independence_tests {
+    use super::check_independent;
+    use serde_json::json;
+
+    #[test]
+    fn a_game_result_is_verified_only_by_another_provider() {
+        let from = |p: &str| json!({ "provider": p });
+        assert!(check_independent(&from("sportsdataverse"), Some("balldontlie")).is_ok());
+        assert!(check_independent(&from("nflverse"), Some("balldontlie")).is_ok());
+        for same in ["balldontlie", "football_data"] {
+            assert!(
+                check_independent(&from(same), Some("balldontlie")).is_err(),
+                "{same} is not independent of balldontlie"
+            );
+        }
+        assert!(
+            check_independent(&json!({}), Some("balldontlie")).is_err(),
+            "no provider named"
+        );
+        assert!(
+            check_independent(&from("nws"), None).is_ok(),
+            "other markets re-fetch their own source"
+        );
+    }
 }

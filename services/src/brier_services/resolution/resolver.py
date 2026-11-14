@@ -17,7 +17,17 @@ from dataclasses import dataclass
 from types import ModuleType
 from typing import Any
 
-from brier_services.resolution import balldontlie, bls, football_data, fred, noaa, nws, swpc, usgs
+from brier_services.resolution import (
+    balldontlie,
+    bls,
+    football_data,
+    fred,
+    noaa,
+    nws,
+    second_source,
+    swpc,
+    usgs,
+)
 from brier_services.resolution.fetch import Fetcher, Response, fetch
 from brier_services.resolution.sources import MalformedResponseError, Missing, Reading
 from brier_services.resolution.values import format_decimal, holds, round_half_up
@@ -153,3 +163,32 @@ def resolve(
     return Proposal(
         decided[0], decided[1], evidence_record(rule, response, reading, decided), response.body
     )
+
+
+def verify_source(
+    rule: Rulebook, now: int, api_key: str | None = None, fetcher: Fetcher = fetch
+) -> Proposal | Wait:
+    """The fetch that verifies a proposal. For balldontlie games it is an independent source
+    (second_source), recorded under that source's own provider name, so the gateway can check
+    the two are different; for everything else, a fresh fetch of the rule's own source."""
+    if rule.provider is not Provider.BALLDONTLIE:
+        return resolve(rule, now, api_key, fetcher)
+    if now < rule.times.release:
+        return Wait("before the release time")
+    response = fetcher(second_source.request(rule))
+    if response.status != 200:
+        msg = f"{response.url} answered HTTP {response.status}"
+        raise SourceError(msg)
+    reading = second_source.parse(response.body, rule)
+    retrieved = instant(response.retrieved_at)
+    if retrieved is None:
+        msg = f"unreadable retrieval time {response.retrieved_at!r}"
+        raise MalformedResponseError(msg)
+    decided = decide(rule, reading, retrieved)
+    if decided is None:
+        assert isinstance(reading, Missing)  # noqa: S101 - decide waits only on a missing value
+        return Wait(reading.why)
+    record = evidence_record(rule, response, reading, decided)
+    record["provider"] = second_source.PROVIDER[rule.series.id]
+    record["verifies"] = str(rule.provider)
+    return Proposal(decided[0], decided[1], record, response.body)

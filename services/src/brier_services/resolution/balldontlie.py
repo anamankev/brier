@@ -7,8 +7,9 @@ to another day is not the game the market asked about, and stays missing until t
 voids the market). Only a game whose state is final has a value.
 
 balldontlie's terms forbid settling a wager on its data alone without independent
-verification, so these series are not machine-checkable: an admin confirms every result against
-the league's official one (docs/data-licenses.md).
+verification, so every result is verified from an independent source (second_source.py) before
+payout, and the gateway checks the verifying evidence names a different provider
+(docs/data-licenses.md).
 """
 
 from __future__ import annotations

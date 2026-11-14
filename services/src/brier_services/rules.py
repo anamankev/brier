@@ -484,7 +484,7 @@ REGISTRY: tuple[Series, ...] = (
             "sports",
             live=False,
             released_after_period=False,
-            machine_checkable=False,
+            machine_checkable=True,
             per_game=True,
         )
         for league in ("NBA", "NFL")
@@ -500,7 +500,7 @@ REGISTRY: tuple[Series, ...] = (
             "sports",
             live=False,
             released_after_period=False,
-            machine_checkable=False,
+            machine_checkable=True,
             per_game=True,
         )
         for code, name in (

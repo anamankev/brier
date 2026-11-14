@@ -38,7 +38,7 @@ def test_every_listing_is_a_valid_rulebook(league: sports_catalog.League) -> Non
     assert len({rb["event"]["slug"] for rb in rulebooks}) == 1
     for rb in rulebooks:
         assert rb["schedule"]["close"] == "2026-11-14T00:30:00Z", "trading stops at kickoff"
-        assert rb["review"] == "manual", "sports settle with an admin's confirmation"
+        assert rb["review"] == "automatic", "an independent source verifies every result"
         assert rb["source"]["game"]["starts"] == "2026-11-14T00:30:00Z"
 
 
