@@ -5,8 +5,8 @@ Two Oracle Cloud Always Free micro servers (VM.Standard.E2.1.Micro: 1 GB of memo
 
 | Server | Private IP | Runs |
 |---|---|---|
-| **brier-db** | 10.0.0.138 | PostgreSQL 16, `brier-gateway`, and `brier-operator` (the lister, market maker, resolver and surveillance) |
-| **brier-web** | 10.0.0.175 | `brier-web` (Next.js) behind Caddy |
+| **brier-db** | 10.0.0.138 | PostgreSQL 16, `brier-gateway`, and `brier-operator --tasks surveil` (surveillance reads the journal, so it stays here) |
+| **brier-web** | 10.0.0.175 | `brier-web` (Next.js) behind Caddy, and `brier-bots` (the lister, market maker and resolver), which reach the gateway over the private network |
 
 - **Public address:** `https://playbrier.duckdns.org`, a free DuckDNS name that points to brier-web's public IP (set on duckdns.org by the owner). Caddy gets the certificate from Let's Encrypt.
 - **Former address:** `https://132-145-162-222.sslip.io` (sslip.io maps the name to the IP) forwards there permanently, path and query kept, so old links keep working. Former addresses are listed in `deploy/old-hosts`.
@@ -48,6 +48,11 @@ All these files are mode 600 or 640, and every secret was generated on the serve
    Use `db` or `web` instead of `both` to deploy one side. Installs run as systemd jobs, so a dropped connection cannot leave a server half-installed. The script ends by printing three health checks.
 
 ## Backups
+- **Off-site copy:** every backup is also pushed, still encrypted, to the private GitHub repository `anamankev/brier-backups`, with the newest 14 kept and no history (`deploy/github-backup.sh`):
+  - branch `exchange`: the database dump and the journal, from brier-db at 03:30 UTC;
+  - branch `bots`: the bots' state (service accounts, the resolver's raw evidence, sports ratings), from brier-web at 03:45 UTC.
+  Each server pushes with its own deploy key (`/etc/brier/github_backup_ed25519`), and GitHub's host key is pinned (`/etc/brier/github_known_hosts`). The encryption key is never pushed. Losing either server, or the whole Oracle account, loses at most a day.
+- **Watch the size:** GitHub refuses files over 100 MB. The exchange backup was 7 MB on 14 November 2026; the journal grows with trading.
 - **Schedule:** nightly at 03:30 UTC, from `brier-backup.timer` on brier-db.
 - **Contents:** a `pg_dump` and the journal, encrypted with AES-256 (PBKDF2, 200,000 iterations).
 - **Where they go:** over the private network to brier-web, `/var/backups/brier`. The SSH key brier-db uses can only run the receive command. brier-web deletes backups older than 30 days.
@@ -57,7 +62,7 @@ All these files are mode 600 or 640, and every secret was generated on the serve
   ```
 
 ## Restore
-1. Copy a backup from brier-web, then decrypt it:
+1. Copy a backup from brier-web (or download one from `anamankev/brier-backups`, branch `exchange`), then decrypt it:
    ```bash
    openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:backup.key -in brier-....tar.enc | tar -xf -
    ```
@@ -129,5 +134,7 @@ curl https://playbrier.duckdns.org/v1/health
 | 2026-11-11 | Restore: the latest nightly backup was decrypted and restored into a scratch database and journal, then a second gateway was started on them | Passed. The restored gateway reached seq 1695 with 80 events, the same as live. The decrypted copies were deleted afterwards. |
 | 2026-11-11 | Restart: both servers rebooted | Passed. The site answered again after 73 s and the exchange after 79 s; every service started on its own. |
 | 2026-11-11 | Load test (`scripts/load_test.py`, see `docs/notes/load-test.md`) | About 14 pages a second at 50 users, no errors. |
+| 2026-11-14 | Restore from the GitHub copy | Passed. Both branches downloaded and decrypted with the owner's key copy; the dump lists all 23 tables, and the journal and bots' state are complete. |
+| 2026-11-14 | Bots moved to brier-web | brier-operator stopped, `/var/lib/brier/operator` copied to brier-web, then both deployed: brier-db runs surveillance only, brier-web runs `brier-bots`. Prices kept quoting throughout from resting orders. |
 | 2026-11-12 | Move to playbrier.duckdns.org | The redirect file for the old address was written mode 600 (the installer's umask), Caddy could not read it and stopped: the site was down for about 2 minutes. Fixed on the server, and the installer now writes it readable. The new certificate came from Let's Encrypt in 5 seconds. |
 | 2026-11-12 | Deploy during an automatic security update | The install stopped on the package lock while `deploy.sh` still reported success. Fixed: installs now wait up to 15 minutes for the lock, and a failed install fails the deploy. |
