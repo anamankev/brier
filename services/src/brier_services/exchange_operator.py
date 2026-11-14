@@ -41,6 +41,7 @@ TERMS = "2026-11-12"
 ROLES = {"lister": "lister", "resolver": "resolver", "maker": None, "watch": "surveillance"}
 EVERY = {"list": 1800.0, "sports": 3 * 3600.0, "resolve": 600.0, "surveil": 3600.0}
 TICK = 60.0
+TASKS = ("list", "maker", "resolve", "surveil")
 
 
 def log(kind: str, **fields: Any) -> None:  # noqa: ANN401 - JSON fields
@@ -91,11 +92,15 @@ class SessionGateway(resolve.RestGateway):
         )
 
 
-def accounts(base: str, binary: Path, state: Path) -> dict[str, Session]:
-    """The service accounts, created and given their roles on first start."""
+def accounts(base: str, binary: Path | None, state: Path) -> dict[str, Session]:
+    """The service accounts, created and given their roles on first start (which needs the
+    gateway binary; later starts read the saved password)."""
     path = state / "accounts.json"
     if path.exists():
         saved = json.loads(path.read_text())
+    elif binary is None:
+        msg = f"{path} does not exist; the first start needs --gateway-binary"
+        raise SystemExit(msg)
     else:
         saved = {"password": secrets.token_urlsafe(24)}
         for name, role in ROLES.items():
@@ -129,11 +134,22 @@ MAKER_LOGGED = frozenset({"quote_refused", "allowance", "allowance_failed"})
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python -m brier_services.exchange_operator")
     p.add_argument("--gateway", default="http://127.0.0.1:8080")
-    p.add_argument("--gateway-binary", type=Path, required=True)
-    p.add_argument("--core", type=Path, required=True)
-    p.add_argument("--data", type=Path, required=True, help="the gateway's journal directory")
+    p.add_argument("--gateway-binary", type=Path, help="needed only to create the accounts")
+    p.add_argument("--core", type=Path, help="brier-core, for surveillance's journal export")
+    p.add_argument("--data", type=Path, help="the gateway's journal directory (surveillance)")
     p.add_argument("--state", type=Path, required=True)
+    p.add_argument(
+        "--tasks",
+        default=",".join(TASKS),
+        help=f"comma-separated subset of {','.join(TASKS)}: surveillance reads the journal, so "
+        "it runs beside the gateway; the rest can run on another server",
+    )
     args = p.parse_args(argv)
+    tasks = set(args.tasks.split(","))
+    if not tasks or not tasks <= set(TASKS):
+        p.error(f"--tasks must be a subset of {','.join(TASKS)}")
+    if "surveil" in tasks and (args.core is None or args.data is None):
+        p.error("surveillance needs --core and --data")
 
     who = accounts(args.gateway, args.gateway_binary, args.state)
     fred = os.environ.get("FRED_API_KEY")
@@ -150,11 +166,11 @@ def main(argv: list[str] | None = None) -> int:
     store = EvidenceStore(args.state / "evidence")
     verified: set[int] = set()
     last = dict.fromkeys(EVERY, 0.0)
-    log("start", gateway=args.gateway)
+    log("start", gateway=args.gateway, tasks=sorted(tasks))
     while True:
         now = time.time()
         try:
-            if now - last["list"] >= EVERY["list"]:
+            if "list" in tasks and now - last["list"] >= EVERY["list"]:
                 at = dt.datetime.now(dt.UTC)
                 listed = list_catalogue(
                     who["lister"], at, forecasts.high, lambda *a, **k: None, forecasts.low
@@ -163,13 +179,14 @@ def main(argv: list[str] | None = None) -> int:
                 if fred:
                     log("economy_listed", slugs=economy.run_once(who["lister"], at, fred, log))
                 last["list"] = now
-            if sports_on and now - last["sports"] >= EVERY["sports"]:
+            if "list" in tasks and sports_on and now - last["sports"] >= EVERY["sports"]:
                 at = dt.datetime.now(dt.UTC)
                 games = sports_catalog.run_once(who["lister"], ratings, at, log)
                 log("sports_listed", slugs=games)
                 last["sports"] = now
-            maker.run_once()
-            if now - last["resolve"] >= EVERY["resolve"]:
+            if "maker" in tasks:
+                maker.run_once()
+            if "resolve" in tasks and now - last["resolve"] >= EVERY["resolve"]:
                 resolve.run_once(
                     SessionGateway(who["resolver"]),
                     store,
@@ -179,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
                     verified=verified,
                 )
                 last["resolve"] = now
-            if now - last["surveil"] >= EVERY["surveil"]:
+            if "surveil" in tasks and now - last["surveil"] >= EVERY["surveil"]:
                 surveillance.run_once(who["watch"], surveillance.export(args.core, args.data))
                 last["surveil"] = now
         except (ApiError, OSError, subprocess.CalledProcessError) as e:

@@ -1,0 +1,6 @@
+[Unit]
+Description=Brier bots' state backup, encrypted, to the private GitHub repository
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/brier-bots-backup

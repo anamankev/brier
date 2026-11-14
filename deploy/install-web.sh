@@ -13,7 +13,7 @@ if ! swapon --show | grep -q /swapfile; then
 fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get -o DPkg::Lock::Timeout=900 update -qq
-apt-get -o DPkg::Lock::Timeout=900 install -y -qq curl gnupg debian-keyring debian-archive-keyring apt-transport-https netfilter-persistent >/dev/null
+apt-get -o DPkg::Lock::Timeout=900 install -y -qq curl gnupg debian-keyring debian-archive-keyring apt-transport-https netfilter-persistent python3-venv >/dev/null
 
 # Node 24 from nodejs.org: the newest 24.x released at least 14 days ago, checked against its
 # published SHA-256.
@@ -89,10 +89,26 @@ if [ -n "${BRIER_OLD_HOSTS:-}" ]; then
 fi
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 || { echo "Caddyfile does not validate" >&2; exit 1; }
 install -d -o caddy -g caddy /var/log/caddy
+# The bots (lister, market maker, resolver): the Python services from the release, run against
+# the gateway over the private network. Their keys come from brier-db through deploy.sh.
+(
+  umask 022  # the service user must read the code; the 077 above is for the secret files
+  [ -d /opt/brier/venv ] || python3 -m venv /opt/brier/venv
+  /opt/brier/venv/bin/pip install -q --require-hashes -r "$STAGE"/py/requirements.txt
+  /opt/brier/venv/bin/pip install -q --no-deps --force-reinstall "$STAGE"/py/*.whl
+)
+install -d -o brier -g brier -m 750 /var/lib/brier /var/lib/brier/operator
+if [ -f /tmp/operator-install.env ]; then
+  install -o root -g brier -m 640 /tmp/operator-install.env /etc/brier/operator.env
+  rm -f /tmp/operator-install.env
+fi
+install -m 644 "$STAGE"/deploy/systemd/brier-bots.service /etc/systemd/system/
 install -m 644 "$STAGE"/deploy/systemd/brier-web.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable -q brier-web caddy
 systemctl restart brier-web caddy
+# The bots start once their saved accounts are here (moved from brier-db once; runbook).
+if [ -f /var/lib/brier/operator/accounts.json ]; then systemctl enable -q brier-bots; systemctl restart brier-bots; fi
 # SSH: keys only, no root login, no X11 (deploy/sshd-hardening.conf). Checked before reloading,
 # so a bad file never locks the operator out.
 install -m 644 "$STAGE"/deploy/sshd-hardening.conf /etc/ssh/sshd_config.d/10-brier.conf
@@ -102,5 +118,11 @@ install -d -m 755 /etc/systemd/journald.conf.d
 printf '[Journal]\nMaxRetentionSec=30day\n' > /etc/systemd/journald.conf.d/10-brier.conf
 chmod 644 /etc/systemd/journald.conf.d/10-brier.conf
 systemctl restart systemd-journald
+# Nightly backup of the bots' state to the private GitHub repository (needs the backup key).
+install -m 755 "$STAGE"/deploy/github-backup.sh /usr/local/bin/brier-github-backup
+install -m 755 "$STAGE"/deploy/bots-backup.sh /usr/local/bin/brier-bots-backup
+install -m 644 "$STAGE"/deploy/systemd/brier-bots-backup.service "$STAGE"/deploy/systemd/brier-bots-backup.timer /etc/systemd/system/
+systemctl daemon-reload
+if [ -f /etc/brier/backup.key ]; then systemctl enable -q --now brier-bots-backup.timer; fi
 rm -rf "$STAGE"
 echo "brier-web: $(cat /opt/brier/COMMIT) at https://$BRIER_HOST"

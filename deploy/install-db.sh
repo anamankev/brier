@@ -67,5 +67,11 @@ install -d -m 755 /etc/systemd/journald.conf.d
 printf '[Journal]\nMaxRetentionSec=30day\n' > /etc/systemd/journald.conf.d/10-brier.conf
 chmod 644 /etc/systemd/journald.conf.d/10-brier.conf
 systemctl restart systemd-journald
+# Nightly backups: to brier-web, and an encrypted copy to the private GitHub repository.
+install -m 755 "$STAGE"/deploy/backup.sh /usr/local/bin/brier-backup
+install -m 755 "$STAGE"/deploy/github-backup.sh /usr/local/bin/brier-github-backup
+install -m 644 "$STAGE"/deploy/systemd/brier-backup.service "$STAGE"/deploy/systemd/brier-backup.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable -q --now brier-backup.timer
 rm -rf "$STAGE"
 echo "brier-db: $(cat /opt/brier/COMMIT)"

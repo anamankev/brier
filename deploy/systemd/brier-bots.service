@@ -1,0 +1,24 @@
+[Unit]
+Description=Brier bots on brier-web: lister, market maker and resolver, talking to the gateway over the private network
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=brier
+Group=brier
+# BRIER_GATEWAY_URL (web.env) is the gateway on brier-db's private address; the keys are in
+# operator.env. Surveillance reads the journal, so it stays on brier-db (brier-operator).
+EnvironmentFile=/etc/brier/web.env
+EnvironmentFile=/etc/brier/operator.env
+WorkingDirectory=/var/lib/brier
+ExecStart=/opt/brier/venv/bin/python -m brier_services.exchange_operator --gateway ${BRIER_GATEWAY_URL} --state /var/lib/brier/operator --tasks list,maker,resolve
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/brier
+
+[Install]
+WantedBy=multi-user.target

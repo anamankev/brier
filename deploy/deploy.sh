@@ -33,6 +33,9 @@ if [ "$WHICH" != db ]; then
   ssh brier-db 'sudo grep ^BRIER_PROXY_KEY= /etc/brier/gateway.env' \
     | { cat; printf 'BRIER_HOST=%s\nBRIER_GATEWAY=%s\nBRIER_OLD_HOSTS="%s"\n' "$HOST" "$GATEWAY" "${BRIER_OLD_HOSTS:-}"; } \
     | ssh brier-web 'umask 077; cat > /tmp/web-install.env'
+  # The bots' data-source keys, from brier-db's operator.env (never printed or kept locally).
+  ssh brier-db 'sudo grep -E "^(FRED_API_KEY|BALLDONTLIE_API_KEY|FOOTBALL_DATA_API_KEY|BRIER_SPORTS_CACHE)=" /etc/brier/operator.env' \
+    | ssh brier-web 'umask 077; cat > /tmp/operator-install.env'
   detached brier-web "set -a; . /tmp/web-install.env; set +a; rm -f /tmp/web-install.env; bash /tmp/install-web.sh /tmp/brier-release.tar.gz" /tmp/install-web.log
 fi
 for path in /v1/health / /photos/nyc.webp; do
