@@ -25,7 +25,10 @@ use std::sync::Arc;
 use brier_core::CoreConfig;
 use brier_gateway::{AppState, DISPUTE_WINDOW, router, run_projector, scheduler};
 use serde_json::json;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use tokio::net::TcpListener;
+use tokio::sync::Notify;
 use tokio_postgres::{Client, NoTls};
 
 fn info(msg: &str, detail: &serde_json::Value) {
@@ -35,16 +38,27 @@ fn info(msg: &str, detail: &serde_json::Value) {
     );
 }
 
-async fn connect(url: &str) -> Result<Client, String> {
+/// Opens a database connection. `lost`, when given, is notified if the connection ever ends,
+/// for any reason: a `tokio_postgres::Client` cannot reconnect, so `serve` treats a lost
+/// connection as fatal and stops cleanly, and systemd starts a fresh process (crash-only
+/// recovery; see docs/runbooks/deploy.md). Before this, a Postgres restart left the gateway
+/// up but answering every request with "unavailable" until someone restarted it by hand.
+async fn connect(url: &str, lost: Option<Arc<Notify>>) -> Result<Client, String> {
     let (client, connection) = tokio_postgres::connect(url, NoTls)
         .await
         .map_err(|e| format!("database: {}", brier_readmodel::describe_db_error(&e)))?;
     tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            eprintln!(
-                "{}",
-                json!({ "level": "error", "msg": "database connection closed", "detail": e.to_string() })
-            );
+        let detail = match connection.await {
+            Ok(()) => "the server ended the connection".to_owned(),
+            Err(e) => e.to_string(),
+        };
+        eprintln!(
+            "{}",
+            json!({ "level": "error", "msg": "database connection closed", "detail": detail })
+        );
+        if let Some(lost) = lost {
+            // notify_one keeps a permit if nothing is waiting yet, so the loss is never missed.
+            lost.notify_one();
         }
     });
     if let Ok(schema) = std::env::var("BRIER_DATABASE_SCHEMA") {
@@ -132,11 +146,12 @@ async fn serve(url: &str) -> Result<(), String> {
             .ok_or("BRIER_DISPUTE_WINDOW_SECONDS must be 1 to 2592000")?,
         Err(_) => DISPUTE_WINDOW,
     };
-    let mut db = connect(url).await?;
+    let db_lost = Arc::new(Notify::new());
+    let mut db = connect(url, Some(Arc::clone(&db_lost))).await?;
     brier_readmodel::migrate(&mut db)
         .await
         .map_err(|e| e.to_string())?;
-    let projector_db = connect(url).await?;
+    let projector_db = connect(url, Some(Arc::clone(&db_lost))).await?;
 
     let (core, recovery, core_thread) =
         brier_core::start(CoreConfig::new(&data)).map_err(|e| e.to_string())?;
@@ -186,14 +201,27 @@ async fn serve(url: &str) -> Result<(), String> {
         .await
         .map_err(|e| format!("bind {listen}: {e}"))?;
     info("listening", &json!({ "address": listen.to_string() }));
+    let lost_flag = Arc::new(AtomicBool::new(false));
     axum::serve(
         listener,
         router(Arc::clone(&state)).into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(async move {
-        shutdown_signal().await;
-        // WebSocket connections are not HTTP requests the server waits for; close them.
-        state.shutdown.send_replace(true);
+    .with_graceful_shutdown({
+        let lost_flag = Arc::clone(&lost_flag);
+        async move {
+            tokio::select! {
+                () = shutdown_signal() => {}
+                () = db_lost.notified() => {
+                    lost_flag.store(true, Ordering::SeqCst);
+                    eprintln!(
+                        "{}",
+                        json!({ "level": "error", "msg": "database lost; stopping so the service manager restarts the gateway" })
+                    );
+                }
+            }
+            // WebSocket connections are not HTTP requests the server waits for; close them.
+            state.shutdown.send_replace(true);
+        }
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -207,11 +235,17 @@ async fn serve(url: &str) -> Result<(), String> {
     core_result
         .map_err(|_| "the core thread panicked".to_owned())?
         .map_err(|e| e.to_string())?;
-    match projector.await {
-        Ok(Ok(())) => {}
-        Ok(Err(e)) => return Err(format!("projector: {e}")),
-        Err(e) => return Err(format!("projector task: {e}")),
+    let projected = match projector.await {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) => Err(format!("projector: {e}")),
+        Err(e) => Err(format!("projector task: {e}")),
+    };
+    // A lost database is reported as a failure even when every task stopped cleanly, so the
+    // exit status is non-zero and the service manager restarts the process.
+    if lost_flag.load(Ordering::SeqCst) {
+        return Err("database connection lost; stopped cleanly for a restart".to_owned());
     }
+    projected?;
     info("stopped", &json!({}));
     Ok(())
 }
@@ -231,7 +265,7 @@ async fn set_role(url: &str, username: &str, role: &str, reason: &str) -> Result
     if !(3..=500).contains(&reason.trim().chars().count()) {
         return Err("reason must be 3 to 500 characters".to_owned());
     }
-    let mut db = connect(url).await?;
+    let mut db = connect(url, None).await?;
     brier_readmodel::migrate(&mut db)
         .await
         .map_err(|e| e.to_string())?;
