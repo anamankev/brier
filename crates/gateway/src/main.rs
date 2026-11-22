@@ -103,6 +103,24 @@ async fn shutdown_signal() {
     let _ = interrupt.await;
 }
 
+/// Resolves when the server should stop: on SIGINT/SIGTERM, or when a database connection is
+/// lost (then `lost_flag` is set, so `serve` exits non-zero and the service manager restarts
+/// the gateway with fresh connections).
+async fn stop_when(db_lost: Arc<Notify>, lost_flag: Arc<AtomicBool>, state: Arc<AppState>) {
+    tokio::select! {
+        () = shutdown_signal() => {}
+        () = db_lost.notified() => {
+            lost_flag.store(true, Ordering::SeqCst);
+            eprintln!(
+                "{}",
+                json!({ "level": "error", "msg": "database lost; stopping so the service manager restarts the gateway" })
+            );
+        }
+    }
+    // WebSocket connections are not HTTP requests the server waits for; close them.
+    state.shutdown.send_replace(true);
+}
+
 /// The TOTP key and the proxy key, from the environment.
 fn with_keys(mut state: AppState) -> Result<AppState, String> {
     match std::env::var("BRIER_TOTP_KEY") {
@@ -206,23 +224,7 @@ async fn serve(url: &str) -> Result<(), String> {
         listener,
         router(Arc::clone(&state)).into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown({
-        let lost_flag = Arc::clone(&lost_flag);
-        async move {
-            tokio::select! {
-                () = shutdown_signal() => {}
-                () = db_lost.notified() => {
-                    lost_flag.store(true, Ordering::SeqCst);
-                    eprintln!(
-                        "{}",
-                        json!({ "level": "error", "msg": "database lost; stopping so the service manager restarts the gateway" })
-                    );
-                }
-            }
-            // WebSocket connections are not HTTP requests the server waits for; close them.
-            state.shutdown.send_replace(true);
-        }
-    })
+    .with_graceful_shutdown(stop_when(db_lost, Arc::clone(&lost_flag), state))
     .await
     .map_err(|e| e.to_string())?;
 
