@@ -1,8 +1,11 @@
 [Unit]
 Description=Brier gateway (matching engine, journal, REST and WebSocket API)
-After=network-online.target postgresql.service
-Wants=network-online.target
+After=network-online.target postgresql.service postgresql@16-main.service
+Wants=network-online.target postgresql@16-main.service
 Requires=postgresql.service
+# The gateway exits when it loses the database and is restarted until Postgres is back, so
+# never give up restarting.
+StartLimitIntervalSec=0
 
 [Service]
 User=brier

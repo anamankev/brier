@@ -51,6 +51,12 @@ fi
 chown root:brier /etc/brier/*.env && chmod 640 /etc/brier/*.env
 
 install -m 644 "$STAGE"/deploy/systemd/brier-gateway.service "$STAGE"/deploy/systemd/brier-operator.service /etc/systemd/system/
+# Postgres comes back by itself after any failure, and package maintenance is the OOM killer's
+# first choice (the Nov 19 2026 outage; docs/runbooks/deploy.md).
+install -D -m 644 "$STAGE"/deploy/systemd/dropins/postgresql.conf /etc/systemd/system/postgresql@16-main.service.d/10-brier.conf
+for unit in apt-daily apt-daily-upgrade packagekit; do
+  install -D -m 644 "$STAGE"/deploy/systemd/dropins/maintenance-oom.conf "/etc/systemd/system/$unit.service.d/10-brier-oom.conf"
+done
 systemctl daemon-reload
 systemctl enable -q brier-gateway brier-operator
 systemctl restart brier-gateway
